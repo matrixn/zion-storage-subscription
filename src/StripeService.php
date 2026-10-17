@@ -74,7 +74,7 @@ class StripeService implements BillingService {
   $lines=$invoice['lines']['data']??[];
   if(count($lines)===1) {
    $price=$lines[0]['price']['id']??$lines[0]['pricing']['price_details']['price']??'';
-   foreach($this->plans->all() as $plan) if($plan['stripe_price_id'] && $plan['stripe_price_id']===$price) return $plan;
+   foreach($this->plans->all() as $plan) if(in_array($price,$plan['accepted_stripe_price_ids'],true)) return $plan;
   }
   return $fallback;
  }
@@ -119,7 +119,7 @@ class StripeService implements BillingService {
    $p=$this->plans->get($s['metadata']['plan']??'');
    $manual=(new AccountControl($this->db))->manual($uid);
    $price=$s['items']['data'][0]['price']['id']??'';
-   if(!$p || $p['slug']==='free' || !$p['stripe_price_id'] || $price!==$p['stripe_price_id'] || (!$manual && $p['slug']!==$u['selected_plan_id'])) throw new \RuntimeException('billing_plan_mismatch');
+   if(!$p || $p['slug']==='free' || !in_array($price,$p['accepted_stripe_price_ids'],true) || (!$manual && $p['slug']!==$u['selected_plan_id'])) throw new \RuntimeException('billing_plan_mismatch');
    if($paidInvoice && ($paidInvoice['id']!==$o['id'] || ($paidInvoice['customer']??null)!==$s['customer'])) throw new \RuntimeException('invoice_identity_mismatch');
    $invoice=is_array($s['latest_invoice']??null)?$s['latest_invoice']:null;
    $paid=$invoice && ($invoice['status']??'')==='paid' && $s['status']==='active';

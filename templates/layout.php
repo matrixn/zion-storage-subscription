@@ -13,6 +13,7 @@
 <?php if(!in_array($page,['home','how','register','contact'])): ?><meta name="robots" content="noindex,nofollow"><?php endif ?>
 <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/assets/site.css"><script src="/assets/site.js" defer></script>
+<?php if($page==='home'): ?><link rel="stylesheet" href="/assets/pricing.css"><?php endif ?>
 <?php if(env('CAPTCHA_ENABLED')==='true'): ?><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script><?php endif ?>
 </head>
 <body>

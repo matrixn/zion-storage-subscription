@@ -1,5 +1,13 @@
 # Validation
 
+## Pricing redesign — 18 October 2026
+
+Validated 238 PHP assertions, 27 public/billing HTTP assertions, 24 admin/gateway HTTP assertions and 748 pricing Chrome assertions. PHP syntax, strict Composer validation and Git whitespace checks passed. Browser coverage includes RO/EN/FR/DE at 320/360/390/430/768/1024/1440/1920 px, exact localized catalog amounts, plan-specific features, recommended Personal ribbon, responsive columns, aligned/touch-friendly CTAs, all four registration targets, keyboard slider changes, actual animated bar proportions, no-JavaScript fallback, reduced motion, no runtime/CSP errors, canonical/hreflang and the original 16-URL sitemap. Desktop/mobile screenshots were also visually inspected.
+
+The Plus catalog/upgrade expectations now use 1799 minor units and an 800-minor-unit Personal → Plus difference. A regression fixture verifies that a legacy 1999 Plus Price still confirms its existing subscriber and retains its actual fiscal amount/plan, while new Checkout keeps the separately configured current Price. No production Oblio flow or historical fiscal record was changed.
+
+Local Stripe key/Price IDs are unset, so an actual hosted Checkout total could not be confirmed. Configure the 17.99 monthly Plus Price and preserve the previous ID in STRIPE_LEGACY_PRICE_250GB before enabling new purchases; deal explicitly with previously opened Checkout quotes. No Stripe object, subscription, invoice or payment credential was mutated. See [pricing configuration](PRICING.md).
+
 ## Administration and upgrades — 18 October 2026
 
 Current checks: 235 PHP assertions, 27 existing isolated HTTP assertions, 24 new administrator/gateway HTTP assertions, and 116 new Chrome assertions for admin and localized upgrade flows at 320/390/768/1440 px. PHP syntax, strict Composer validation, dependency advisory audit, Git whitespace checks and the Docker build passed. The same 235 PHP assertions also passed inside the built PHP 8.4 container. Screenshots were visually inspected in addition to browser checks; ignored artifacts are `tests/artifacts/admin-*.png` and `upgrade-*.png`.

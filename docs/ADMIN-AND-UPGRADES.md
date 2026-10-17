@@ -24,7 +24,7 @@ For existing active paid subscriptions, administrative upgrades/downgrades updat
 
 - Paid monthly plans only, moving to strictly larger capacity and higher price. Free/manual accounts and banned accounts do not qualify.
 - Window: five times 24 hours from the **original successful purchase**, using Stripe's paid timestamp. Receipt of a webhook, a renewal, an upgrade or an administrative change never starts a new window.
-- Full difference in monthly catalog prices, once, in RON integer minor units. Example: 120 GB 999 → 250 GB 1999 means a separate 1000-minor-unit (10 RON) payment now, then 1999 monthly at the original renewal date.
+- Full difference in monthly catalog prices, once, in RON integer minor units. Example with the current catalog: 120 GB 999 → 250 GB 1799 means a separate 800-minor-unit (8 RON) payment now, then 1799 monthly at the original renewal date. Existing subscriptions on an older Price are not migrated by the marketing redesign.
 - Checkout uses `mode=payment`, the existing Stripe customer, card payments, a separate post-purchase invoice and durable operation metadata. The browser cannot supply an amount or activate the plan.
 - A signed webhook retrieves the exact saved Checkout session, expanded PaymentIntent/charge and invoice. Customer, metadata, test mode, currency, collected amount, successful payment and the five-day deadline are verified before applying the change.
 - The existing subscription item is updated using `proration_behavior=none`, `billing_cycle_anchor=unchanged` and an operation-specific idempotency key. No second subscription is created. Monthly renewal follows Stripe's existing calendar anchor, including February and short months.

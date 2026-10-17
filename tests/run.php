@@ -42,7 +42,7 @@ foreach(Zion\TranslationService::LOCALES as $l){
 check(Zion\TranslationService::preferred('de','ro')==='de','cookie preference');
 check(Zion\TranslationService::preferred('','fr;q=0.3,ro-RO;q=0.9,en;q=0.5')==='ro','Accept-Language priorities');
 check(Zion\TranslationService::preferred('','es')==='en','English fallback');
-check(count($plans->all())===4 && $plans->get('free')['storage_bytes']===10_000_000_000 && $plans->get('1tb')===null && array_column($plans->all(),'monthly_price')===[0,999,1999,2999],'configured plans and quotas');
+check(count($plans->all())===4 && $plans->get('free')['storage_bytes']===10_000_000_000 && $plans->get('1tb')===null && array_column($plans->all(),'monthly_price')===[0,999,1799,2999],'configured plans and quotas');
 check(!$plans->get('tampered'),'reject unknown plan');
 check(!Zion\AccountService::passwordValid('short'),'password length');
 [$free,$token,$link]=signup('free@example.com','free','ro');

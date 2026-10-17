@@ -2,7 +2,7 @@
 // Full SDK + webhook fixtures; all unexpected HTTP is rejected.
 final class ChangesHttp implements Stripe\HttpClient\ClientInterface {
  public array $calls=[];public array $subscription=[];public array $invoices=[];public array $sessions=[];public int $updates=0;public bool $loseUpdate=false;
- public function price(string $id): array {return ['id'=>$id,'object'=>'price','active'=>true,'currency'=>'ron','unit_amount'=>['price_120'=>999,'price_250'=>1999,'price_500'=>2999][$id],'recurring'=>['interval'=>'month','interval_count'=>1]];}
+ public function price(string $id): array {return ['id'=>$id,'object'=>'price','active'=>true,'currency'=>'ron','unit_amount'=>['price_120'=>999,'price_250'=>1799,'price_500'=>2999][$id],'recurring'=>['interval'=>'month','interval_count'=>1]];}
  public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null){
   $path=parse_url($url,PHP_URL_PATH);$this->calls[]=[$method,$path,$params];$r=null;
   if(preg_match('~/prices/(price_\d+)$~',$path,$m))$r=$this->price($m[1]);
@@ -49,14 +49,14 @@ $billing=new Zion\StripeService($db,$plans,$mail,$store);$changes=$billing->chan
 $billing->process(['id'=>'evt_initial_upgrade','type'=>'invoice.paid','data'=>['object'=>$invoice]]);
 $origin=$db->one('SELECT * FROM subscription_origins');check($origin['purchased_at']===$bought,'window starts at original successful payment, not webhook delivery');
 $u=$db->one('SELECT * FROM users WHERE id=?',[$id]);$offers=$changes->offers($u);
-check(array_column($offers,'amount')===[1000,2000],'120GB to 250GB costs 10 lei; only larger plans offered');
+check(array_column($offers,'amount')===[800,2000],'120GB to 250GB costs 8 lei; only larger plans offered');
 check($changes->offers($u,$bought+5*86400+1)===[],'five-day window expires without renewal reset');
 $db->run('UPDATE subscription_origins SET purchased_at=?',[time()-5*86400+60]);
 try{$changes->checkout($u,'250gb');check(false,'closing window');}catch(DomainException $e){check($e->getMessage()==='upgrade.closing','last 30 minutes cannot create a Checkout extending beyond deadline');}
 $db->run('UPDATE subscription_origins SET purchased_at=?',[$bought]);
 $url=$changes->checkout($u,'250gb');$r=$db->one('SELECT * FROM plan_changes');
 $create=array_values(array_filter($http->calls,fn($c)=>$c[1]==='/v1/checkout/sessions'))[0][2];
-check($create['mode']==='payment' && $create['line_items'][0]['price_data']['unit_amount']===1000,'upgrade is one-time difference payment');
+check($create['mode']==='payment' && $create['line_items'][0]['price_data']['unit_amount']===800,'upgrade is one-time difference payment');
 check($create['invoice_creation']['enabled'] && $create['customer']==='cus_upgrade','upgrade creates a separate invoice for existing customer');
 check($create['expires_at']<=$bought+5*86400,'checkout cannot outlive upgrade window');
 check($changes->checkout($u,'250gb')===$url && count($http->sessions)===1,'duplicate tabs reuse same upgrade checkout');
@@ -79,15 +79,15 @@ $http->sessions[$r['checkout_session_id']]=$session;
 $billing->process($event);
 check($db->one('SELECT status FROM plan_changes WHERE id=?',[$r['id']])['status']==='completed','authoritative payment applies upgrade');
 check($db->one('SELECT selected_plan_id FROM users WHERE id=?',[$id])['selected_plan_id']==='250gb','paid upgrade changes account plan');
-check($http->subscription['items']['data'][0]['price']['unit_amount']===1999 && $http->subscription['items']['data'][0]['current_period_end']===$end,'next renewal is 19.99 at original date');
+check($http->subscription['items']['data'][0]['price']['unit_amount']===1799 && $http->subscription['items']['data'][0]['current_period_end']===$end,'next renewal is 17.99 at original date');
 $event['id']='evt_upgrade_replay';$billing->process($event);
 check($http->updates===1,'duplicate webhook cannot repeat Stripe price mutation');
 try{$changes->cancel($r['id']);check(false,'paid cancellation');}catch(DomainException $e){check(true,'confirmed upgrade cannot be cancelled as unpaid');}
 $fi=$db->one('SELECT * FROM fiscal_invoices WHERE stripe_invoice_id=?',[$session['invoice']['id']]);
-check($fi['amount']===1000 && $fi['billing_period_end']===$end,'upgrade fiscal amount is actual 10 lei and covers remaining original cycle');
+check($fi['amount']===800 && $fi['billing_period_end']===$end,'upgrade fiscal amount is actual 8 lei and covers remaining original cycle');
 $fiscal=new Zion\OblioInvoiceService($db,$mail);check($fiscal->process($fi['id']),'upgrade fiscal simulation processes');
 $fi=$db->one('SELECT * FROM fiscal_invoices WHERE id=?',[$fi['id']]);$payload=Zion\EncryptedPayload::decode($fi['request_snapshot']);
-check($payload['products'][0]['price']===10 && str_starts_with($payload['products'][0]['name'],'Upgrade Zion Storage'),'upgrade fiscal product is distinct from monthly subscription');
+check($payload['products'][0]['price']===8 && str_starts_with($payload['products'][0]['name'],'Upgrade Zion Storage'),'upgrade fiscal product is distinct from monthly subscription');
 check($db->one('SELECT purchased_at FROM subscription_origins')['purchased_at']===$bought,'upgrade never opens a new five-day window');
 // Crash recovery: price changed remotely, response lost before local synchronization.
 $u=$db->one('SELECT * FROM users WHERE id=?',[$id]);$changes->checkout($u,'500gb');$r2=$db->one("SELECT * FROM plan_changes WHERE to_plan='500gb'");$session2=$http->pay($r2['checkout_session_id'],time());
@@ -105,7 +105,7 @@ check($db->one('SELECT status FROM users WHERE id=?',[$id])['status']==='banned'
 check($db->one('SELECT paid_confirmed FROM subscriptions WHERE user_id=?',[$id])['paid_confirmed']===1,'ban preserves paid subscription');
 $adminService->ban($id,false,'Fixture unban',$admin['id']);check($accounts->eligible($db->one('SELECT * FROM users WHERE id=?',[$id])),'unban restores eligible account');
 $changes->adminPlan($id,'250gb',$admin['id'],'Fixture downgrade');
-check($http->subscription['items']['data'][0]['price']['unit_amount']===1999,'admin downgrade synchronizes future Stripe renewal');
+check($http->subscription['items']['data'][0]['price']['unit_amount']===1799,'admin downgrade synchronizes future Stripe renewal');
 $store->users['store-'.$id]['used']=130_000_000_000;
 try{$changes->adminPlan($id,'120gb',$admin['id'],'Too much data');check(false,'unsafe downgrade');}catch(DomainException $e){check(true,'downgrade cannot put existing files above target quota');}
 $manual=$adminService->create(['name'=>'Manual client','email'=>'manual@example.com','password'=>'manual-client-password','plan'=>'250gb','locale'=>'ro'],$admin['id']);
@@ -135,6 +135,18 @@ $lateSession=$http->pay($lateChange['checkout_session_id'],$lateChange['deadline
 try{$billing->process(['id'=>'evt_late_upgrade','type'=>'checkout.session.completed','data'=>['object'=>$lateSession]]);check(false,'late paid upgrade');}catch(RuntimeException $e){check(true,'paid upgrade outside deadline needs operator review');}
 $lateSaved=$changes->record($lateChange['id']);check($lateSaved['status']==='review' && $lateSaved['paid_at']===$lateChange['deadline']+1,'late payment remains confirmed in audit without pretending it is unpaid');
 check($db->one('SELECT selected_plan_id FROM users WHERE id=?',[$lateId])['selected_plan_id']==='120gb','late payment cannot grant larger plan');
-check($db->one('SELECT amount FROM fiscal_invoices WHERE stripe_invoice_id=?',[$lateSession['invoice']['id']])['amount']===1000,'late confirmed funds retain durable fiscal record for manual correction');
+check($db->one('SELECT amount FROM fiscal_invoices WHERE stripe_invoice_id=?',[$lateSession['invoice']['id']])['amount']===800,'late confirmed funds retain durable fiscal record for manual correction');
+// A new catalog price must not break or reprice an existing Plus subscription.
+$_ENV['STRIPE_LEGACY_PRICE_250GB']='price_250_1999';
+[$legacyId,$legacyToken]=signup('legacy-plus@example.com','250gb');$accounts->verify($legacyToken);
+$legacyInvoice=$invoice;$legacyInvoice['id']='in_legacy_plus';$legacyInvoice['customer']='cus_legacy';$legacyInvoice['subscription']='sub_legacy';$legacyInvoice['amount_paid']=1999;$legacyInvoice['lines']['data'][0]['price']['id']='price_250_1999';
+$legacyBilling=new TestStripe($db,$plans,$mail,$store);
+$legacyBilling->snapshot=['id'=>'sub_legacy','customer'=>'cus_legacy','status'=>'active','metadata'=>['user_id'=>$legacyId,'plan'=>'250gb'],'items'=>['data'=>[['price'=>['id'=>'price_250_1999'],'current_period_end'=>$end]]],'latest_invoice'=>$legacyInvoice];
+$legacyBilling->invoices[$legacyInvoice['id']]=$legacyInvoice;
+$legacyBilling->process(['id'=>'evt_legacy_plus','type'=>'invoice.paid','data'=>['object'=>$legacyInvoice]]);
+check($db->one('SELECT paid_confirmed FROM subscriptions WHERE user_id=?',[$legacyId])['paid_confirmed']===1,'legacy Plus payment remains eligible after catalog price change');
+$legacyFiscal=$db->one('SELECT plan,amount FROM fiscal_invoices WHERE stripe_invoice_id=?',[$legacyInvoice['id']]);
+check($legacyFiscal['plan']==='250gb' && $legacyFiscal['amount']===1999,'legacy fiscal record retains actual amount and original plan');
+check($db->one('SELECT stripe_price_id FROM subscriptions WHERE user_id=?',[$legacyId])['stripe_price_id']==='price_250_1999' && $plans->get('250gb')['stripe_price_id']==='price_250','legacy ID stays separate from new Checkout Price');
 echo "\n$count total assertions passed, including account management and upgrade recovery.\n";
 Stripe\ApiRequestor::setHttpClient(new NoNetworkStripe());

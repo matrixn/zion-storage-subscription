@@ -2,6 +2,9 @@
 
 ## 2026-10-18
 
+- Redesigned the existing home pricing section with localized inline prices, specific plan benefits, a prominent Personal ribbon and an accessible illustrative storage comparison. Added single-column mobile, two-column tablet and four-column desktop layouts with reduced-motion support.
+- Changed the Plus catalog price to 17.99 RON/month. Its Stripe Price ID must be configured manually for 1799 RON minor units; no existing subscriptions or live Stripe prices are modified.
+- Added optional legacy Stripe Price recognition so previous Plus subscription payments and invoice descriptions remain valid without using an old Price for new Checkout.
 - Added one-time paid upgrades during the original five-day purchase window, with exact RON price differences, preserved renewal dates, authoritative Stripe payment checks, durable recovery and separate upgrade fiscal records.
 - Added private `/admin` authentication, install-time ADMIN_EMAIL/ADMIN_PASSWORD bootstrap, customer creation/manual plans, recurring plan changes, ban/unban, upgrade recovery and operator audit history.
 - Added a non-destructive Immich access gateway/proxy example and explicit pending states when full ban enforcement is not configured; billing cannot clear bans.

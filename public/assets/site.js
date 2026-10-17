@@ -1,4 +1,19 @@
 'use strict';
+document.querySelectorAll('[data-storage-comparison]').forEach(comparison=>{
+ const input=comparison.querySelector('input[type=range]'),total=Number(comparison.dataset.total);
+ const format=new Intl.NumberFormat(document.documentElement.lang);
+ const result=comparison.querySelector('[data-result]');
+ function update(){
+  const overhead=Math.max(0,Math.min(total,Number(input.value))),files=Math.round(overhead*4/7),email=overhead-files,media=total-overhead;
+  for(const [kind,value] of Object.entries({media,files,email})){
+   comparison.querySelector('[data-'+kind+']').textContent=format.format(value);
+   comparison.querySelector('[data-bar-'+kind+']').style.width=(value/total*100)+'%';
+  }
+  comparison.querySelector('[data-overhead]').textContent=format.format(overhead)+' GB';
+  result.textContent=result.dataset.resultTemplate.replace('{media}',format.format(media)).replace('{total}',format.format(total));
+ }
+ input.addEventListener('input',update);update();comparison.querySelector('[data-comparison-control]').hidden=false;
+});
 if('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches){
  const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.add('revealed');observer.unobserve(entry.target);}}),{threshold:.05});
  document.querySelectorAll('.section,.storage-section,.final-cta').forEach(section=>{section.classList.add('reveal-enhanced');observer.observe(section);});
