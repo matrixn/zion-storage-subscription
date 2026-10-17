@@ -6,16 +6,10 @@ use Symfony\Component\Mime\Email;
 final class MailerService {
  public function __construct(private Database $db) {}
  public static function encode(array $data): string {
-  if(strlen(env('APP_KEY'))<32) throw new \RuntimeException('APP_KEY must contain at least 32 characters');
-  $nonce=random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-  return base64_encode($nonce.sodium_crypto_secretbox(json_encode($data,JSON_THROW_ON_ERROR),$nonce,hash('sha256',env('APP_KEY'),true)));
+  return EncryptedPayload::encode($data);
  }
  public static function decode(string $encoded): array {
-  $bytes=base64_decode($encoded,true);
-  if($bytes===false || strlen($bytes)<SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) throw new \RuntimeException('Invalid queued message');
-  $raw=sodium_crypto_secretbox_open(substr($bytes,SODIUM_CRYPTO_SECRETBOX_NONCEBYTES),substr($bytes,0,SODIUM_CRYPTO_SECRETBOX_NONCEBYTES),hash('sha256',env('APP_KEY'),true));
-  if($raw===false) throw new \RuntimeException('Cannot decrypt queued message');
-  return json_decode($raw,true,512,JSON_THROW_ON_ERROR);
+  return EncryptedPayload::decode($encoded);
  }
  public function queue(string $to,string $locale,string $kind,array $data,string $key): void {
   $this->db->run('INSERT OR IGNORE INTO outbox(dedupe_key,recipient,locale,kind,payload,created_at) VALUES(?,?,?,?,?,?)',[$key,$to,$locale,$kind,self::encode($data),time()]);
@@ -34,7 +28,7 @@ final class MailerService {
     if(!empty($data['url'])) $html.='<p><a style="color:#bafa73" href="'.e($data['url']).'">'.e($tr->get('email.action')).'</a></p>';
     $html.='<p>'.e($tr->get('email.footer')).'</p></div></body></html>';
     if(env('MAIL_TRANSPORT','log')==='log' && !production()) {
-     $dir=dirname(__DIR__).'/storage/mail'; if(!is_dir($dir)) mkdir($dir,0700,true);
+     $dir=env('MAIL_LOG_DIRECTORY',dirname(__DIR__).'/storage/mail'); if(!is_dir($dir)) mkdir($dir,0700,true);
      file_put_contents($dir.'/'.$row['id'].'.html',$html,LOCK_EX); chmod($dir.'/'.$row['id'].'.html',0600);
     } else {
      $scheme=env('MAIL_ENCRYPTION','tls')==='smtps'?'smtps':'smtp';
@@ -43,7 +37,12 @@ final class MailerService {
      $mailer=new Mailer(Transport::fromDsn($dsn));
      $mailer->send((new Email())->from(new \Symfony\Component\Mime\Address(env('MAIL_FROM_ADDRESS'), 'Zion Storage'))->to($row['recipient'])->subject($subject)->text($body.(!empty($data['url'])?"\n".$data['url']:''))->html($html));
     }
-    $this->db->run('UPDATE outbox SET sent_at=?,payload=? WHERE id=?',[time(),'{}',$row['id']]); $count++;
+    $this->db->transaction(function() use($row,$data) {
+     $this->db->run('UPDATE outbox SET sent_at=?,payload=? WHERE id=?',[time(),'{}',$row['id']]);
+     if($row['kind']==='fiscal_invoice' && isset($data['fiscal_invoice_id'])) {
+      $this->db->run("UPDATE fiscal_invoices SET notification_sent_at=?,completed_at=?,updated_at=? WHERE id=? AND status='issued'",[time(),time(),time(),$data['fiscal_invoice_id']]);
+     }
+    }); $count++;
    } catch(\Throwable $e) { error_log('Mail delivery pending; outbox_id='.$row['id']); }
    finally { flock($lock,LOCK_UN); fclose($lock); }
   } return $count;

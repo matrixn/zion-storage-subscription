@@ -4,6 +4,12 @@ require dirname(__DIR__).'/src/bootstrap.php';
 $_ENV['APP_ENV']='test';$_ENV['MAIL_TRANSPORT']='log';$_ENV['STRIPE_SECRET_KEY']='sk_test_fake';$_ENV['STRIPE_WEBHOOK_SECRET']='whsec_fixture';
 $_ENV['STRIPE_PRICE_120GB']='price_120'; $_ENV['APP_URL']='http://localhost:8088';
 $_ENV['APP_KEY']=str_repeat('test-key',8);
+$_ENV['OBLIO_ENABLED']='false';
+$_ENV['MAIL_LOG_DIRECTORY']=dirname(__DIR__).'/storage/test-mail';
+final class NoNetworkStripe implements Stripe\HttpClient\ClientInterface {
+ public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null) { throw new RuntimeException('Unexpected network call in tests'); }
+}
+Stripe\ApiRequestor::setHttpClient(new NoNetworkStripe());
 final class TestStorage extends Zion\StorageProvisioningService {
  public int $created=0;public array $users=[];public bool $fail=false;public int $disabled=0;
  public function createUser(array $u,string $p,int $quota):string{if($this->fail)throw new RuntimeException('offline');$this->created++;$this->users['store-'.$u['id']]=['quota'=>$quota,'used'=>0];return 'store-'.$u['id'];}
@@ -13,7 +19,9 @@ final class TestStorage extends Zion\StorageProvisioningService {
 }
 final class TestStripe extends Zion\StripeService {
  public array $snapshot=[];
+ public array $invoices=[];
  protected function fetchSubscription(string $id):array{return $this->snapshot;}
+ protected function fetchInvoice(string $id):array{return $this->invoices[$id]??throw new RuntimeException('Missing invoice fixture');}
 }
 $count=0;
 function check(bool $condition,string $name):void {global $count;if(!$condition)throw new RuntimeException('FAIL: '.$name);$count++;echo "PASS ".$name."\n";}
@@ -21,6 +29,7 @@ $db=new Zion\Database(':memory:');$db->migrate();$plans=new Zion\Plans();$mail=n
 function signup(string $email,string $plan='free',string $locale='en'):array{
  global $accounts,$db;
  $id=$accounts->register(['name'=>'Test User','email'=>$email,'password'=>'a-long-test-password','locale'=>$locale,'plan'=>$plan]);
+ if($plan!=='free') (new Zion\BillingProfileService($db))->save($id,['type'=>'individual','name'=>'Test User','billing_email'=>$email,'country'=>'RO','county'=>'Bucuresti','city'=>'Bucuresti','address'=>'Strada Test 1','postal_code'=>'010101']);
  $payload=Zion\MailerService::decode($db->one("SELECT payload FROM outbox WHERE recipient=? ORDER BY id DESC",[$email])['payload']);
  parse_str(parse_url($payload['url'],PHP_URL_QUERY),$q);return [$id,$q['token'],$payload['url']];
 }
@@ -56,6 +65,7 @@ check(!$accounts->provision($paid,'a-long-test-password'),'paid user cannot acti
 $billing=new TestStripe($db,$plans,$mail,$store);
 $billing->snapshot=['id'=>'sub_test','customer'=>'cus_test','status'=>'active','metadata'=>['user_id'=>$paid,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120'],'current_period_end'=>time()+86400]]],'latest_invoice'=>['id'=>'in_test','status'=>'paid','hosted_invoice_url'=>'https://invoice.stripe.com/i/test','amount_paid'=>799,'currency'=>'ron','created'=>time()]];
 $event=['id'=>'evt_paid','object'=>'event','livemode'=>false,'type'=>'invoice.paid','data'=>['object'=>['id'=>'in_test','subscription'=>'sub_test']]];
+$billing->invoices['in_test']=$billing->snapshot['latest_invoice']+['livemode'=>false,'customer'=>'cus_test','subscription'=>'sub_test','lines'=>['data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>1792108800,'end'=>1794787200]]],'has_more'=>false]];
 $raw=json_encode($event);$sig='t='.time().',v1='.hash_hmac('sha256',time().'.'.$raw,'whsec_fixture');
 $billing->receive($raw,$sig);
 check($accounts->provision($paid,'a-long-test-password'),'signed webhook permits paid provisioning');
@@ -79,3 +89,4 @@ $_ENV['TRUSTED_PROXIES']='127.0.0.1';$_SERVER['REMOTE_ADDR']='203.0.113.5';$_SER
 $_SERVER['REMOTE_ADDR']='127.0.0.1';$_SERVER['HTTP_X_FORWARDED_FOR']='1.2.3.4, 203.0.113.5';check(Zion\Security::clientIp()==='203.0.113.5','trusted proxy chain excludes spoofed prefix');
 echo "\n$count assertions passed. No external service was contacted.\n";
 require __DIR__.'/services.php';
+require __DIR__.'/fiscal.php';

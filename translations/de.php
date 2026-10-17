@@ -1,5 +1,5 @@
 <?php
-return json_decode(<<<'JSON'
+$messages = json_decode(<<<'JSON'
 {
   "nav.home": "Startseite",
   "nav.how": "So funktioniert’s",
@@ -163,3 +163,42 @@ return json_decode(<<<'JSON'
   "email.support.body": "{name}\n{email}\n{subject}\n\n{message}"
 }
 JSON, true, 512, JSON_THROW_ON_ERROR);
+return array_replace($messages, json_decode(<<<'FISCAL'
+{
+  "billing.title": "Rechnungsdaten",
+  "billing.intro": "Gib die Rechnungsdaten für kostenpflichtige Tarife ein. Verwende einen Ländercode mit zwei Buchstaben, zum Beispiel RO. Änderungen gelten nur für zukünftige Rechnungen.",
+  "billing.type": "Kundentyp",
+  "billing.individual": "Privatperson",
+  "billing.company": "Unternehmen / Selbstständige",
+  "billing.name": "Vollständiger Name / Kontaktperson",
+  "billing.billing_email": "E-Mail für Rechnungen",
+  "billing.country": "Land (Code mit zwei Buchstaben)",
+  "billing.county": "Bundesland / Region",
+  "billing.city": "Ort",
+  "billing.address": "Rechnungsadresse",
+  "billing.postal_code": "Postleitzahl",
+  "billing.phone": "Telefon (optional)",
+  "billing.company_name": "Firmenname",
+  "billing.tax_id": "Steuer- / Umsatzsteuer-ID",
+  "billing.registration_number": "Registrierungsnummer (optional)",
+  "billing.invalid": "Prüfe deine Rechnungsdaten. Gib Adresse, Land, Region, Ort und Postleitzahl an. Unternehmen benötigen zusätzlich den Firmennamen und die Steuernummer.",
+  "billing.required": "Vervollständige deine Rechnungsdaten vor der Zahlung.",
+  "billing.save": "Daten speichern",
+  "billing.saved": "Deine Rechnungsdaten wurden gespeichert.",
+  "billing.history": "Steuerrechnungen",
+  "billing.history.note": "Zahlungsbestätigungen und Steuerrechnungen sind unterschiedliche Dokumente. Rechnungen erscheinen nach ihrer Ausstellung.",
+  "billing.empty": "Du hast noch keine Steuerrechnungen.",
+  "billing.document": "Rechnungsdokument",
+  "billing.download": "Rechnung öffnen",
+  "billing.status.pending": "In Vorbereitung",
+  "billing.status.processing": "In Vorbereitung",
+  "billing.status.issued": "Ausgestellt",
+  "billing.status.failed": "In Vorbereitung",
+  "billing.status.cancelled": "Storniert",
+  "billing.status.simulated": "Simulation — ohne steuerliche Gültigkeit",
+  "billing.status.no_charge": "Keine Zahlung eingegangen",
+  "email.fiscal_invoice.subject": "Ihre Zion Storage-Rechnung ist verfügbar",
+  "email.fiscal_invoice.body": "Die Rechnung {number} ist verfügbar.\nTarif: {plan}\nBezahlter Betrag: {amount}\nAbgedeckter Zeitraum: {period}\nNächste Verlängerung: {renewal}\n\nÖffnen Sie das Dokument über den Link unten, sofern verfügbar.",
+  "email.payment.body": "Deine Abonnementzahlung ist eingegangen. Diese Zahlungsbestätigung ist keine Steuerrechnung. Deine Steuerrechnung wird nach der Ausstellung separat versendet."
+}
+FISCAL, true, 512, JSON_THROW_ON_ERROR));

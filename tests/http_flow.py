@@ -1,5 +1,5 @@
 """Isolated HTTP signup/verification/provisioning test with a local storage API fixture."""
-import http.server, threading, subprocess, tempfile, os, time, json, urllib.request, urllib.parse, http.cookiejar, re, sqlite3
+import base64, http.server, threading, subprocess, tempfile, os, time, json, urllib.request, urllib.parse, http.cookiejar, re, sqlite3
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 checks=0
@@ -33,11 +33,12 @@ with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
     backend=http.server.ThreadingHTTPServer(("127.0.0.1",0),Backend)
     threading.Thread(target=backend.serve_forever,daemon=True).start()
     env=os.environ.copy()
-    env.update(APP_ENV="test",APP_KEY="http-fixture-key-"*4,APP_URL="http://127.0.0.1:8092",DB_PATH=temp+"/test.sqlite",MAIL_TRANSPORT="log",STRIPE_SECRET_KEY="sk_test_fixture",STRIPE_WEBHOOK_SECRET="whsec_fixture",STORAGE_API_URL="http://127.0.0.1:"+str(backend.server_port)+"/api",STORAGE_API_KEY="fixture-storage-key",CAPTCHA_ENABLED="false")
+    env.update(APP_ENV="test",APP_KEY="http-fixture-key-"*4,APP_URL="http://127.0.0.1:8092",DB_PATH=temp+"/test.sqlite",MAIL_TRANSPORT="log",STRIPE_SECRET_KEY="sk_test_fixture",STRIPE_WEBHOOK_SECRET="whsec_fixture",STORAGE_API_URL="http://127.0.0.1:"+str(backend.server_port)+"/api",STORAGE_API_KEY="fixture-storage-key",CAPTCHA_ENABLED="false",OBLIO_ENABLED="false",STRIPE_PRICE_120GB="price_http")
     def cli(*args):
         result=subprocess.run(["php",*args],cwd=ROOT,env=env,text=True,capture_output=True)
         if result.returncode: raise RuntimeError(result.stderr)
         return result.stdout
+    env['MAIL_LOG_DIRECTORY']=temp+'/mail'
     cli("bin/console.php","migrate")
     log=open(temp+"/server.log","w")
     server=subprocess.Popen(["php","-S","127.0.0.1:8092","-t","public","public/router.php"],cwd=ROOT,env=env,stdout=log,stderr=log)
@@ -95,6 +96,44 @@ with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
         cli("bin/console.php","mail:work")
         check(connection.execute("SELECT COUNT(*) FROM outbox WHERE sent_at IS NULL").fetchone()[0]==0,"HTTP worker delivers local email previews")
         check("secure-http-test-password" not in Path(temp+"/server.log").read_text(),"HTTP server logs exclude passwords")
+
+        check(connection.execute("SELECT COUNT(*) FROM fiscal_invoices").fetchone()[0]==0,"HTTP free signup has no fiscal document")
+        _,html=request("/en/register")
+        bad_paid=data.copy()
+        bad_paid.update(email="paid-http@example.com",plan="120gb",_csrf=csrf(html))
+        status,html=request("/en/register",bad_paid)
+        check(status==422 and "billing details" in html,"HTTP paid registration requires local billing profile")
+        billing=dict(type="individual",name="HTTP Paid",billing_email="paid-billing@example.com",country="RO",county="Bucuresti",city="Bucuresti",address="Strada Test 1",postal_code="010101")
+        paid=bad_paid.copy()
+        paid.update(locale="fr")
+        paid.update({"billing["+key+"]":value for key,value in billing.items()})
+        status,html=request("/en/register",paid)
+        check(status==200 and "Check your inbox." in html,"HTTP paid registration saves billing profile without JavaScript")
+        link=mail_link();_,html=request(link)
+        verification=re.search(r'name="token" value="([^"]+)"',html).group(1)
+        status,html=request("/fr/verification-email",dict(_csrf=csrf(html),token=verification))
+        check(status==200 and "Paiement" in html,"HTTP paid verification reaches localized checkout")
+        _,html=request("/fr/coordonnees-facturation")
+        check("paid-billing@example.com" in html and 'name="robots" content="noindex,nofollow"' in html,"HTTP private billing page renders local profile and noindex")
+        company=billing.copy()
+        company.update(type="company",company_name="HTTP Company SRL",tax_id="RO12345678",name="HTTP Contact")
+        update={"billing["+key+"]":value for key,value in company.items()}
+        update["_csrf"]=csrf(html)
+        status,html=request("/fr/coordonnees-facturation",update)
+        check(status==200 and "enregistrées" in html,"HTTP company billing profile update")
+        connection.close()
+        connection=sqlite3.connect(temp+"/test.sqlite")
+        check(connection.execute("PRAGMA integrity_check").fetchone()[0]=="ok","HTTP database integrity after billing profile writes")
+        profile_row=connection.execute("SELECT type,company_name,tax_id FROM billing_profiles WHERE user_id=(SELECT id FROM users WHERE email='paid-http@example.com')").fetchone()
+        check(profile_row==("company","HTTP Company SRL","RO12345678"),"HTTP company data persists separately from authentication")
+        code='require "src/bootstrap.php";$db=new Zion\\Database();$u=$db->one("SELECT * FROM users WHERE email=?",["paid-http@example.com"]);$plans=new Zion\\Plans();$s=new Zion\\OblioInvoiceService($db,new Zion\\MailerService($db));$invoice=["id"=>"in_http_sim","status"=>"paid","livemode"=>false,"subscription"=>"sub_http","customer"=>"cus_http","amount_paid"=>650,"currency"=>"ron","created"=>1792108800,"lines"=>["data"=>[["price"=>["id"=>$plans->get("120gb")["stripe_price_id"]],"period"=>["start"=>1792108800,"end"=>1794787200],"quantity"=>1]],"has_more"=>false]];$subscription=["id"=>"sub_http","current_period_end"=>1794787200];$id=$s->capture($invoice,$u,$subscription,$plans->get("120gb"));$s->process($id);'
+        cli("-r",code)
+        check(connection.execute("SELECT status,amount,oblio_invoice_id FROM fiscal_invoices").fetchone()==("simulated",650,None),"HTTP local fiscal simulation keeps authoritative collected amount")
+        _,html=request("/fr/coordonnees-facturation")
+        check("sans valeur fiscale" in html and "6,50 RON" in html,"HTTP history labels simulation without claiming fiscal issuance")
+        result=json.loads(cli("bin/retry-oblio-invoices.php"))
+        check(result["processed"]==0,"HTTP CLI retry skips simulated and issued documents")
+
         print(str(checks)+" HTTP assertions passed.")
     finally:
         server.terminate();server.wait(timeout=5);backend.shutdown();log.close()

@@ -6,6 +6,10 @@ $cmd=$argv[1]??'help';
 if($cmd==='key'){echo bin2hex(random_bytes(32)).PHP_EOL;exit;}
 if($cmd==='migrate'){$db->migrate();echo "Database ready\n";exit;}
 $mail=new Zion\MailerService($db);
+if($cmd==='oblio:retry'){
+ $result=(new Zion\OblioInvoiceService($db,$mail))->retryPending(in_array('--due',$argv,true));
+ echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;exit($result['pending']>0?1:0);
+}
 if($cmd==='mail:work'){echo 'Delivered: '.$mail->deliver().PHP_EOL;exit;}
 if($cmd==='maintenance'){
  $db->run('DELETE FROM email_verifications WHERE expires_at<?',[time()-86400]);
@@ -37,6 +41,7 @@ $queries=[
  'provisioning'=>'SELECT id,storage_user_id,storage_quota_bytes,status FROM users',
  'events'=>'SELECT * FROM billing_events ORDER BY created_at DESC LIMIT 100',
  'deliveries'=>'SELECT id,kind,attempts,sent_at FROM outbox ORDER BY id DESC LIMIT 100'
+ ,'fiscal-invoices'=>'SELECT id,user_id,stripe_invoice_id,stripe_subscription_id,oblio_invoice_id,oblio_series,oblio_number,amount,currency,status,error_message,attempts,issued_at,notification_sent_at,completed_at FROM fiscal_invoices ORDER BY created_at DESC LIMIT 100'
 ];
 if(isset($queries[$cmd])){echo json_encode($db->run($queries[$cmd])->fetchAll(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE).PHP_EOL;exit;}
-echo "Commands: key, migrate, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries\n";
+echo "Commands: key, migrate, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";

@@ -7,3 +7,4 @@
 <?php else: ?><h1><?= e($t('status.title')) ?></h1><p><?= e($t($user && $user['email_verified_at']?'status.wait':'status.verify')) ?></p><a class="button" href="<?= $url('status') ?>"><?= e($t('continue')) ?> ↻</a><?php endif ?>
 <?php if($user && $user['selected_plan_id']!=='free'): ?><form class="recovery" method="post" action="<?= $url('portal') ?>"><input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><button class="text-link"><?= e($t('status.billing')) ?> ↗</button></form><?php endif ?>
 </section>
+<?php if($user && $user['selected_plan_id']!=='free'): ?><div class="wrap billing-shortcut"><a class="text-link" href="<?= $url('billing-profile') ?>"><?= e($t('billing.title')) ?> · <?= e($t('billing.history')) ?> ↗</a></div><?php endif ?>

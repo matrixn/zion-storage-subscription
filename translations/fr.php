@@ -1,5 +1,5 @@
 <?php
-return json_decode(<<<'JSON'
+$messages = json_decode(<<<'JSON'
 {
   "nav.home": "Accueil",
   "nav.how": "Comment ça marche",
@@ -163,3 +163,42 @@ return json_decode(<<<'JSON'
   "email.support.body": "{name}\n{email}\n{subject}\n\n{message}"
 }
 JSON, true, 512, JSON_THROW_ON_ERROR);
+return array_replace($messages, json_decode(<<<'FISCAL'
+{
+  "billing.title": "Coordonnées de facturation",
+  "billing.intro": "Renseignez les coordonnées pour vos offres payantes. Utilisez un code pays à deux lettres, par exemple RO. Les modifications concernent uniquement les futures factures.",
+  "billing.type": "Type de client",
+  "billing.individual": "Particulier",
+  "billing.company": "Entreprise / indépendant",
+  "billing.name": "Nom complet / personne à contacter",
+  "billing.billing_email": "E-mail de facturation",
+  "billing.country": "Pays (code à deux lettres)",
+  "billing.county": "Département / région",
+  "billing.city": "Ville",
+  "billing.address": "Adresse de facturation",
+  "billing.postal_code": "Code postal",
+  "billing.phone": "Téléphone (facultatif)",
+  "billing.company_name": "Raison sociale",
+  "billing.tax_id": "Numéro fiscal / TVA",
+  "billing.registration_number": "Numéro d’immatriculation (facultatif)",
+  "billing.invalid": "Vérifiez les coordonnées de facturation. Renseignez l’adresse, le pays, la région, la ville et le code postal ; les entreprises doivent également indiquer leur raison sociale et numéro fiscal.",
+  "billing.required": "Complétez vos coordonnées de facturation avant le paiement.",
+  "billing.save": "Enregistrer",
+  "billing.saved": "Vos coordonnées de facturation ont été enregistrées.",
+  "billing.history": "Factures fiscales",
+  "billing.history.note": "Les confirmations de paiement et les factures fiscales sont des documents distincts. Les factures apparaissent après leur émission.",
+  "billing.empty": "Vous n’avez pas encore de facture fiscale.",
+  "billing.document": "Document fiscal",
+  "billing.download": "Ouvrir la facture",
+  "billing.status.pending": "En préparation",
+  "billing.status.processing": "En préparation",
+  "billing.status.issued": "Émise",
+  "billing.status.failed": "En préparation",
+  "billing.status.cancelled": "Annulée",
+  "billing.status.simulated": "Simulation — sans valeur fiscale",
+  "billing.status.no_charge": "Aucun paiement encaissé",
+  "email.fiscal_invoice.subject": "Votre facture Zion Storage est disponible",
+  "email.fiscal_invoice.body": "La facture {number} est disponible.\nOffre : {plan}\nMontant payé : {amount}\nPériode couverte : {period}\nProchain renouvellement : {renewal}\n\nOuvrez le document avec le lien ci-dessous, s’il est disponible.",
+  "email.payment.body": "Le paiement de votre abonnement a été reçu. Cette confirmation ne constitue pas une facture fiscale. Votre facture fiscale sera envoyée séparément après son émission."
+}
+FISCAL, true, 512, JSON_THROW_ON_ERROR));

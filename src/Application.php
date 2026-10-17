@@ -51,9 +51,10 @@ final class Application {
    // Do not consume tokens on GET: mail scanners must not activate accounts.
    $this->render('verify',['token'=>is_string($token)?$token:'']);return;
   }
-  if(in_array($this->page,['status','checkout','cancel','activate','portal'],true)&&!$this->user()){
+  if(in_array($this->page,['status','checkout','cancel','activate','portal','billing-profile'],true)&&!$this->user()){
    $this->render('resend',['notice'=>'status.recover']);return;
   }
+  if($this->page==='checkout' && $this->user() && !(new BillingProfileService($this->db))->get($this->user()['id'])) $this->redirect(Router::path($this->locale,'billing-profile'));
   $this->render($this->page);
  }
  private function post(): void {
@@ -64,6 +65,10 @@ final class Application {
    if(mb_strlen($d['name'])<2 || mb_strlen($d['name'])>150 || !filter_var($d['email'],FILTER_VALIDATE_EMAIL) || strlen($d['email'])>254 || !in_array($d['locale'],TranslationService::LOCALES,true) || empty($_POST['terms']) || empty($_POST['privacy'])){$this->fail('error.validation');return;}
    if(!AccountService::passwordValid($d['password']) || $d['password']!==$d['confirm']){$this->fail('error.password');return;}
    if(!$this->plans->get($d['plan'])){$this->fail('error.plan');return;}
+   if($d['plan']!=='free') {
+    try { $d['billing']=BillingProfileService::validate(is_array($_POST['billing']??null)?$_POST['billing']:[], $d); }
+    catch(\InvalidArgumentException $e) { $this->fail('billing.invalid');return; }
+   }
    if(!Security::captcha((string)($_POST['cf-turnstile-response']??''))){$this->fail('error.captcha');return;}
    // Same response for existing accounts. No session privilege is granted before verification.
    $this->accounts->register($d);
@@ -106,7 +111,15 @@ final class Application {
    $this->render('message',['message'=>'contact.sent']);return;
   }
   $u=$this->user();if(!$u){$this->fail('error.csrf',401);return;}
-  if($this->page==='checkout'){$this->redirect($this->billing->checkout($u));}
+  if($this->page==='billing-profile') {
+   try { (new BillingProfileService($this->db))->save($u['id'],is_array($_POST['billing']??null)?$_POST['billing']:[]); }
+   catch(\InvalidArgumentException $e) { $this->fail('billing.invalid');return; }
+   $this->render('billing-profile',['notice'=>'billing.saved']);return;
+  }
+  if($this->page==='checkout'){
+   if(!(new BillingProfileService($this->db))->get($u['id']))$this->redirect(Router::path($this->locale,'billing-profile'));
+   $this->redirect($this->billing->checkout($u));
+  }
   if($this->page==='portal'){$this->redirect($this->billing->portal($u));}
   if($this->page==='activate') {
    if(!Security::limit($this->db,'activate:'.$u['id'],8,900)){$this->fail('error.rate',429);return;}
@@ -118,6 +131,9 @@ final class Application {
  private function render(string $view,array $data=[]): void {
   $locale=$this->locale; $page=$this->page; $t=fn(string $k,array $v=[])=>$this->tr->get($k,$v); $url=fn(string $p,string $l='')=>Router::path($l?:$locale,$p);
   $plans=$this->plans->all();$user=$this->user();$eligible=$user?$this->accounts->eligible($user):false;
+  $profile=$user?(new BillingProfileService($this->db))->get($user['id']):null;
+  $billing=is_array($_POST['billing']??null)?$_POST['billing']:($profile??[]);
+  $fiscalInvoices=$user?$this->db->run('SELECT oblio_series,oblio_number,invoice_url,amount,currency,status,billing_period_start,billing_period_end FROM fiscal_invoices WHERE user_id=? ORDER BY created_at DESC LIMIT 50',[$user['id']])->fetchAll():[];
   $error=$data['error']??null;$message=$data['message']??null;
   $selected=(string)($_GET['plan']??$_POST['plan']??'free'); if(!$this->plans->get($selected))$selected='free';
   $canonicalPage=in_array($page,['home','how','register','contact'],true)?$page:'home';

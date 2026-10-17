@@ -10,6 +10,7 @@
 <fieldset data-plan><legend><?= e($t('register.step2')) ?></legend>
 <label for="plan"><?= e($t('form.plan')) ?></label><select id="plan" name="plan"><?php foreach($plans as $p): ?><option value="<?= $p['slug'] ?>" <?= $selected===$p['slug']?'selected':'' ?>><?= e($p['name'].' · '.$p['capacity'].' · '.number_format($p['monthly_price']/100,2).' RON / '.$t('month')) ?></option><?php endforeach ?></select>
 <p class="micro"><?= e($t('pricing.note')) ?></p>
+<?php require __DIR__.'/billing-fields.php' ?>
 <label class="checkbox"><input type="checkbox" name="terms" required value="1"><span><?= e($t('form.terms')) ?> <a target="_blank" rel="noopener" href="<?= $url('legal') ?>?document=terms">↗</a></span></label>
 <label class="checkbox"><input type="checkbox" name="privacy" required value="1"><span><?= e($t('form.privacy')) ?> <a target="_blank" rel="noopener" href="<?= $url('legal') ?>?document=privacy">↗</a></span></label>
 <button class="button full" type="submit"><?= e($t('form.submit')) ?> ↗</button>

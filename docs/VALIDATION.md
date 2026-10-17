@@ -39,3 +39,15 @@ These need real test credentials and a reachable isolated storage environment:
 7. Check actual reverse-proxy TLS, forwarded client IPs, caching, public URLs and Core Web Vitals on representative phones.
 
 Fixtures and a successful local container build do not establish that these external integrations have been accepted.
+
+## Fiscal invoicing update — 17 October 2026
+
+Validated 175 PHP assertions, 27 isolated HTTP assertions, 693 public-site Chrome assertions and 181 billing-flow Chrome assertions. PHP syntax, strict Composer validation, dependency advisory audit and Docker build also passed. No real fiscal invoice was issued.
+
+Fiscal cases cover first purchase, repeated events, each renewal, provider outage, retry after a lost response following remote creation, interrupted workers, immutable billing snapshots, updated future profiles, exact billing periods, actual collected amounts, configured VAT, localized fiscal email delivery/completion, failure/cancellation exclusions, zero collection, unsupported currency/proration and safe simulation. The HTTP test covers paid billing profiles without JavaScript, local persistence, authenticated editing/history, no invoice for free signup and the retry CLI. It uses a disposable database and only local fixture APIs.
+
+The additional browser suite checks paid registration and company fields in all four locales at all seven requested widths, private billing/history at 320/390/768/1440 px, saved company data and anonymous access exclusion. Screenshots are in ignored tests/artifacts/billing-*.png.
+
+To run this optional suite, start an isolated PHP test server with APP_ENV=test, OBLIO_ENABLED=false, a disposable DB_PATH, STRIPE_PRICE_120GB=price_browser and APP_URL matching its local origin. Run tests/setup-billing-browser.php with the same environment and save its JSON to tests/artifacts/billing-fixture.json. Then run tests/billing-browser.cjs with BILLING_FIXTURE_FILE pointing to that JSON, TEST_URL matching the test server (default http://localhost:8089) and PLAYWRIGHT_MODULE if needed. The fixture creates only local test data and refuses non-test environments. Regenerate its one-use verification link before rerunning the browser suite.
+
+Real Oblio authentication, issuer nomenclatures, numbering, document/PDF/e-Factura output and hosted Stripe test payment acceptance still require controlled external acceptance. See [Oblio deployment and recovery](OBLIO.md). Refund/storno automation remains phase 2.

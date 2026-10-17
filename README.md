@@ -24,7 +24,7 @@ Run `php bin/console.php mail:work` to deliver queued email. Local `MAIL_TRANSPO
 - `public/`: document root, front controller, local CSS/SVG and small progressive-enhancement script.
 - `src/`: routing, localization, controllers, database, account security and service adapters.
 - `templates/`: shared localized layouts; templates are not duplicated by locale.
-- `translations/`: complete RO/EN/FR/DE dictionaries, including eight transactional email types.
+- `translations/`: complete RO/EN/FR/DE dictionaries, including fiscal invoice notifications.
 - `config/plans.php`: canonical storage/price catalog; integer minor currency units and decimal storage bytes.
 - `database/schema.sql`: idempotent initial schema.
 - `bin/console.php`: migration, private diagnostics, email worker and maintenance.
@@ -36,7 +36,7 @@ Four marketing pages per locale: home, how it works, register, contact. Pricing 
 
 Registration stores an Argon2id hash only. No clear-text or reversibly encrypted password is persisted. After verification and, for paid plans, confirmed subscription payment, the user confirms the original password in a POST form. It is verified locally and passed over the private server-side API connection once. This is architecture B from the brief. Account creation therefore needs this final user interaction; it cannot silently happen in a webhook without retaining a recoverable password.
 
-Verification tokens contain 32 random bytes, are hashed with SHA-256, expire after one hour and are consumed atomically. GET only presents a confirmation form, protecting against mail-link scanners. Email queue payloads are authenticated-encrypted using APP_KEY, then scrubbed after successful delivery. Rotating APP_KEY invalidates pending email payloads: drain or reissue them first.
+Verification tokens contain 32 random bytes, are hashed with SHA-256, expire after one hour and are consumed atomically. GET only presents a confirmation form, protecting against mail-link scanners. Email queue payloads and fiscal snapshots are authenticated-encrypted using APP_KEY. Sent email payloads are scrubbed; fiscal audit snapshots remain. Preserve APP_KEY with backups and do not rotate it without a re-encryption migration.
 
 Verified users can resume signup through a new one-use email link. The secure session expires after four hours. Email links never contain passwords. Existing-email registration and resend use generic responses. Verification resend is limited per IP and email. Storage creation is serialized per user and reconciled using a safe opaque label after timeouts.
 
@@ -59,7 +59,7 @@ Only Stripe test keys and non-live webhook events are accepted in this release. 
 
 The return URL does not grant access. Webhooks verify the official SDK signature/timestamp and retrieve the current subscription with expanded latest invoice. Access requires the matching server-configured price, a paid latest invoice, active subscription and a verified email. Event order cannot restore an obsolete paid state. Database event IDs, email deduplication and locks support webhook retries. Subscription quota changes must be made through this application's configured catalog; arbitrary price changes in the Stripe dashboard are rejected.
 
-Invoices are recorded by ID and URL. The customer portal provides invoice history and renewal management. `BillingService` is the provider boundary; a fiscal invoicing provider can consume invoice records independently. Stripe invoices are not represented as a completed Romanian fiscal integration.
+Stripe invoices are recorded as payment/billing references. The customer portal manages payment methods and renewals. Fiscal invoicing is provided separately by `OblioInvoiceService`, with durable per-cycle jobs, local individual/company billing profiles, invoice history and localized notifications. A Stripe receipt is not the final fiscal invoice. Oblio defaults to local simulation; credentials, issuer/VAT settings and controlled external acceptance are required before real issuance. See [Oblio configuration and retry workflow](docs/OBLIO.md).
 
 ## Private storage adapter (operator-only information)
 

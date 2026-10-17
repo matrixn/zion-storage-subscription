@@ -20,6 +20,8 @@ Run from the deployment scheduler:
 
 These commands are instructions, not schedules installed on the current host. Configure log rotation for storage/logs/application.log and local mail previews. Production must use MAIL_TRANSPORT=smtp; local file previews are prohibited in production.
 
+Also run `docker compose exec -T --user www-data web php bin/console.php oblio:retry --due` every minute, before the mail worker. Run migrations before serving the updated application. Oblio defaults to OBLIO_ENABLED=false; enabling it can issue real fiscal documents. See [the fiscal deployment notes](OBLIO.md) for issuer/VAT settings, simulation boundaries, retries and external acceptance. Back up APP_KEY with the database; it is required to decrypt persistent fiscal snapshots as well as pending email.
+
 SMTP supports mandatory STARTTLS (`MAIL_ENCRYPTION=tls`) or implicit TLS (`smtps`). Credentials are URL-encoded internally. Do not use unencrypted SMTP in production.
 
 ## Reverse proxy

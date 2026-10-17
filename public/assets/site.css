@@ -11,4 +11,20 @@
 .hero-art{overflow:clip}
 .reveal-enhanced{opacity:0;translate:0 16px;transition:opacity .65s ease,translate .65s ease}.reveal-enhanced.revealed{opacity:1;translate:0 0}
 @media(prefers-reduced-motion:reduce){.reveal-enhanced{opacity:1;translate:none}}
+.billing-fields{margin-top:24px;border-top:1px solid var(--line);padding-top:5px}
+.billing-fields legend{line-height:1.4}
+.billing-fields>p{margin-top:14px;margin-bottom:10px}
+.billing-page{padding-bottom:90px}
+.billing-page .page-heading h1{font-size:clamp(32px,5vw,64px);overflow-wrap:anywhere}
+.billing-layout{display:grid;grid-template-columns:1.1fr 1fr;gap:40px;align-items:start}
+.billing-layout .billing-fields{border:0;margin-top:0;padding-top:0}
+.billing-layout .billing-fields legend{padding-top:0}
+.invoice-history{padding:24px 0}
+.invoice-history h2{font-size:30px}
+.invoice-card{border:1px solid var(--line);border-radius:12px;padding:22px;margin-top:16px}
+.invoice-card>div{display:flex;flex-wrap:wrap;align-items:center;gap:14px;justify-content:space-between}
+.invoice-card p{margin:12px 0 0;font-size:14px}
+.invoice-status{font-size:10px;color:var(--green)}
+.billing-shortcut{margin-top:-70px;margin-bottom:70px;text-align:center}
+@media(max-width:740px){.billing-layout{grid-template-columns:1fr;gap:20px}.billing-page{padding-bottom:50px}.billing-shortcut{margin-top:-35px;margin-bottom:45px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

@@ -1,5 +1,5 @@
 <?php
-return json_decode(<<<'JSON'
+$messages = json_decode(<<<'JSON'
 {
   "nav.home": "Home",
   "nav.how": "How it works",
@@ -163,3 +163,42 @@ return json_decode(<<<'JSON'
   "email.support.body": "{name}\n{email}\n{subject}\n\n{message}"
 }
 JSON, true, 512, JSON_THROW_ON_ERROR);
+return array_replace($messages, json_decode(<<<'FISCAL'
+{
+  "billing.title": "Billing details",
+  "billing.intro": "Enter the billing details for paid plans. Use a two-letter country code, for example RO. Changes apply only to future invoices.",
+  "billing.type": "Customer type",
+  "billing.individual": "Individual",
+  "billing.company": "Company / sole trader",
+  "billing.name": "Full name / contact person",
+  "billing.billing_email": "Billing email",
+  "billing.country": "Country (two-letter code)",
+  "billing.county": "County / region",
+  "billing.city": "City",
+  "billing.address": "Billing address",
+  "billing.postal_code": "Postal code",
+  "billing.phone": "Phone (optional)",
+  "billing.company_name": "Company / business name",
+  "billing.tax_id": "Tax / VAT number",
+  "billing.registration_number": "Registration number (optional)",
+  "billing.invalid": "Check your billing details. Enter the address, country, region, city and postal code; businesses also need a company name and tax number.",
+  "billing.required": "Complete your billing details before payment.",
+  "billing.save": "Save details",
+  "billing.saved": "Your billing details have been saved.",
+  "billing.history": "Fiscal invoices",
+  "billing.history.note": "Payment confirmations and fiscal invoices are separate documents. Invoices appear after they are issued.",
+  "billing.empty": "You do not have any fiscal invoices yet.",
+  "billing.document": "Fiscal document",
+  "billing.download": "Open invoice",
+  "billing.status.pending": "Being prepared",
+  "billing.status.processing": "Being prepared",
+  "billing.status.issued": "Issued",
+  "billing.status.failed": "Being prepared",
+  "billing.status.cancelled": "Cancelled",
+  "billing.status.simulated": "Simulation — no fiscal validity",
+  "billing.status.no_charge": "No payment collected",
+  "email.fiscal_invoice.subject": "Your Zion Storage invoice is available",
+  "email.fiscal_invoice.body": "Invoice {number} is available.\nPlan: {plan}\nAmount paid: {amount}\nCovered period: {period}\nNext renewal: {renewal}\n\nUse the link below to open the document, if available.",
+  "email.payment.body": "Your subscription payment was received. This payment confirmation is not a fiscal invoice. Your fiscal invoice will be sent separately after it is issued."
+}
+FISCAL, true, 512, JSON_THROW_ON_ERROR));

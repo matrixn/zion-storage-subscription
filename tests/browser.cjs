@@ -32,6 +32,8 @@ let checks=0;const results=[];function check(ok,label){if(!ok)throw Error(label)
  await page.locator('#name').fill('Browser Test');await page.locator('#email').fill('browser-'+Date.now()+'@example.com');
  await page.locator('#password').fill('browser-test-password');await page.locator('#confirm').fill('browser-test-password');
  await page.locator('[data-next]').click();check(await page.locator('[data-plan]').isVisible(),'registration advances to plan review');
+ check(await page.locator('[data-billing]').isVisible(),'paid plan collects billing details');
+ await page.locator('#billing-country').fill('RO');await page.locator('#billing-county').fill('Bucuresti');await page.locator('#billing-city').fill('Bucuresti');await page.locator('#billing-address').fill('Strada Test 1');await page.locator('#billing-postal_code').fill('010101');
  await page.locator('[data-back]').click();check(await page.locator('#name').isVisible(),'registration back preserves fields');
  await page.locator('[data-next]').click();await page.locator('[name=terms]').check();await page.locator('[name=privacy]').check();await page.locator('[type=submit]').click();
  check((await page.locator('h1').innerText())==='Check your inbox.','registration response');

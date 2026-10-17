@@ -6,8 +6,11 @@ final class AccountService {
  public function register(array $data): ?string {
   $id=bin2hex(random_bytes(16));
   try {
-   $this->db->run('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',[
-    $id,$data['name'],strtolower($data['email']),password_hash($data['password'],PASSWORD_ARGON2ID),$data['locale'],$data['plan'],time(),time(),time(),time()]);
+   $this->db->transaction(function() use($id,$data) {
+    $this->db->run('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',[
+     $id,$data['name'],strtolower($data['email']),password_hash($data['password'],PASSWORD_ARGON2ID),$data['locale'],$data['plan'],time(),time(),time(),time()]);
+    if($data['plan']!=='free' && isset($data['billing'])) (new BillingProfileService($this->db))->save($id,$data['billing']);
+   });
   } catch(\PDOException $e) { if($this->db->one('SELECT id FROM users WHERE email=?',[$data['email']])) return null; throw $e; }
   $this->issueVerification($id); return $id;
  }

@@ -10,7 +10,10 @@ final class Database {
   $this->pdo=new PDO('sqlite:'.$path,null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
   $this->pdo->exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=15000; PRAGMA journal_mode=WAL;');
  }
- public function migrate(): void { $this->pdo->exec(file_get_contents(dirname(__DIR__).'/database/schema.sql')); }
+ public function migrate(): void {
+  $this->pdo->exec(file_get_contents(dirname(__DIR__).'/database/schema.sql'));
+  foreach(glob(dirname(__DIR__).'/database/migrations/*.sql') as $file) $this->pdo->exec(file_get_contents($file));
+ }
  public function run(string $sql,array $p=[]): \PDOStatement { $s=$this->pdo->prepare($sql); $s->execute($p); return $s; }
  public function one(string $sql,array $p=[]): ?array { return $this->run($sql,$p)->fetch() ?: null; }
  public function transaction(callable $fn): mixed {

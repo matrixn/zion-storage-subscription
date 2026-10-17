@@ -1,5 +1,5 @@
 <?php
-return json_decode(<<<'JSON'
+$messages = json_decode(<<<'JSON'
 {
   "nav.home": "Acasă",
   "nav.how": "Cum funcționează",
@@ -163,3 +163,42 @@ return json_decode(<<<'JSON'
   "email.support.body": "{name}\n{email}\n{subject}\n\n{message}"
 }
 JSON, true, 512, JSON_THROW_ON_ERROR);
+return array_replace($messages, json_decode(<<<'FISCAL'
+{
+  "billing.title": "Date de facturare",
+  "billing.intro": "Completează datele pentru facturile planurilor plătite. Țara se introduce folosind codul de două litere, de exemplu RO. Modificările se aplică doar facturilor viitoare.",
+  "billing.type": "Tip de client",
+  "billing.individual": "Persoană fizică",
+  "billing.company": "Firmă / PFA",
+  "billing.name": "Nume complet / persoană de contact",
+  "billing.billing_email": "Email de facturare",
+  "billing.country": "Țară (cod de două litere)",
+  "billing.county": "Județ / regiune",
+  "billing.city": "Localitate",
+  "billing.address": "Adresă de facturare",
+  "billing.postal_code": "Cod poștal",
+  "billing.phone": "Telefon (opțional)",
+  "billing.company_name": "Denumire firmă / PFA",
+  "billing.tax_id": "CUI / cod TVA",
+  "billing.registration_number": "Număr Registrul Comerțului (opțional)",
+  "billing.invalid": "Verifică datele de facturare. Completează adresa, țara, județul, localitatea și codul poștal; pentru firme sunt necesare denumirea și CUI-ul.",
+  "billing.required": "Completează datele de facturare înainte de plată.",
+  "billing.save": "Salvează datele",
+  "billing.saved": "Datele de facturare au fost salvate.",
+  "billing.history": "Facturi fiscale",
+  "billing.history.note": "Confirmările de plată și facturile fiscale sunt documente distincte. Facturile sunt afișate după emitere.",
+  "billing.empty": "Nu ai încă facturi fiscale.",
+  "billing.document": "Document fiscal",
+  "billing.download": "Deschide factura",
+  "billing.status.pending": "În pregătire",
+  "billing.status.processing": "În pregătire",
+  "billing.status.issued": "Emisă",
+  "billing.status.failed": "În pregătire",
+  "billing.status.cancelled": "Anulată",
+  "billing.status.simulated": "Simulare — fără valoare fiscală",
+  "billing.status.no_charge": "Fără încasare",
+  "email.fiscal_invoice.subject": "Factura ta Zion Storage este disponibilă",
+  "email.fiscal_invoice.body": "Factura {number} este disponibilă.\nPlan: {plan}\nSumă achitată: {amount}\nPerioadă acoperită: {period}\nUrmătoarea reînnoire: {renewal}\n\nPoți accesa documentul folosind linkul de mai jos, dacă este disponibil.",
+  "email.payment.body": "Am primit plata abonamentului. Confirmarea plății nu reprezintă factura fiscală. Factura fiscală îți va fi trimisă separat după emitere."
+}
+FISCAL, true, 512, JSON_THROW_ON_ERROR));

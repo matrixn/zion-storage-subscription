@@ -2,13 +2,18 @@
 namespace Zion;
 class StripeService implements BillingService {
  protected \Stripe\StripeClient $client;
- public function __construct(protected Database $db,protected Plans $plans,protected MailerService $mail,protected StorageProvisioningService $storage) {
+ protected OblioInvoiceService $fiscal;
+ public function __construct(protected Database $db,protected Plans $plans,protected MailerService $mail,protected StorageProvisioningService $storage, ?OblioInvoiceService $fiscal=null) {
   $key=env('STRIPE_SECRET_KEY','sk_test_unconfigured');
   if(!str_starts_with($key,'sk_test_') && !str_starts_with($key,'rk_test_')) throw new \RuntimeException('Only Stripe TEST MODE is enabled in this release');
   $this->client=new \Stripe\StripeClient($key);
+  $this->fiscal=$fiscal??new OblioInvoiceService($db,$mail);
  }
  public function checkout(array $u): string {
   if(!$u['email_verified_at'] || $u['selected_plan_id']==='free') throw new \RuntimeException('checkout_ineligible');
+  $profile=(new BillingProfileService($this->db))->get($u['id']);
+  if(!$profile) throw new \InvalidArgumentException('billing.required');
+  BillingProfileService::validate($profile,$u);
   $p=$this->plans->get($u['selected_plan_id']);
   if(!$p || !$p['stripe_price_id'] || !env('STRIPE_SECRET_KEY')) throw new \RuntimeException('billing_unconfigured');
   // Serialize session creation so two tabs cannot create separate subscriptions.
@@ -42,6 +47,27 @@ class StripeService implements BillingService {
   $this->process($event->toArray());
  }
  protected function fetchSubscription(string $id): array { return $this->client->subscriptions->retrieve($id,['expand'=>['latest_invoice']])->toArray(); }
+ protected function fetchInvoice(string $id): array {
+  $invoice=$this->client->invoices->retrieve($id)->toArray();
+  if($invoice['lines']['has_more']??false) {
+   $lines=[]; foreach($this->client->invoices->allLines($id,['limit'=>100])->autoPagingIterator() as $line) $lines[]=$line->toArray();
+   $invoice['lines']=['data'=>$lines,'has_more'=>false];
+  }
+  return $invoice;
+ }
+ private function invoicePlan(array $invoice,array $fallback): array {
+  $lines=$invoice['lines']['data']??[];
+  if(count($lines)===1) {
+   $price=$lines[0]['price']['id']??$lines[0]['pricing']['price_details']['price']??'';
+   foreach($this->plans->all() as $plan) if($plan['stripe_price_id'] && $plan['stripe_price_id']===$price) return $plan;
+  }
+  return $fallback;
+ }
+ private function storeInvoice(array $invoice,string $uid): void {
+  $this->db->run('INSERT INTO invoices(id,user_id,hosted_url,amount,currency,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET hosted_url=excluded.hosted_url,amount=excluded.amount,currency=excluded.currency',[
+   $invoice['id'],$uid,$invoice['hosted_invoice_url']??null,$invoice['amount_paid']??0,$invoice['currency']??'ron',$invoice['created']??time()
+  ]);
+ }
  public function process(array $event): void {
   $types=['checkout.session.completed','invoice.paid','invoice.payment_failed','customer.subscription.created','customer.subscription.updated','customer.subscription.deleted'];
   if(!in_array($event['type'],$types,true)) return;
@@ -49,42 +75,57 @@ class StripeService implements BillingService {
   $userLock=null;
   try {
    if($this->db->one("SELECT id FROM billing_events WHERE id=? AND status='complete'",[$event['id']])) return;
+   $this->db->run("INSERT INTO billing_events(id,type,status,created_at) VALUES(?,?,'processing',?) ON CONFLICT(id) DO UPDATE SET status='processing'",[$event['id'],$event['type'],time()]);
    $o=$event['data']['object'];
-   $id=str_starts_with($event['type'],'customer.subscription.')?$o['id']:($o['subscription']??$o['parent']['subscription_details']['subscription']??null);
-   if(!$id) return;
-   // Fetch current authoritative state. Event delivery order must not roll state back.
+   // A delayed event must invoice its own paid cycle, never the latest subscription invoice.
+   $paidInvoice=$event['type']==='invoice.paid'?$this->fetchInvoice($o['id']):null;
+   if($paidInvoice && ($paidInvoice['status']??'')!=='paid') throw new \RuntimeException('invoice_not_paid');
+   $source=$paidInvoice??$o;
+   $id=str_starts_with($event['type'],'customer.subscription.')?$o['id']:($source['subscription']??$source['parent']['subscription_details']['subscription']??null);
+   if(!$id) {
+    $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);
+    return;
+   }
+   // Entitlements always use current authoritative subscription state.
    $s=$this->fetchSubscription($id);
    $uid=$s['metadata']['user_id']??'';
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
    if(!$u) throw new \RuntimeException('unknown_billing_user');
    $userLock=fopen(dirname(__DIR__).'/storage/provision-'.$uid.'.lock','c');flock($userLock,LOCK_EX);
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
-   $p=$this->plans->get($u['selected_plan_id']);
+   $p=$this->plans->get($s['metadata']['plan']??'');
    $price=$s['items']['data'][0]['price']['id']??'';
-   if(!$p || !$p['stripe_price_id'] || $price!==$p['stripe_price_id'] || ($s['metadata']['plan']??'')!==$p['slug']) throw new \RuntimeException('billing_plan_mismatch');
+   if(!$p || $p['slug']==='free' || !$p['stripe_price_id'] || $price!==$p['stripe_price_id'] || $p['slug']!==$u['selected_plan_id']) throw new \RuntimeException('billing_plan_mismatch');
+   if($paidInvoice && ($paidInvoice['id']!==$o['id'] || ($paidInvoice['customer']??null)!==$s['customer'])) throw new \RuntimeException('invoice_identity_mismatch');
    $invoice=is_array($s['latest_invoice']??null)?$s['latest_invoice']:null;
    $paid=$invoice && ($invoice['status']??'')==='paid' && $s['status']==='active';
    $existing=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$uid]);
+   $oldSubscription=false;
    if($existing && $existing['stripe_subscription_id']!==$id) {
-    if(in_array($s['status'],['canceled','incomplete_expired'],true)) return;
-    if(!in_array($existing['status'],['canceled','incomplete_expired'],true)) throw new \RuntimeException('duplicate_subscription');
+    if(in_array($s['status'],['canceled','incomplete_expired'],true)) $oldSubscription=true;
+    elseif(!in_array($existing['status'],['canceled','incomplete_expired'],true)) throw new \RuntimeException('duplicate_subscription');
    }
-   $this->db->transaction(function() use($s,$uid,$p,$price,$paid,$invoice,$event) {
-    $this->db->run('INSERT INTO subscriptions(user_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,plan,renewal_at,last_invoice_id,paid_confirmed) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id=excluded.stripe_customer_id,stripe_subscription_id=excluded.stripe_subscription_id,stripe_price_id=excluded.stripe_price_id,status=excluded.status,plan=excluded.plan,renewal_at=excluded.renewal_at,last_invoice_id=excluded.last_invoice_id,paid_confirmed=excluded.paid_confirmed',[
+   $fiscalId=$this->db->transaction(function() use($s,$uid,$p,$price,$paid,$invoice,$paidInvoice,$oldSubscription,$u) {
+    if(!$oldSubscription) $this->db->run('INSERT INTO subscriptions(user_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,plan,renewal_at,last_invoice_id,paid_confirmed) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id=excluded.stripe_customer_id,stripe_subscription_id=excluded.stripe_subscription_id,stripe_price_id=excluded.stripe_price_id,status=excluded.status,plan=excluded.plan,renewal_at=excluded.renewal_at,last_invoice_id=excluded.last_invoice_id,paid_confirmed=excluded.paid_confirmed',[
      $uid,$s['customer'],$s['id'],$price,$s['status'],$p['slug'],$s['items']['data'][0]['current_period_end']??$s['current_period_end']??null,$invoice['id']??null,$paid?1:0]);
-    if($invoice) $this->db->run('INSERT OR REPLACE INTO invoices(id,user_id,hosted_url,amount,currency,created_at) VALUES(?,?,?,?,?,?)',[$invoice['id'],$uid,$invoice['hosted_invoice_url']??null,$invoice['amount_paid']??0,$invoice['currency']??'ron',$invoice['created']??time()]);
-    $this->db->run("INSERT INTO billing_events(id,type,status,created_at) VALUES(?,?,'processing',?) ON CONFLICT(id) DO UPDATE SET status='processing'",[$event['id'],$event['type'],time()]);
+    if($invoice) $this->storeInvoice($invoice,$uid);
+    if($paidInvoice) {
+     $this->storeInvoice($paidInvoice,$uid);
+     return $this->fiscal->capture($paidInvoice,$u,$s,$this->invoicePlan($paidInvoice,$p));
+    }
+    return null;
    });
-   if($u['storage_user_id']) {
+   // The durable fiscal job is processed by the CLI worker. Provider latency/outages
+   // must never delay Stripe's webhook acknowledgement or change payment status.
+   if(!$oldSubscription && $u['storage_user_id']) {
     if($paid) $this->storage->enableUser($u['storage_user_id'],$p['storage_bytes']);
     else $this->storage->disableUser($u['storage_user_id']);
     $this->db->run('UPDATE users SET status=?,updated_at=? WHERE id=?',[$paid?'active':'restricted',time(),$uid]);
    }
-   $this->db->transaction(function() use($u,$invoice,$paid,$s,$uid,$event) {
-    if($paid) {
-     $this->mail->queue($u['email'],$u['locale'],'payment',['url'=>$invoice['hosted_invoice_url']??''],'paid:'.$invoice['id']);
-     $this->mail->queue($u['email'],$u['locale'],'subscription',[],'subscription:'.$s['id']);
-    } elseif($s['status']==='canceled') $this->mail->queue($u['email'],$u['locale'],'cancelled',[],'cancelled:'.$s['id']);
+   $this->db->transaction(function() use($u,$paidInvoice,$paid,$s,$event,$oldSubscription) {
+    if($paidInvoice) $this->mail->queue($u['email'],$u['locale'],'payment',[],'paid:'.$paidInvoice['id']);
+    if($paid && !$oldSubscription) $this->mail->queue($u['email'],$u['locale'],'subscription',[],'subscription:'.$s['id']);
+    elseif($s['status']==='canceled') $this->mail->queue($u['email'],$u['locale'],'cancelled',[],'cancelled:'.$s['id']);
     elseif($event['type']==='invoice.payment_failed') $this->mail->queue($u['email'],$u['locale'],'failed',[],'failed:'.$event['id']);
     $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);
    });
