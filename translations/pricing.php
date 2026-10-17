@@ -16,7 +16,7 @@ return [
   'comparison.eyebrow'=>'DOAR PENTRU AMINTIRI','comparison.title'=>'Mai mult loc pentru ce contează.',
   'comparison.desc'=>'Într-un serviciu cu stocare comună, fișierele și emailurile pot împărți capacitatea cu fotografiile. La Zion Storage, planul tău este dedicat fotografiilor și videoclipurilor.',
   'comparison.example'=>'Exemplu ilustrativ, nu statistici despre un furnizor sau despre utilizatori reali. Repartizarea depinde de serviciu și de utilizare.',
-  'comparison.shared'=>'Cloud cu stocare comună','comparison.dedicated'=>'Zion Storage · {plan}',
+  'comparison.shared'=>'Cloud Google Photos cu stocare comună','comparison.dedicated'=>'Zion Storage · {plan}',
   'comparison.photos'=>'Fotografii și videoclipuri','comparison.files'=>'Fișiere','comparison.email'=>'Emailuri',
   'comparison.available'=>'{capacity} disponibili pentru fotografii și videoclipuri',
   'comparison.control'=>'Spațiu folosit de fișiere și emailuri în exemplu',
