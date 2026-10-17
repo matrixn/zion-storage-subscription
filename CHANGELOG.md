@@ -2,6 +2,7 @@
 
 ## 2026-10-18
 
+- Replaced the layer-stack icon with a generated lime photo-stack emblem across site branding, mobile touch/app icons, browser favicons and social sharing artwork. Preserved a high-resolution brand master and its generation brief.
 - Redesigned the existing home pricing section with localized inline prices, specific plan benefits, a prominent Personal ribbon and an accessible illustrative storage comparison. Added single-column mobile, two-column tablet and four-column desktop layouts with reduced-motion support.
 - Changed the Plus catalog price to 17.99 RON/month. Its Stripe Price ID must be configured manually for 1799 RON minor units; no existing subscriptions or live Stripe prices are modified.
 - Added optional legacy Stripe Price recognition so previous Plus subscription payments and invoice descriptions remain valid without using an old Price for new Checkout.

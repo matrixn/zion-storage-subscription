@@ -86,7 +86,7 @@ New uploads stop when a failed/inactive subscription is reconciled; ending renew
 
 MOBILE_SERVICE_URL is the public mobile service address. MOBILE_IOS_URL and MOBILE_ANDROID_URL should point to approved Zion-branded distribution/instructions. They are optional and hidden when empty. Do not link to a third-party branded application while promising a completely standalone brand. Mobile app repackaging/distribution is outside this website and remains an operator prerequisite. No internal API URL is returned in public HTML.
 
-The provided wordmark, icon, favicon, 512px application-icon placeholder and 1200×630 PNG OG image are original. Editable SVG sources are included. Local system fonts and CSS-drawn photo illustrations avoid remote assets and tracking.
+The lime photo-stack brand icon is generated with ImageGen and exported locally for the site, browser favicons, 180px Apple touch icon, 512px app icon and 1200×630 sharing image. Its 1024px master and generation brief are in `design/brand/`. The compatibility SVG embeds the PNG; it is not an editable vector master. Local system fonts and CSS-drawn photo illustrations avoid remote assets and tracking.
 
 ## Legal and launch configuration
 

@@ -1,4 +1,4 @@
-<section class="wrap form-page"><div class="form-intro"><p class="eyebrow">ZION / <?= e($t('start')) ?></p><h1><?= e($t('register.title')) ?></h1><p class="lead"><?= e($t('register.desc')) ?></p><div class="intro-orbit"><img src="/assets/icon.svg" width="92" height="92" alt=""></div><p class="micro"><?= e($t('hero.note')) ?></p></div><div class="form-card">
+<section class="wrap form-page"><div class="form-intro"><p class="eyebrow">ZION / <?= e($t('start')) ?></p><h1><?= e($t('register.title')) ?></h1><p class="lead"><?= e($t('register.desc')) ?></p><div class="intro-orbit"><img src="/assets/icon.png" width="92" height="92" alt=""></div><p class="micro"><?= e($t('hero.note')) ?></p></div><div class="form-card">
 <ol class="form-steps"><li class="active">01 <span><?= e($t('register.step1')) ?></span></li><li>02 <span><?= e($t('register.step2')) ?></span></li><li>03 <span><?= e($t('register.step3')) ?></span></li></ol>
 <form method="post" action="<?= $url('register') ?>" data-registration>
 <?php require __DIR__.'/form-fields.php' ?>
