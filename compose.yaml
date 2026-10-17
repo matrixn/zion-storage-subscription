@@ -1,0 +1,17 @@
+services:
+  web:
+    build: .
+    ports:
+      - "127.0.0.1:8088:80"
+    env_file: .env
+    volumes:
+      - zion_data:/var/www/html/storage
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  zion_data:

@@ -1,0 +1,2 @@
+/* System font stack keeps rendering fast and avoids third-party requests. */
+@font-face{font-family:'Zion Sans';src:local('Inter'),local('Segoe UI');font-display:swap}

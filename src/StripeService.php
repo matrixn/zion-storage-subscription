@@ -1,0 +1,93 @@
+<?php
+namespace Zion;
+class StripeService implements BillingService {
+ protected \Stripe\StripeClient $client;
+ public function __construct(protected Database $db,protected Plans $plans,protected MailerService $mail,protected StorageProvisioningService $storage) {
+  $key=env('STRIPE_SECRET_KEY','sk_test_unconfigured');
+  if(!str_starts_with($key,'sk_test_') && !str_starts_with($key,'rk_test_')) throw new \RuntimeException('Only Stripe TEST MODE is enabled in this release');
+  $this->client=new \Stripe\StripeClient($key);
+ }
+ public function checkout(array $u): string {
+  if(!$u['email_verified_at'] || $u['selected_plan_id']==='free') throw new \RuntimeException('checkout_ineligible');
+  $p=$this->plans->get($u['selected_plan_id']);
+  if(!$p || !$p['stripe_price_id'] || !env('STRIPE_SECRET_KEY')) throw new \RuntimeException('billing_unconfigured');
+  // Serialize session creation so two tabs cannot create separate subscriptions.
+  $lock=fopen(dirname(__DIR__).'/storage/checkout-'.$u['id'].'.lock','c'); flock($lock,LOCK_EX);
+  try {
+   $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
+   if($s && $s['stripe_subscription_id'] && !in_array($s['status'],['canceled','incomplete_expired'],true)) throw new \RuntimeException('subscription_exists');
+   $old=$this->db->one('SELECT * FROM checkout_sessions WHERE user_id=? AND expires_at>?',[$u['id'],time()+60]);
+   if($old) return $old['url'];
+   $l=$u['locale']; $epoch=intdiv(time(),1800);
+   $session=$this->client->checkout->sessions->create([
+    'mode'=>'subscription','customer_email'=>$u['email'],'client_reference_id'=>$u['id'],'locale'=>$l==='ro'?'ro':$l,
+    'line_items'=>[['price'=>$p['stripe_price_id'],'quantity'=>1]],
+    'metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug']],
+    'subscription_data'=>['metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug']]],
+    'success_url'=>base_url().Router::path($l,'status'),'cancel_url'=>base_url().Router::path($l,'cancel'),
+   ],['idempotency_key'=>'checkout-'.$u['id'].'-'.$epoch]);
+   $this->db->run('INSERT INTO checkout_sessions(user_id,session_id,url,expires_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET session_id=excluded.session_id,url=excluded.url,expires_at=excluded.expires_at',[$u['id'],$session->id,$session->url,$session->expires_at]);
+   return $session->url;
+  } finally { flock($lock,LOCK_UN); fclose($lock); }
+ }
+ public function portal(array $u): string {
+  $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
+  if(!$s || !$s['stripe_customer_id']) throw new \RuntimeException('billing_unavailable');
+  return $this->client->billingPortal->sessions->create(['customer'=>$s['stripe_customer_id'],'return_url'=>base_url().Router::path($u['locale'],'status')])->url;
+ }
+ public function receive(string $payload,string $signature): void {
+  if(!env('STRIPE_WEBHOOK_SECRET')) throw new \RuntimeException('webhook_unconfigured');
+  $event=\Stripe\Webhook::constructEvent($payload,$signature,env('STRIPE_WEBHOOK_SECRET'));
+  if($event->livemode) throw new \RuntimeException('live_event_rejected');
+  $this->process($event->toArray());
+ }
+ protected function fetchSubscription(string $id): array { return $this->client->subscriptions->retrieve($id,['expand'=>['latest_invoice']])->toArray(); }
+ public function process(array $event): void {
+  $types=['checkout.session.completed','invoice.paid','invoice.payment_failed','customer.subscription.created','customer.subscription.updated','customer.subscription.deleted'];
+  if(!in_array($event['type'],$types,true)) return;
+  $lock=fopen(dirname(__DIR__).'/storage/billing.lock','c'); flock($lock,LOCK_EX);
+  $userLock=null;
+  try {
+   if($this->db->one("SELECT id FROM billing_events WHERE id=? AND status='complete'",[$event['id']])) return;
+   $o=$event['data']['object'];
+   $id=str_starts_with($event['type'],'customer.subscription.')?$o['id']:($o['subscription']??$o['parent']['subscription_details']['subscription']??null);
+   if(!$id) return;
+   // Fetch current authoritative state. Event delivery order must not roll state back.
+   $s=$this->fetchSubscription($id);
+   $uid=$s['metadata']['user_id']??'';
+   $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
+   if(!$u) throw new \RuntimeException('unknown_billing_user');
+   $userLock=fopen(dirname(__DIR__).'/storage/provision-'.$uid.'.lock','c');flock($userLock,LOCK_EX);
+   $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
+   $p=$this->plans->get($u['selected_plan_id']);
+   $price=$s['items']['data'][0]['price']['id']??'';
+   if(!$p || !$p['stripe_price_id'] || $price!==$p['stripe_price_id'] || ($s['metadata']['plan']??'')!==$p['slug']) throw new \RuntimeException('billing_plan_mismatch');
+   $invoice=is_array($s['latest_invoice']??null)?$s['latest_invoice']:null;
+   $paid=$invoice && ($invoice['status']??'')==='paid' && $s['status']==='active';
+   $existing=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$uid]);
+   if($existing && $existing['stripe_subscription_id']!==$id) {
+    if(in_array($s['status'],['canceled','incomplete_expired'],true)) return;
+    if(!in_array($existing['status'],['canceled','incomplete_expired'],true)) throw new \RuntimeException('duplicate_subscription');
+   }
+   $this->db->transaction(function() use($s,$uid,$p,$price,$paid,$invoice,$event) {
+    $this->db->run('INSERT INTO subscriptions(user_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,plan,renewal_at,last_invoice_id,paid_confirmed) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id=excluded.stripe_customer_id,stripe_subscription_id=excluded.stripe_subscription_id,stripe_price_id=excluded.stripe_price_id,status=excluded.status,plan=excluded.plan,renewal_at=excluded.renewal_at,last_invoice_id=excluded.last_invoice_id,paid_confirmed=excluded.paid_confirmed',[
+     $uid,$s['customer'],$s['id'],$price,$s['status'],$p['slug'],$s['items']['data'][0]['current_period_end']??$s['current_period_end']??null,$invoice['id']??null,$paid?1:0]);
+    if($invoice) $this->db->run('INSERT OR REPLACE INTO invoices(id,user_id,hosted_url,amount,currency,created_at) VALUES(?,?,?,?,?,?)',[$invoice['id'],$uid,$invoice['hosted_invoice_url']??null,$invoice['amount_paid']??0,$invoice['currency']??'ron',$invoice['created']??time()]);
+    $this->db->run("INSERT INTO billing_events(id,type,status,created_at) VALUES(?,?,'processing',?) ON CONFLICT(id) DO UPDATE SET status='processing'",[$event['id'],$event['type'],time()]);
+   });
+   if($u['storage_user_id']) {
+    if($paid) $this->storage->enableUser($u['storage_user_id'],$p['storage_bytes']);
+    else $this->storage->disableUser($u['storage_user_id']);
+    $this->db->run('UPDATE users SET status=?,updated_at=? WHERE id=?',[$paid?'active':'restricted',time(),$uid]);
+   }
+   $this->db->transaction(function() use($u,$invoice,$paid,$s,$uid,$event) {
+    if($paid) {
+     $this->mail->queue($u['email'],$u['locale'],'payment',['url'=>$invoice['hosted_invoice_url']??''],'paid:'.$invoice['id']);
+     $this->mail->queue($u['email'],$u['locale'],'subscription',[],'subscription:'.$s['id']);
+    } elseif($s['status']==='canceled') $this->mail->queue($u['email'],$u['locale'],'cancelled',[],'cancelled:'.$s['id']);
+    elseif($event['type']==='invoice.payment_failed') $this->mail->queue($u['email'],$u['locale'],'failed',[],'failed:'.$event['id']);
+    $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);
+   });
+  } finally { if($userLock){flock($userLock,LOCK_UN);fclose($userLock);} flock($lock,LOCK_UN); fclose($lock); }
+ }
+}

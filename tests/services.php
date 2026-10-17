@@ -1,0 +1,56 @@
+<?php
+// Official SDK transport fixture: exercise Checkout request construction without network calls.
+final class FixtureHttp implements Stripe\HttpClient\ClientInterface {
+ public array $calls=[];
+ public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null) {
+  $this->calls[]=[$method,$url,$params];
+  if(str_contains($url,'checkout/sessions'))$r=['id'=>'cs_fixture','object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/cs_fixture','expires_at'=>time()+3600];
+  else $r=['id'=>'bps_fixture','object'=>'billing_portal.session','url'=>'https://billing.stripe.com/p/session/test'];
+  return [json_encode($r),200,[]];
+ }
+}
+$http=new FixtureHttp();Stripe\ApiRequestor::setHttpClient($http);
+[$checkoutId,$checkoutToken]=signup('checkout@example.com','120gb','fr');$accounts->verify($checkoutToken);
+$cu=$db->one('SELECT * FROM users WHERE id=?',[$checkoutId]);
+$realBilling=new Zion\StripeService($db,$plans,$mail,$store);
+$checkoutUrl=$realBilling->checkout($cu);
+check(str_starts_with($checkoutUrl,'https://checkout.stripe.com/'),'SDK checkout URL');
+check($http->calls[0][2]['mode']==='subscription','SDK checkout subscription mode');
+check($http->calls[0][2]['line_items'][0]['price']==='price_120','SDK uses configured price');
+check($http->calls[0][2]['locale']==='fr','SDK checkout locale');
+check($http->calls[0][2]['cancel_url']==='http://localhost:8088/fr/paiement-annule','SDK localized cancel route');
+check($http->calls[0][2]['subscription_data']['metadata']['user_id']===$checkoutId,'SDK authoritative user metadata');
+$realBilling->checkout($cu);check(count($http->calls)===1,'existing Checkout Session reused');
+$db->run('INSERT INTO subscriptions(user_id,stripe_customer_id,status) VALUES(?,?,?)',[$checkoutId,'cus_portal','pending']);
+check(str_starts_with($realBilling->portal($cu),'https://billing.stripe.com/'),'SDK customer portal');
+check($http->calls[1][2]['customer']==='cus_portal','portal uses stored customer');
+
+final class AdapterFixture extends Zion\StorageProvisioningService {
+ public array $calls=[];public array $records=[];
+ protected function request(string $method,string $path,?array $body=null):array {
+  $this->calls[]=[$method,$path,$body];
+  if($method==='GET' && str_starts_with($path,'/admin/users?'))return $this->records;
+  if($method==='POST'){$this->records[]=$body+['id'=>'adapter-id'];return ['id'=>'adapter-id'];}
+  if($method==='GET')return ['quotaUsageInBytes'=>456,'quotaSizeInBytes'=>1000];
+  return [];
+ }
+}
+$adapter=new AdapterFixture();$adapterUser=['id'=>'opaque-safe-id','name'=>'Test','email'=>'adapter@example.com'];
+check($adapter->createUser($adapterUser,'never-persist-this-password',1000)==='adapter-id','adapter creates user');
+check($adapter->calls[1][2]['quotaSizeInBytes']===1000 && $adapter->calls[1][2]['isAdmin']===false,'adapter quota and non-admin');
+check($adapter->calls[1][2]['notify']===false,'upstream branded notifications disabled');
+$adapter->createUser($adapterUser,'never-persist-this-password',1000);
+check(count(array_filter($adapter->calls,fn($x)=>$x[0]==='POST'))===1,'adapter reconciles create timeout');
+$adapter->disableUser('adapter-id');$last=end($adapter->calls);
+check($last[0]==='PUT' && $last[2]['quotaSizeInBytes']===456,'restriction retains files and blocks uploads');
+$adapter->enableUser('adapter-id',1000);$last=end($adapter->calls);check($last[2]['quotaSizeInBytes']===1000,'restores paid quota');
+$adapter->records=[['email'=>'adapter@example.com','id'=>'unrelated','storageLabel'=>'another-label']];
+try{$adapter->createUser($adapterUser,'password',1000);check(false,'identity collision');}catch(RuntimeException $e){check(true,'adapter refuses unrelated existing identity');}
+check(!str_contains($db->one("SELECT payload FROM outbox WHERE recipient='checkout@example.com'")['payload'],$checkoutToken),'queued verification token encrypted');
+foreach(Zion\TranslationService::LOCALES as $l)foreach(['activated','payment','subscription','failed','cancelled','quota','contact'] as $kind){
+ $mail->queue('preview@example.com',$l,$kind,[],'render-'.$l.'-'.$kind);
+}
+$mail->deliver();
+check((int)$db->one('SELECT COUNT(*) AS n FROM outbox WHERE sent_at IS NULL')['n']===0,'all localized queued email templates render');
+check($db->one("SELECT payload FROM outbox WHERE recipient='checkout@example.com'")['payload']==='{}','delivered payload scrubbed');
+echo "\n$count total assertions passed, including SDK/adapter/email fixtures.\n";

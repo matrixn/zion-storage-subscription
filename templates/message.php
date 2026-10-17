@@ -1,0 +1,1 @@
+<section class="wrap flow-card"><span class="flow-icon">✉</span><h1><?= e($t($message==='register.sent'?'register.sent.title':'contact.title')) ?></h1><p><?= e($t($message)) ?></p><a class="button" href="<?= $url('resend') ?>"><?= e($t('resend')) ?> ↗</a></section>
