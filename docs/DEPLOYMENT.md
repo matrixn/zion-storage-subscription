@@ -4,10 +4,10 @@
 
 ```sh
 cp .env.example .env
-# Generate APP_KEY, then configure SMTP, Stripe test prices and storage API.
+# Generate APP_KEY, configure ADMIN_EMAIL/ADMIN_PASSWORD, SMTP, Stripe test prices and storage API.
 # Set APP_URL=https://storage.zion3d.ro and APP_ENV=production.
 docker compose build
-docker compose run --rm --user www-data web php bin/console.php migrate
+docker compose run --rm --user www-data web php bin/console.php install
 docker compose up -d
 ```
 
@@ -15,6 +15,7 @@ The named volume holds SQLite, encrypted mail outbox, private logs and locks. In
 
 Run from the deployment scheduler:
 - Every minute: `docker compose exec -T --user www-data web php bin/console.php mail:work`
+- Every minute, before fiscal/mail workers: `docker compose exec -T --user www-data web php bin/console.php changes:retry`
 - Every hour: `docker compose exec -T --user www-data web php bin/console.php quota:check`
 - Daily: `docker compose exec -T --user www-data web php bin/console.php maintenance`
 
@@ -51,3 +52,5 @@ Designed for a single instance with SQLite on local persistent storage and files
 Back up the SQLite database consistently (SQLite backup API or a stopped application) together with APP_KEY and any needed pending mail records. Store keys outside the repository and protect backups. Test restoration before launch. A storage backend backup is a separate operational responsibility.
 
 No production deploy, real customer mutation, live payment, destructive storage API call or external email send was performed in development.
+
+For `/admin`, manual customer grants, Stripe plan changes and full Immich access suspension, follow [administration and upgrade deployment](ADMIN-AND-UPGRADES.md). Run installation/migration before serving this version. Full ban enforcement needs the private Immich auth_request gateway and a firewall preventing direct upstream access; do not set STORAGE_GATEWAY_ENFORCED until verified.

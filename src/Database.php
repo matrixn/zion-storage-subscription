@@ -13,6 +13,8 @@ final class Database {
  public function migrate(): void {
   $this->pdo->exec(file_get_contents(dirname(__DIR__).'/database/schema.sql'));
   foreach(glob(dirname(__DIR__).'/database/migrations/*.sql') as $file) $this->pdo->exec(file_get_contents($file));
+  // Preserve installations made before quota synchronization was introduced.
+  if(!in_array('quota_sync',array_column($this->run('PRAGMA table_info(account_controls)')->fetchAll(),'name'),true))$this->pdo->exec("ALTER TABLE account_controls ADD COLUMN quota_sync TEXT NOT NULL DEFAULT 'ready'");
  }
  public function run(string $sql,array $p=[]): \PDOStatement { $s=$this->pdo->prepare($sql); $s->execute($p); return $s; }
  public function one(string $sql,array $p=[]): ?array { return $this->run($sql,$p)->fetch() ?: null; }

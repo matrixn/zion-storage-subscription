@@ -1,0 +1,43 @@
+<?php
+return [
+ 'ro'=>[
+  'upgrade.review'=>'Plata a fost confirmată după termenul de upgrade și necesită verificare manuală. Contactează-ne; nu plăti din nou.',
+  'upgrade.title'=>'Mai mult spațiu','upgrade.intro'=>'Poți trece la un plan mai mare în primele 5 zile de la cumpărarea inițială. Plătești o singură dată diferența integrală dintre tarifele lunare; data de reînnoire rămâne aceeași.',
+  'upgrade.pay'=>'Plătește {amount} lei o singură dată','upgrade.renewal'=>'Apoi {amount} lei/lună, de la {date}.','upgrade.deadline'=>'Plata trebuie finalizată până la {date}. Deschiderea unei plăți noi se închide cu 30 de minute înainte.',
+  'upgrade.unavailable'=>'Upgrade-ul nu este disponibil pentru acest cont sau perioada de 5 zile a expirat.','upgrade.pending'=>'Există deja o schimbare în curs. Plata este verificată înainte de activarea noului plan.',
+  'upgrade.closing'=>'Nu mai este suficient timp pentru deschiderea unei plăți noi înainte de expirarea perioadei de upgrade.','upgrade.unconfigured'=>'Plata pentru upgrade nu este încă disponibilă. Contactează-ne.',
+  'upgrade.history'=>'Ultima schimbare: {from} → {to}.','upgrade.processing'=>'Confirmarea plății și actualizarea planului sunt în curs. Nu plăti din nou.','upgrade.done'=>'Noul plan este activ.','upgrade.cancelled'=>'Plata neconfirmată a fost anulată sau a expirat.','upgrade.cancel'=>'Anulează plata neconfirmată',
+  'account.banned'=>'Cont suspendat','account.banned.info'=>'Accesul este suspendat. Fișierele sunt păstrate. Suspendarea nu anulează abonamentul; contactează-ne pentru asistență.',
+  'account.accept'=>'Accept termenii și politica de confidențialitate disponibile mai jos înainte de activare.',
+ ],
+ 'en'=>[
+  'upgrade.review'=>'Payment was confirmed after the upgrade deadline and needs manual review. Contact us; do not pay again.',
+  'upgrade.title'=>'More storage','upgrade.intro'=>'Move to a larger plan within 5 days of your original purchase. Pay the full difference between monthly prices once; your renewal date stays the same.',
+  'upgrade.pay'=>'Pay {amount} RON once','upgrade.renewal'=>'Then {amount} RON/month, starting {date}.','upgrade.deadline'=>'Complete payment by {date}. New payment sessions close 30 minutes earlier.',
+  'upgrade.unavailable'=>'An upgrade is unavailable for this account or the 5-day window has ended.','upgrade.pending'=>'A plan change is already in progress. Payment is verified before the new plan is activated.',
+  'upgrade.closing'=>'There is not enough time to open a new payment before the upgrade window ends.','upgrade.unconfigured'=>'Upgrade payments are not available yet. Please contact us.',
+  'upgrade.history'=>'Latest change: {from} → {to}.','upgrade.processing'=>'Payment confirmation and plan activation are in progress. Do not pay again.','upgrade.done'=>'Your new plan is active.','upgrade.cancelled'=>'The unconfirmed payment was cancelled or expired.','upgrade.cancel'=>'Cancel unconfirmed payment',
+  'account.banned'=>'Account suspended','account.banned.info'=>'Access is suspended. Files are retained. Suspension does not cancel your subscription; contact us for help.',
+  'account.accept'=>'I accept the terms and privacy policy linked below before activation.',
+ ],
+ 'fr'=>[
+  'upgrade.review'=>'Le paiement a été confirmé après le délai et nécessite une vérification manuelle. Contactez-nous ; ne payez pas à nouveau.',
+  'upgrade.title'=>'Plus de stockage','upgrade.intro'=>'Passez à une offre supérieure dans les 5 jours suivant votre achat initial. Payez une seule fois la différence intégrale entre les tarifs mensuels ; la date de renouvellement reste identique.',
+  'upgrade.pay'=>'Payer {amount} RON une seule fois','upgrade.renewal'=>'Puis {amount} RON/mois, à partir du {date}.','upgrade.deadline'=>'Terminez le paiement avant le {date}. Les nouvelles sessions de paiement ferment 30 minutes plus tôt.',
+  'upgrade.unavailable'=>'Cette offre ne permet pas de changement ou le délai de 5 jours a expiré.','upgrade.pending'=>'Un changement est déjà en cours. Le paiement est vérifié avant activation.',
+  'upgrade.closing'=>'Le délai restant ne permet plus de lancer un nouveau paiement.','upgrade.unconfigured'=>'Le paiement pour une offre supérieure est indisponible. Contactez-nous.',
+  'upgrade.history'=>'Dernier changement : {from} → {to}.','upgrade.processing'=>'La confirmation du paiement et l’activation sont en cours. Ne payez pas à nouveau.','upgrade.done'=>'Votre nouvelle offre est active.','upgrade.cancelled'=>'Le paiement non confirmé a été annulé ou a expiré.','upgrade.cancel'=>'Annuler le paiement non confirmé',
+  'account.banned'=>'Compte suspendu','account.banned.info'=>'L’accès est suspendu. Les fichiers sont conservés. La suspension n’annule pas l’abonnement ; contactez-nous.',
+  'account.accept'=>'J’accepte les conditions et la politique de confidentialité accessibles ci-dessous avant l’activation.',
+ ],
+ 'de'=>[
+  'upgrade.review'=>'Die Zahlung wurde nach Ablauf der Upgrade-Frist bestätigt und muss manuell geprüft werden. Kontaktieren Sie uns; bitte nicht erneut bezahlen.',
+  'upgrade.title'=>'Mehr Speicher','upgrade.intro'=>'Wechseln Sie innerhalb von 5 Tagen nach dem ersten Kauf zu einem größeren Tarif. Zahlen Sie die volle Differenz der Monatspreise einmalig; das Verlängerungsdatum bleibt unverändert.',
+  'upgrade.pay'=>'Einmalig {amount} RON bezahlen','upgrade.renewal'=>'Danach {amount} RON/Monat ab {date}.','upgrade.deadline'=>'Zahlung bis {date} abschließen. Neue Zahlungssitzungen schließen 30 Minuten vorher.',
+  'upgrade.unavailable'=>'Ein Upgrade ist für dieses Konto nicht verfügbar oder die Frist von 5 Tagen ist abgelaufen.','upgrade.pending'=>'Eine Tarifänderung läuft bereits. Die Zahlung wird vor der Aktivierung geprüft.',
+  'upgrade.closing'=>'Es bleibt nicht genug Zeit, um vor Ablauf der Upgrade-Frist eine neue Zahlung zu starten.','upgrade.unconfigured'=>'Upgrade-Zahlungen sind noch nicht verfügbar. Bitte kontaktieren Sie uns.',
+  'upgrade.history'=>'Letzte Änderung: {from} → {to}.','upgrade.processing'=>'Zahlungsbestätigung und Tarifaktivierung laufen. Bitte nicht erneut bezahlen.','upgrade.done'=>'Ihr neuer Tarif ist aktiv.','upgrade.cancelled'=>'Die unbestätigte Zahlung wurde storniert oder ist abgelaufen.','upgrade.cancel'=>'Unbestätigte Zahlung stornieren',
+  'account.banned'=>'Konto gesperrt','account.banned.info'=>'Der Zugriff ist gesperrt. Dateien bleiben erhalten. Die Sperre kündigt das Abonnement nicht; kontaktieren Sie uns.',
+  'account.accept'=>'Ich akzeptiere vor der Aktivierung die unten verlinkten Bedingungen und Datenschutzhinweise.',
+ ],
+];

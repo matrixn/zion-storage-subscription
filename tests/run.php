@@ -11,9 +11,9 @@ final class NoNetworkStripe implements Stripe\HttpClient\ClientInterface {
 }
 Stripe\ApiRequestor::setHttpClient(new NoNetworkStripe());
 final class TestStorage extends Zion\StorageProvisioningService {
- public int $created=0;public array $users=[];public bool $fail=false;public int $disabled=0;
+ public int $created=0;public array $users=[];public bool $fail=false;public int $disabled=0;public bool $failQuota=false;
  public function createUser(array $u,string $p,int $quota):string{if($this->fail)throw new RuntimeException('offline');$this->created++;$this->users['store-'.$u['id']]=['quota'=>$quota,'used'=>0];return 'store-'.$u['id'];}
- public function enableUser(string $id,int $quota):void{$this->users[$id]['quota']=$quota;}
+ public function enableUser(string $id,int $quota):void{if($this->failQuota)throw new RuntimeException('fixture quota outage');$this->users[$id]['quota']=$quota;}
  public function disableUser(string $id):void{$this->disabled++;}
  public function getUsage(string $id):array{return $this->users[$id];}
 }
@@ -90,3 +90,4 @@ $_SERVER['REMOTE_ADDR']='127.0.0.1';$_SERVER['HTTP_X_FORWARDED_FOR']='1.2.3.4, 2
 echo "\n$count assertions passed. No external service was contacted.\n";
 require __DIR__.'/services.php';
 require __DIR__.'/fiscal.php';
+require __DIR__.'/changes.php';

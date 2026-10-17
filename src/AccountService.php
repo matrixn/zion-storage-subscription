@@ -36,6 +36,9 @@ final class AccountService {
  }
  public function eligible(array $u): bool {
   if(!$u['email_verified_at']) return false;
+  $controls=new AccountControl($this->db);
+  if($controls->banned($u['id'])) return false;
+  if($controls->manual($u['id'])===$u['selected_plan_id']) return true;
   if($u['selected_plan_id']==='free') return true;
   $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
   return $s && $s['paid_confirmed'] && $s['status']==='active';

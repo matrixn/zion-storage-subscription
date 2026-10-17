@@ -11,11 +11,14 @@ composer install
 cp .env.example .env
 php bin/console.php key
 # Put the generated value into APP_KEY in .env.
-php bin/console.php migrate
+# Set ADMIN_EMAIL and ADMIN_PASSWORD in .env to create the initial administrator.
+php bin/console.php install
 php -S 127.0.0.1:8088 -t public public/router.php
 ```
 
 Open http://localhost:8088/ro/ (or /en/, /fr/, /de/). Keep .env private and never commit it. Source repository: https://github.com/matrixn/zion-storage-subscription.
+
+Administration is available at `/admin`: create manual customers, manage plans and suspensions, inspect/retry upgrades, and view the operator audit trail. Paid customer upgrades collect the one-time price difference during the original five-day window and preserve the monthly renewal anchor. See [administration, installation, upgrade deadlines and suspension gateway](docs/ADMIN-AND-UPGRADES.md).
 
 Run `php bin/console.php mail:work` to deliver queued email. Local `MAIL_TRANSPORT=log` renders emails under private `storage/mail/`; no messages are sent externally. Open these files locally to follow verification links. Do not publish this folder.
 
@@ -53,7 +56,7 @@ Only Stripe test keys and non-live webhook events are accepted in this release. 
    - customer.subscription.created
    - customer.subscription.updated
    - customer.subscription.deleted
-4. Enable the Stripe customer portal for payment method updates, cancellation and invoice history. Enable billing invoice/receipt emails in Stripe.
+4. The application creates a restricted Stripe portal configuration for payment method updates, cancellation and invoice history, with plan changes disabled. Enable billing invoice/receipt emails in Stripe.
 5. Use Stripe CLI forwarding for localhost: `stripe listen --forward-to localhost:8088/webhooks/stripe`. Use the emitted signing secret.
 6. Register a paid account, verify email, complete Checkout using Stripe's documented test cards. Test failure and cancellation as well.
 
@@ -75,7 +78,7 @@ Implemented calls:
 - GET /admin/users/{id} — quota/usage.
 - DELETE /admin/users/{id} with force=false — available only as a service method, never called by billing.
 
-The API does not provide a general non-destructive account-disabled switch. `disableUser` restricts **new uploads** by setting quota to current usage (minimum one byte); it deliberately retains sign-in and downloads. `enableUser` restores the subscribed quota. Cancellation never calls delete or restore APIs, which could schedule data removal. If a strict login lockout is required, it needs a separately verified backend capability.
+The API does not provide a general non-destructive account-disabled switch. `disableUser` restricts **new uploads** by setting quota to current usage (minimum one byte); it deliberately retains sign-in and downloads. `enableUser` restores the subscribed quota. Cancellation never calls delete or restore APIs, which could schedule data removal. Account bans use a separate flag and the supplied [private proxy gateway](docs/ADMIN-AND-UPGRADES.md#suspend-without-deleting-files) to block authenticated API/file access without deleting users.
 
 New uploads stop when a failed/inactive subscription is reconciled; ending renewal at period end keeps access while Stripe still reports an active paid subscription. There is no automatic data deletion policy or deletion scheduler.
 

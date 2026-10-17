@@ -4,8 +4,19 @@ require dirname(__DIR__).'/src/bootstrap.php';
 $db=new Zion\Database();
 $cmd=$argv[1]??'help';
 if($cmd==='key'){echo bin2hex(random_bytes(32)).PHP_EOL;exit;}
-if($cmd==='migrate'){$db->migrate();echo "Database ready\n";exit;}
+if(in_array($cmd,['migrate','install'],true)){$db->migrate();$seeded=Zion\AccountControl::seedAdmin($db);echo "Database ready\n".($seeded?"Admin configured (existing passwords preserved)\n":"Set ADMIN_EMAIL and ADMIN_PASSWORD, then run install to create the administrator\n");exit;}
 $mail=new Zion\MailerService($db);
+if($cmd==='changes:retry'){
+ $plans=new Zion\Plans();$storage=new Zion\StorageProvisioningService();$changes=(new Zion\StripeService($db,$plans,$mail,$storage))->changes();
+ $failed=0;$processed=0;
+ foreach($db->run("SELECT id FROM plan_changes WHERE status IN ('creating','pending','paid','applying','retry') ORDER BY created_at LIMIT 100")->fetchAll() as $r){
+  try{$record=$changes->record($r['id']);if($record['status']==='creating' && !$record['checkout_session_id'] && $record['expires_at']<=time())$changes->cancel($r['id']);else $changes->retry($r['id']);$processed++;}
+  catch(Throwable $e){$failed++;error_log('Plan change requires retry; id='.$r['id']);}
+ }
+ $admin=new Zion\AdminService($db,$plans,$mail,$storage,$changes);
+ foreach($db->run("SELECT user_id FROM account_controls WHERE quota_sync='pending' LIMIT 100")->fetchAll() as $r){try{$admin->syncQuota($r['user_id']);$processed++;}catch(Throwable $e){$failed++;}}
+ echo json_encode(['processed'=>$processed,'failed'=>$failed],JSON_THROW_ON_ERROR).PHP_EOL;exit($failed?1:0);
+}
 if($cmd==='oblio:retry'){
  $result=(new Zion\OblioInvoiceService($db,$mail))->retryPending(in_array('--due',$argv,true));
  echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;exit($result['pending']>0?1:0);
@@ -44,4 +55,4 @@ $queries=[
  ,'fiscal-invoices'=>'SELECT id,user_id,stripe_invoice_id,stripe_subscription_id,oblio_invoice_id,oblio_series,oblio_number,amount,currency,status,error_message,attempts,issued_at,notification_sent_at,completed_at FROM fiscal_invoices ORDER BY created_at DESC LIMIT 100'
 ];
 if(isset($queries[$cmd])){echo json_encode($db->run($queries[$cmd])->fetchAll(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE).PHP_EOL;exit;}
-echo "Commands: key, migrate, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";
+echo "Commands: key, install, migrate, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";

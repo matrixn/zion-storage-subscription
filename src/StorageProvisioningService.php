@@ -25,6 +25,7 @@ class StorageProvisioningService {
  }
  public function updateQuota(string $id,int $quota): void { $this->request('PUT','/admin/users/'.rawurlencode($id),['quotaSizeInBytes'=>max(1,$quota)]); }
  public function getUsage(string $id): array { $u=$this->request('GET','/admin/users/'.rawurlencode($id)); return ['used'=>(int)($u['quotaUsageInBytes']??0),'quota'=>(int)($u['quotaSizeInBytes']??0)]; }
+ public function getIdentity(string $id): array { $u=$this->request('GET','/admin/users/'.rawurlencode($id));return ['label'=>$u['storageLabel']??'','email'=>$u['email']??'']; }
  /** Suspend new uploads while retaining access to existing files. No deletion. */
  public function disableUser(string $id): void { $usage=$this->getUsage($id); $this->updateQuota($id,max(1,$usage['used'])); }
  public function enableUser(string $id,int $quota): void { $this->updateQuota($id,$quota); }

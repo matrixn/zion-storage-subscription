@@ -10,6 +10,7 @@ class StripeService implements BillingService {
   $this->fiscal=$fiscal??new OblioInvoiceService($db,$mail);
  }
  public function checkout(array $u): string {
+  if((new AccountControl($this->db))->banned($u['id']) || (new AccountControl($this->db))->manual($u['id'])) throw new \RuntimeException('checkout_ineligible');
   if(!$u['email_verified_at'] || $u['selected_plan_id']==='free') throw new \RuntimeException('checkout_ineligible');
   $profile=(new BillingProfileService($this->db))->get($u['id']);
   if(!$profile) throw new \InvalidArgumentException('billing.required');
@@ -38,8 +39,22 @@ class StripeService implements BillingService {
  public function portal(array $u): string {
   $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
   if(!$s || !$s['stripe_customer_id']) throw new \RuntimeException('billing_unavailable');
-  return $this->client->billingPortal->sessions->create(['customer'=>$s['stripe_customer_id'],'return_url'=>base_url().Router::path($u['locale'],'status')])->url;
+  // Never expose Stripe's generic plan switcher: it bypasses the five-day policy.
+  $key='restricted-portal-v1:'.hash('sha256',env('STRIPE_SECRET_KEY'));
+  $stored=$this->db->one('SELECT value FROM integration_settings WHERE key=?',[$key]);
+  if($stored)$config=$this->client->billingPortal->configurations->retrieve($stored['value']);
+  else {
+   $config=$this->client->billingPortal->configurations->create(['business_profile'=>['headline'=>'Zion Storage'],'features'=>[
+    'invoice_history'=>['enabled'=>true],'payment_method_update'=>['enabled'=>true],
+    'customer_update'=>['enabled'=>false],'subscription_update'=>['enabled'=>false],
+    'subscription_cancel'=>['enabled'=>true,'mode'=>'at_period_end'],
+   ]],['idempotency_key'=>$key]);
+   $this->db->run('INSERT OR IGNORE INTO integration_settings(key,value) VALUES(?,?)',[$key,$config->id]);
+  }
+  if(!$config->active || ($config->features->subscription_update->enabled??true))throw new \RuntimeException('unsafe_portal_configuration');
+  return $this->client->billingPortal->sessions->create(['customer'=>$s['stripe_customer_id'],'configuration'=>$config->id,'return_url'=>base_url().Router::path($u['locale'],'status')])->url;
  }
+ public function changes(): SubscriptionChanges { return new SubscriptionChanges($this->db,$this->plans,$this->mail,$this->storage,$this->client,$this->fiscal); }
  public function receive(string $payload,string $signature): void {
   if(!env('STRIPE_WEBHOOK_SECRET')) throw new \RuntimeException('webhook_unconfigured');
   $event=\Stripe\Webhook::constructEvent($payload,$signature,env('STRIPE_WEBHOOK_SECRET'));
@@ -81,6 +96,13 @@ class StripeService implements BillingService {
    $paidInvoice=$event['type']==='invoice.paid'?$this->fetchInvoice($o['id']):null;
    if($paidInvoice && ($paidInvoice['status']??'')!=='paid') throw new \RuntimeException('invoice_not_paid');
    $source=$paidInvoice??$o;
+   $upgradeId=$source['metadata']['upgrade_id']??null;
+   if($upgradeId && in_array($event['type'],['checkout.session.completed','invoice.paid'],true)) {
+    $change=$this->changes()->record($upgradeId);
+    $userLock=fopen(dirname(__DIR__).'/storage/provision-'.$change['user_id'].'.lock','c');flock($userLock,LOCK_EX);
+    $this->changes()->fulfill($upgradeId);
+    $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);return;
+   }
    $id=str_starts_with($event['type'],'customer.subscription.')?$o['id']:($source['subscription']??$source['parent']['subscription_details']['subscription']??null);
    if(!$id) {
     $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);
@@ -92,10 +114,12 @@ class StripeService implements BillingService {
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
    if(!$u) throw new \RuntimeException('unknown_billing_user');
    $userLock=fopen(dirname(__DIR__).'/storage/provision-'.$uid.'.lock','c');flock($userLock,LOCK_EX);
+   $this->changes()->reconcile($s);
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
    $p=$this->plans->get($s['metadata']['plan']??'');
+   $manual=(new AccountControl($this->db))->manual($uid);
    $price=$s['items']['data'][0]['price']['id']??'';
-   if(!$p || $p['slug']==='free' || !$p['stripe_price_id'] || $price!==$p['stripe_price_id'] || $p['slug']!==$u['selected_plan_id']) throw new \RuntimeException('billing_plan_mismatch');
+   if(!$p || $p['slug']==='free' || !$p['stripe_price_id'] || $price!==$p['stripe_price_id'] || (!$manual && $p['slug']!==$u['selected_plan_id'])) throw new \RuntimeException('billing_plan_mismatch');
    if($paidInvoice && ($paidInvoice['id']!==$o['id'] || ($paidInvoice['customer']??null)!==$s['customer'])) throw new \RuntimeException('invoice_identity_mismatch');
    $invoice=is_array($s['latest_invoice']??null)?$s['latest_invoice']:null;
    $paid=$invoice && ($invoice['status']??'')==='paid' && $s['status']==='active';
@@ -110,6 +134,7 @@ class StripeService implements BillingService {
      $uid,$s['customer'],$s['id'],$price,$s['status'],$p['slug'],$s['items']['data'][0]['current_period_end']??$s['current_period_end']??null,$invoice['id']??null,$paid?1:0]);
     if($invoice) $this->storeInvoice($invoice,$uid);
     if($paidInvoice) {
+     $this->changes()->rememberOrigin($paidInvoice,$s,$uid);
      $this->storeInvoice($paidInvoice,$uid);
      return $this->fiscal->capture($paidInvoice,$u,$s,$this->invoicePlan($paidInvoice,$p));
     }
@@ -117,7 +142,7 @@ class StripeService implements BillingService {
    });
    // The durable fiscal job is processed by the CLI worker. Provider latency/outages
    // must never delay Stripe's webhook acknowledgement or change payment status.
-   if(!$oldSubscription && $u['storage_user_id']) {
+   if(!$oldSubscription && !$manual && $u['storage_user_id'] && !(new AccountControl($this->db))->banned($uid)) {
     if($paid) $this->storage->enableUser($u['storage_user_id'],$p['storage_bytes']);
     else $this->storage->disableUser($u['storage_user_id']);
     $this->db->run('UPDATE users SET status=?,updated_at=? WHERE id=?',[$paid?'active':'restricted',time(),$uid]);

@@ -1,5 +1,17 @@
 # Validation
 
+## Administration and upgrades — 18 October 2026
+
+Current checks: 235 PHP assertions, 27 existing isolated HTTP assertions, 24 new administrator/gateway HTTP assertions, and 116 new Chrome assertions for admin and localized upgrade flows at 320/390/768/1440 px. PHP syntax, strict Composer validation, dependency advisory audit, Git whitespace checks and the Docker build passed. The same 235 PHP assertions also passed inside the built PHP 8.4 container. Screenshots were visually inspected in addition to browser checks; ignored artifacts are `tests/artifacts/admin-*.png` and `upgrade-*.png`.
+
+New acceptance cases cover the 10 RON difference from 120 GB to 250 GB, the original five-day purchase timestamp, larger-plan eligibility, Checkout deadline/currency/customer/amount/mode checks, separate one-time billing, preserved renewal at 19.99, duplicated tabs/events, a lost Stripe update response, interrupted quota synchronization, and distinct fiscal records for the actual upgrade amount. A late successful payment remains financially recorded for manual review without granting an out-of-window entitlement. Portal plan changes are disabled.
+
+Admin HTTP checks exercise environment-based administrator creation, separate scoped sessions, CSRF and privilege separation, customer verification/legal acceptance, manual plan provisioning, downgrade, ban/unban, retained subscriptions/files, the private authenticated access gateway, and logout. Browser checks include all four customer locales, mobile overflow, masked passwords, upgrade price/renewal disclosures, audit/history sections and absence of runtime errors.
+
+Run `composer test`, `python3 tests/http_flow.py` and `python3 tests/admin_http.py`. Optional browser run: set `ZION_NODE` to the Node executable, `ZION_BROWSER_SCRIPT` to `tests/admin-browser.cjs` as a path readable by that Node runtime, and run `python3 tests/admin_http.py --browser`. Install Playwright/Chrome or supply PLAYWRIGHT_MODULE/BROWSER_CHANNEL as in the existing browser suites. Fixtures use disposable databases and local HTTP adapters; no real payment, email, fiscal document or installed Immich mutation was performed.
+
+External acceptance remains required for real hosted Stripe test payments, installed Immich/mobile compatibility and the deployed Nginx/firewall gate. Without configured admin environment values, no default administrator is created. Without the proxy gateway, a ban limits uploads but cannot fully deny file access. Stripe Checkout imposes the disclosed final-30-minute cutoff for new upgrade sessions. See [installation and operational details](ADMIN-AND-UPGRADES.md).
+
 ## Automated application tests
 
 ```sh

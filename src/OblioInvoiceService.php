@@ -38,8 +38,30 @@ final class OblioInvoiceService
         return $id;
     }
 
+    public function captureUpgrade(array $invoice,array $user,array $change,array $plan): string
+    {
+        $invoice['payment_intent'] ??= $change['payment_intent_id'];
+        return $this->db->transaction(function()use($invoice,$user,$change,$plan){
+            $old=$this->db->one('SELECT id FROM fiscal_invoices WHERE stripe_invoice_id=?',[$invoice['id']]);
+            if($old)return $old['id'];
+            $plan['invoice_name_ro']='Upgrade Zion Storage '.$change['from_plan'].' → '.$plan['name'].' '.$plan['capacity'];
+            $plan['invoice_product_code'].='_UPGRADE';
+            $id=$this->capture($invoice,$user,['id'=>$change['stripe_subscription_id'],'current_period_end'=>$change['period_end']],$plan);
+            $row=$this->db->one('SELECT source_snapshot FROM fiscal_invoices WHERE id=?',[$id]);
+            $source=EncryptedPayload::decode($row['source_snapshot']);
+            $source['upgrade']=['id'=>$change['id'],'start'=>$change['paid_at'],'end'=>$change['period_end'],'amount'=>$change['amount']];
+            $this->db->run('UPDATE fiscal_invoices SET source_snapshot=?,billing_period_start=?,billing_period_end=? WHERE id=?',[EncryptedPayload::encode($source),$change['paid_at'],$change['period_end'],$id]);
+            return $id;
+        });
+    }
+
     private function period(array $source, bool $strict = true): array
     {
+        if(isset($source['upgrade'])) {
+            $u=$source['upgrade'];
+            if(!is_int($u['start']) || !is_int($u['end']) || $u['end']<=$u['start'] || $u['amount']!==$source['invoice']['amount_paid'])throw new OblioException('invalid_upgrade_snapshot');
+            return [$u['start'],$u['end']];
+        }
         $lines = $source['invoice']['lines']['data'] ?? [];
         $line = count($lines) === 1 ? $lines[0] : null;
         $price = $line['price']['id'] ?? $line['pricing']['price_details']['price'] ?? null;

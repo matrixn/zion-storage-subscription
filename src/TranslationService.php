@@ -6,6 +6,7 @@ final class TranslationService {
  public function __construct(public string $locale) {
   if (!in_array($locale,self::LOCALES,true)) throw new \InvalidArgumentException('locale');
   $this->messages=require dirname(__DIR__).'/translations/'.$locale.'.php';
+  $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/account_changes.php')[$locale]);
  }
  public function get(string $key,array $vars=[]): string {
   $s=$this->messages[$key]??throw new \RuntimeException('Missing translation: '.$key);

@@ -2,6 +2,10 @@
 
 ## 2026-10-18
 
+- Added one-time paid upgrades during the original five-day purchase window, with exact RON price differences, preserved renewal dates, authoritative Stripe payment checks, durable recovery and separate upgrade fiscal records.
+- Added private `/admin` authentication, install-time ADMIN_EMAIL/ADMIN_PASSWORD bootstrap, customer creation/manual plans, recurring plan changes, ban/unban, upgrade recovery and operator audit history.
+- Added a non-destructive Immich access gateway/proxy example and explicit pending states when full ban enforcement is not configured; billing cannot clear bans.
+- Restricted the Stripe billing portal so it cannot bypass the upgrade policy.
 - Updated monthly prices to 9.99 RON for 120 GB, 19.99 RON for 250 GB and 29.99 RON for 500 GB.
 - Removed the 1 TB offer and adjusted the pricing layout for the four remaining plans, including the free 10 GB plan.
 

@@ -1,0 +1,100 @@
+"""Isolated admin/session/ban integration test. No external services or real credentials."""
+import http.server, threading, subprocess, tempfile, os, time, json, urllib.request, urllib.parse, http.cookiejar, re, sqlite3, sys
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[1]
+checks=0
+def check(value,label):
+    global checks
+    if not value: raise AssertionError(label)
+    checks+=1;print('PASS',label,flush=True)
+class Backend(http.server.BaseHTTPRequestHandler):
+    records=[]
+    def log_message(self,*args): pass
+    def respond(self,obj,code=200):
+        self.send_response(code);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(json.dumps(obj).encode())
+    def do_GET(self):
+        if self.path=='/api/users/me':
+            return self.respond({'id':'immich-admin-test'} if self.headers.get('Authorization')=='Bearer fixture-user' else {},200 if self.headers.get('Authorization')=='Bearer fixture-user' else 401)
+        if self.headers.get('x-api-key')!='fixture-key': return self.respond({},403)
+        return self.respond(self.records if '?' in self.path else self.records[0])
+    def do_POST(self):
+        body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if self.headers.get('x-api-key')!='fixture-key':return self.respond({},403)
+        body.pop('password');body.update(id='immich-admin-test',quotaUsageInBytes=0);self.records.append(body);self.respond(body)
+    def do_PUT(self):
+        body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if self.headers.get('x-api-key')!='fixture-key':return self.respond({},403)
+        self.records[0].update(body);self.respond(self.records[0])
+def client():return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+def request(opener,path,data=None,headers=None):
+    req=urllib.request.Request('http://127.0.0.1:8093'+path,data=urllib.parse.urlencode(data).encode() if data is not None else None,headers=headers or {})
+    try:r=opener.open(req)
+    except urllib.error.HTTPError as e:r=e
+    return r.status,r.read().decode(),r.headers
+def csrf(html):return re.search(r'name="_csrf" value="([a-f0-9]+)"',html).group(1)
+with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
+    backend=http.server.ThreadingHTTPServer(('127.0.0.1',0),Backend);threading.Thread(target=backend.serve_forever,daemon=True).start()
+    env=os.environ.copy();env.update(APP_ENV='test',APP_URL='http://localhost:8093',DB_PATH=temp+'/app.sqlite',APP_KEY='fixture-key-'*8,ADMIN_EMAIL='admin-fixture@example.com',ADMIN_PASSWORD='fixture-admin-password',MAIL_TRANSPORT='log',MAIL_LOG_DIRECTORY=temp+'/mail',OBLIO_ENABLED='false',STORAGE_API_URL='http://127.0.0.1:'+str(backend.server_port)+'/api',STORAGE_API_KEY='fixture-key',STORAGE_GATEWAY_KEY='fixture-gateway-key-'*3,STORAGE_GATEWAY_ENFORCED='false',STRIPE_SECRET_KEY='sk_test_unconfigured')
+    subprocess.run(['php','bin/console.php','install'],cwd=ROOT,env=env,check=True,capture_output=True)
+    with open(temp+'/server.log','w+') as log:
+        server=subprocess.Popen(['php','-S','0.0.0.0:8093','-t','public','public/router.php'],cwd=ROOT,env=env,stdout=log,stderr=log)
+        try:
+            admin=client();customer=client()
+            for _ in range(50):
+                try:status,body,headers=request(admin,'/admin');break
+                except OSError:time.sleep(.1)
+            check(status==200 and 'Autentificare administrator' in body,'admin requires authentication')
+            check('noindex' in headers['X-Robots-Tag'] and 'no-store' in headers['Cache-Control'],'admin is private and not indexed')
+            check('path=/admin' in headers['Set-Cookie'].lower() and 'httponly' in headers['Set-Cookie'].lower(),'admin has separate scoped HttpOnly cookie')
+            check(request(admin,'/admin',{'action':'login','email':'admin-fixture@example.com','password':'fixture-admin-password'})[0]==419,'admin login requires CSRF')
+            token=csrf(body)
+            status,body,_=request(admin,'/admin',{'_csrf':token,'action':'login','email':'admin-fixture@example.com','password':'wrong-password'})
+            check(status==422 and 'Client nou' not in body,'invalid admin password denied')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'login','email':'admin-fixture@example.com','password':'fixture-admin-password'})
+            check(status==200 and 'Client nou' in body,'administrator logs in with installed env credentials')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'create','name':'Admin Test Client','email':'admin-client@example.com','password':'secure-admin-client-password','plan':'250gb','locale':'ro'})
+            check(status==200 and 'Client creat' in body,'admin creates customer with selected manual plan')
+            db=sqlite3.connect(temp+'/app.sqlite');db.row_factory=sqlite3.Row;u=dict(db.execute('SELECT * FROM users').fetchone())
+            check(u['selected_plan_id']=='250gb' and not u['email_verified_at'] and not u['terms_at'],'manual client must verify email and accept terms')
+            check(db.execute('SELECT COUNT(*) FROM subscriptions').fetchone()[0]==0,'manual grant does not create a paid subscription')
+            db.close()
+            php='require "src/bootstrap.php"; $db=new Zion\\Database(); $r=$db->one("SELECT payload FROM outbox ORDER BY id DESC LIMIT 1"); echo json_encode(Zion\\MailerService::decode($r["payload"]));'
+            payload=json.loads(subprocess.run(['php','-r',php],cwd=ROOT,env=env,check=True,capture_output=True,text=True).stdout)
+            parsed=urllib.parse.urlparse(payload['url']);path=parsed.path+'?'+parsed.query
+            status,html,_=request(customer,path)
+            status,html,_=request(customer,parsed.path,{'_csrf':csrf(html),'token':urllib.parse.parse_qs(parsed.query)['token'][0]})
+            check(status==200 and 'name="accept"' in html,'verified manual customer reaches terms and activation, not checkout')
+            data={'_csrf':csrf(html),'password':'secure-admin-client-password'}
+            check(request(customer,'/ro/finalizare',data)[0]==422,'admin cannot accept legal terms on behalf of customer')
+            data['accept']='1';status,html,_=request(customer,'/ro/finalizare',data)
+            check(status==200 and len(Backend.records)==1 and Backend.records[0]['quotaSizeInBytes']==250_000_000_000,'manual customer activates selected Immich quota')
+            check('Autentificare administrator' in request(customer,'/admin')[1],'customer session cannot access administration')
+            admin_html=request(admin,'/admin')[1]
+            check(request(admin,'/admin',{'_csrf':csrf(html),'action':'ban','user_id':u['id'],'reason':'Wrong session'})[0]==419,'customer CSRF cannot authorize admin changes')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(admin_html),'action':'ban','user_id':u['id'],'reason':'Test suspension'})
+            check(status==200 and 'gateway_required' in body and Backend.records[0]['quotaSizeInBytes']==1,'ban preserves files and exposes missing gateway enforcement')
+            check('Cont suspendat' in request(customer,'/ro/activare')[1],'customer sees suspended state')
+            gate={'X-Zion-Gateway-Key':env['STORAGE_GATEWAY_KEY'],'X-Original-URI':'/api/assets/123','Authorization':'Bearer fixture-user'}
+            check(request(customer,'/internal/storage-access',headers=gate)[0]==403,'existing Immich session denied by ban gateway')
+            check(request(customer,'/internal/storage-access',headers={'X-Zion-Gateway-Key':'wrong','X-Original-URI':'/api/auth/login'})[0]==403,'internal gateway requires shared secret')
+            gate['X-Original-URI']='/api/auth/login';check(request(customer,'/internal/storage-access',headers=gate)[0]==204,'gateway permits public login bootstrap')
+            request(admin,'/admin',{'_csrf':csrf(body),'action':'unban','user_id':u['id'],'reason':'Resolved test'})
+            gate['X-Original-URI']='/api/assets/123';check(request(customer,'/internal/storage-access',headers=gate)[0]==204,'unban restores authenticated Immich access')
+            check(Backend.records[0]['quotaSizeInBytes']==250_000_000_000,'unban restores current entitlement quota')
+            body=request(admin,'/admin')[1]
+            request(admin,'/admin',{'_csrf':csrf(body),'action':'plan','user_id':u['id'],'plan':'120gb','reason':'Manual downgrade'})
+            check(Backend.records[0]['quotaSizeInBytes']==120_000_000_000,'admin manual downgrade synchronizes storage')
+            if '--browser' in sys.argv:
+                db=sqlite3.connect(temp+'/app.sqlite');now=int(time.time());browser_id='b'*32;verify_token='c'*64
+                db.execute('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,email_verified_at,storage_user_id,status,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',(browser_id,'Upgrade Browser','upgrade-browser@example.com',u['password_hash'],'ro','120gb',now,'browser-storage','active',now,now,now,now))
+                db.execute('INSERT INTO subscriptions(user_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,plan,renewal_at,paid_confirmed) VALUES(?,?,?,?,?,?,?,1)',(browser_id,'cus_browser','sub_browser','price_browser','active','120gb',now+29*86400))
+                db.execute('INSERT INTO subscription_origins VALUES(?,?,?,?,?)',('sub_browser',browser_id,now-86400,now+29*86400,'in_browser'))
+                import hashlib
+                db.execute('INSERT INTO email_verifications(token_hash,user_id,expires_at) VALUES(?,?,?)',(hashlib.sha256(verify_token.encode()).hexdigest(),browser_id,now+3600));db.commit();db.close()
+                node=os.environ['ZION_NODE'];script=os.environ.get('ZION_BROWSER_SCRIPT',str(ROOT/'tests/admin-browser.cjs'))
+                subprocess.run([node,script,'http://localhost:8093/ro/verificare-email?token='+verify_token],cwd=ROOT,env=env,check=True)
+            body=request(admin,'/admin')[1];status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'logout'})
+            check(status==200 and 'Autentificare administrator' in body,'logout removes administrative access')
+            log.flush();log.seek(0);text=log.read();check('secure-admin-client-password' not in text and 'fixture-admin-password' not in text,'server logs contain no plaintext credentials')
+            print(f'{checks} admin HTTP assertions passed. No external services contacted.')
+        finally:server.terminate();server.wait(timeout=10);backend.shutdown()

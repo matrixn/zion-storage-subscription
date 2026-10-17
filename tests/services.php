@@ -5,6 +5,7 @@ final class FixtureHttp implements Stripe\HttpClient\ClientInterface {
  public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null) {
   $this->calls[]=[$method,$url,$params];
   if(str_contains($url,'checkout/sessions'))$r=['id'=>'cs_fixture','object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/cs_fixture','expires_at'=>time()+3600];
+  elseif(str_contains($url,'billing_portal/configurations'))$r=['id'=>'bpc_fixture','object'=>'billing_portal.configuration','active'=>true,'features'=>['subscription_update'=>['enabled'=>false]]];
   else $r=['id'=>'bps_fixture','object'=>'billing_portal.session','url'=>'https://billing.stripe.com/p/session/test'];
   return [json_encode($r),200,[]];
  }
@@ -23,7 +24,8 @@ check($http->calls[0][2]['subscription_data']['metadata']['user_id']===$checkout
 $realBilling->checkout($cu);check(count($http->calls)===1,'existing Checkout Session reused');
 $db->run('INSERT INTO subscriptions(user_id,stripe_customer_id,status) VALUES(?,?,?)',[$checkoutId,'cus_portal','pending']);
 check(str_starts_with($realBilling->portal($cu),'https://billing.stripe.com/'),'SDK customer portal');
-check($http->calls[1][2]['customer']==='cus_portal','portal uses stored customer');
+check($http->calls[2][2]['customer']==='cus_portal','portal uses stored customer');
+check(in_array($http->calls[1][2]['features']['subscription_update']['enabled'],[false,'false'],true) && $http->calls[2][2]['configuration']==='bpc_fixture','portal cannot bypass upgrade policy');
 
 final class AdapterFixture extends Zion\StorageProvisioningService {
  public array $calls=[];public array $records=[];

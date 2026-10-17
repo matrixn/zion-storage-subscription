@@ -51,7 +51,7 @@ final class Application {
    // Do not consume tokens on GET: mail scanners must not activate accounts.
    $this->render('verify',['token'=>is_string($token)?$token:'']);return;
   }
-  if(in_array($this->page,['status','checkout','cancel','activate','portal','billing-profile'],true)&&!$this->user()){
+  if(in_array($this->page,['status','checkout','cancel','activate','portal','billing-profile','upgrade'],true)&&!$this->user()){
    $this->render('resend',['notice'=>'status.recover']);return;
   }
   if($this->page==='checkout' && $this->user() && !(new BillingProfileService($this->db))->get($this->user()['id'])) $this->redirect(Router::path($this->locale,'billing-profile'));
@@ -78,7 +78,7 @@ final class Application {
    $uid=$this->accounts->verify((string)($_POST['token']??''));
    if(!$uid){$this->fail('error.token');return;}
    $this->authenticate($uid);$u=$this->user();
-   $this->redirect(Router::path($u['locale'],$u['selected_plan_id']==='free'?'status':'checkout'));
+   $this->redirect(Router::path($u['locale'],$this->accounts->eligible($u) || (new AccountControl($this->db))->banned($uid)?'status':'checkout'));
   }
   if($this->page==='resend') {
    $email=strtolower(trim((string)($_POST['email']??'')));
@@ -111,6 +111,18 @@ final class Application {
    $this->render('message',['message'=>'contact.sent']);return;
   }
   $u=$this->user();if(!$u){$this->fail('error.csrf',401);return;}
+  if($this->page==='upgrade') {
+   if(!($this->billing instanceof StripeService))throw new \RuntimeException('billing_unavailable');
+   try {
+    if(($_POST['action']??'')==='cancel') {
+     $id=(string)($_POST['change_id']??'');$r=$this->billing->changes()->record($id);
+     if($r['user_id']!==$u['id']){$this->fail('error.validation',403);return;}
+     $this->billing->changes()->cancel($id);$this->redirect(Router::path($this->locale,'upgrade'));
+    }
+    $this->redirect($this->billing->changes()->checkout($u,(string)($_POST['plan']??'')));
+   }catch(\DomainException $e){$key=$e->getMessage();$this->fail(in_array($key,['upgrade.unavailable','upgrade.pending','upgrade.closing','upgrade.unconfigured','billing.required'],true)?$key:'error.generic');}
+   return;
+  }
   if($this->page==='billing-profile') {
    try { (new BillingProfileService($this->db))->save($u['id'],is_array($_POST['billing']??null)?$_POST['billing']:[]); }
    catch(\InvalidArgumentException $e) { $this->fail('billing.invalid');return; }
@@ -122,6 +134,10 @@ final class Application {
   }
   if($this->page==='portal'){$this->redirect($this->billing->portal($u));}
   if($this->page==='activate') {
+   if(!$u['terms_at'] || !$u['privacy_at']) {
+    if(empty($_POST['accept']) || (production() && env('LEGAL_READY')!=='true')){$this->fail('error.validation');return;}
+    $this->db->run('UPDATE users SET terms_at=?,privacy_at=? WHERE id=?',[time(),time(),$u['id']]);
+   }
    if(!Security::limit($this->db,'activate:'.$u['id'],8,900)){$this->fail('error.rate',429);return;}
    if(!$this->accounts->provision($u['id'],(string)($_POST['password']??''))){$this->fail('error.validation');return;}
    $this->redirect(Router::path($this->locale,'status'));
@@ -131,6 +147,9 @@ final class Application {
  private function render(string $view,array $data=[]): void {
   $locale=$this->locale; $page=$this->page; $t=fn(string $k,array $v=[])=>$this->tr->get($k,$v); $url=fn(string $p,string $l='')=>Router::path($l?:$locale,$p);
   $plans=$this->plans->all();$user=$this->user();$eligible=$user?$this->accounts->eligible($user):false;
+  $banned=$user?(new AccountControl($this->db))->banned($user['id']):false;
+  $upgradeOffers=$user && $this->billing instanceof StripeService?$this->billing->changes()->offers($user):[];
+  $latestChange=$user?$this->db->one('SELECT * FROM plan_changes WHERE user_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',[$user['id']]):null;
   $profile=$user?(new BillingProfileService($this->db))->get($user['id']):null;
   $billing=is_array($_POST['billing']??null)?$_POST['billing']:($profile??[]);
   $fiscalInvoices=$user?$this->db->run('SELECT oblio_series,oblio_number,invoice_url,amount,currency,status,billing_period_start,billing_period_end FROM fiscal_invoices WHERE user_id=? ORDER BY created_at DESC LIMIT 50',[$user['id']])->fetchAll():[];
