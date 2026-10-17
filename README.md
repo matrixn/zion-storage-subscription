@@ -44,7 +44,7 @@ Verified users can resume signup through a new one-use email link. The secure se
 
 Only Stripe test keys and non-live webhook events are accepted in this release. No live billing was enabled.
 
-1. Create four recurring monthly RON Prices in Stripe test mode: 799, 1499, 2499, 3999 minor units.
+1. Create three recurring monthly RON Prices in Stripe test mode: 999 (120 GB), 1999 (250 GB), 2999 (500 GB) minor units. Map the matching STRIPE_PRICE_* settings to these prices; use new Price IDs when changing amounts. The 1 TB plan is no longer offered.
 2. Set the corresponding STRIPE_PRICE_* values and STRIPE_SECRET_KEY in .env.
 3. Register `/webhooks/stripe`, configure STRIPE_WEBHOOK_SECRET and subscribe to:
    - checkout.session.completed

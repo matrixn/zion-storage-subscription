@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-18
+
+- Updated monthly prices to 9.99 RON for 120 GB, 19.99 RON for 250 GB and 29.99 RON for 500 GB.
+- Removed the 1 TB offer and adjusted the pricing layout for the four remaining plans, including the free 10 GB plan.
+
 ## 2026-10-17
 
 - Added separate individual/company billing profiles to paid registration and authenticated account flows in RO/EN/FR/DE.

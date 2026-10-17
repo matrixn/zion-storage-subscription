@@ -12,7 +12,7 @@ $id=$account->register(['name'=>'Browser Billing','email'=>'billing-'.bin2hex(ra
 $row=$db->one("SELECT payload FROM outbox WHERE kind='verify' AND recipient=(SELECT email FROM users WHERE id=?) ORDER BY id DESC",[$id]);
 $link=Zion\EncryptedPayload::decode($row['payload'])['url'];
 $fiscal=new Zion\OblioInvoiceService($db,$mail);
-$invoice=['id'=>'in_browser_'.bin2hex(random_bytes(4)),'status'=>'paid','livemode'=>false,'customer'=>'cus_browser','amount_paid'=>799,'currency'=>'ron','created'=>1792108800,'lines'=>['has_more'=>false,'data'=>[['price'=>['id'=>$plans->get('120gb')['stripe_price_id']],'period'=>['start'=>1792108800,'end'=>1794787200],'quantity'=>1]]]];
+$invoice=['id'=>'in_browser_'.bin2hex(random_bytes(4)),'status'=>'paid','livemode'=>false,'customer'=>'cus_browser','amount_paid'=>$plans->get('120gb')['monthly_price'],'currency'=>'ron','created'=>1792108800,'lines'=>['has_more'=>false,'data'=>[['price'=>['id'=>$plans->get('120gb')['stripe_price_id']],'period'=>['start'=>1792108800,'end'=>1794787200],'quantity'=>1]]]];
 $fid=$fiscal->capture($invoice,$db->one('SELECT * FROM users WHERE id=?',[$id]),['id'=>'sub_browser','current_period_end'=>1794787200],$plans->get('120gb'));
 $fiscal->process($fid);
 echo json_encode(['verification_url'=>$link],JSON_THROW_ON_ERROR);
