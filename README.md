@@ -1,6 +1,6 @@
 # Zion Storage
 
-A small server-rendered PHP application for public marketing, registration, verified activation, monthly subscriptions and mobile onboarding. No browser photo gallery.
+A small server-rendered PHP application for public marketing, registration, verified activation, monthly/yearly subscriptions and mobile onboarding. No browser photo gallery.
 
 ## Local development
 
@@ -18,7 +18,7 @@ php -S 127.0.0.1:8088 -t public public/router.php
 
 Open http://localhost:8088/ro/ (or /en/, /fr/, /de/). Keep .env private and never commit it. Source repository: https://github.com/matrixn/zion-storage-subscription.
 
-Administration is available at `/admin`: create manual customers, manage plans and suspensions, inspect/retry upgrades, and view the operator audit trail. Paid customer upgrades collect the one-time price difference during the original five-day window and preserve the monthly renewal anchor. See [administration, installation, upgrade deadlines and suspension gateway](docs/ADMIN-AND-UPGRADES.md).
+Administration is available at `/admin`: create manual customers, manage plans and suspensions, inspect/retry upgrades, and view the operator audit trail. Paid customer upgrades collect the one-time price difference during the original five-day window and preserve the existing renewal date and billing interval. See [administration, installation, upgrade deadlines and suspension gateway](docs/ADMIN-AND-UPGRADES.md).
 
 Run `php bin/console.php mail:work` to deliver queued email. Local `MAIL_TRANSPORT=log` renders emails under private `storage/mail/`; no messages are sent externally. Open these files locally to follow verification links. Do not publish this folder.
 
@@ -47,8 +47,8 @@ Verified users can resume signup through a new one-use email link. The secure se
 
 Only Stripe test keys and non-live webhook events are accepted in this release. No live billing was enabled.
 
-1. Create three recurring monthly RON Prices in Stripe test mode: 999 (120 GB), 1799 (250 GB), 2999 (500 GB) minor units. Map the matching STRIPE_PRICE_* settings to these prices; use new Price IDs when changing amounts. STRIPE_PRICE_250GB must reference the 17.99 RON monthly Price. Preserve the former 19.99 RON Price ID in STRIPE_LEGACY_PRICE_250GB for existing subscription events/invoices; existing customer subscriptions are not automatically migrated. See [pricing configuration and transition](docs/PRICING.md). The 1 TB plan is no longer offered.
-2. Set the corresponding STRIPE_PRICE_* values and STRIPE_SECRET_KEY in .env.
+1. Set STRIPE_SECRET_KEY in private .env (TEST MODE). Install/migrate the database and sign into /admin.
+2. In the billing catalog, create or validate the six EUR recurring Prices: Personal 199/month or 2189/year, Plus 359/month or 3949/year, Titan 599/month or 6589/year, in minor units. Annual billing gives one month free. Product/Price mappings live in the database, not .env. See [pricing configuration and transition](docs/PRICING.md).
 3. Register `/webhooks/stripe`, configure STRIPE_WEBHOOK_SECRET and subscribe to:
    - checkout.session.completed
    - invoice.paid

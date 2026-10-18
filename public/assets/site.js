@@ -1,4 +1,15 @@
 'use strict';
+document.querySelector('[data-billing-switch]')?.addEventListener('submit',event=>{
+ const interval=event.submitter?.value;if(!['month','year'].includes(interval))return;event.preventDefault();
+ event.currentTarget.querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.value===interval)));
+ document.querySelectorAll('.pricing-grid .plan').forEach(card=>{
+  card.querySelector('.price-amount').textContent=card.dataset[interval+'Amount'];
+  card.querySelector('.price-interval').textContent=card.dataset[interval+'Interval'];
+  card.querySelector('.plan-caption').textContent=card.dataset[interval+'Caption'];
+  const link=card.querySelector('.button'),target=new URL(link.href);target.searchParams.set('billing_interval',interval);link.href=target.pathname+target.search;
+ });
+ const target=new URL(location.href);target.searchParams.set('billing_interval',interval);history.replaceState(null,'',target);
+});
 document.querySelectorAll('[data-storage-comparison]').forEach(comparison=>{
  const input=comparison.querySelector('input[type=range]'),total=Number(comparison.dataset.total);
  const format=new Intl.NumberFormat(document.documentElement.lang);
@@ -24,6 +35,8 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&toggle?.get
 nav?.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{nav.classList.remove('open');toggle?.setAttribute('aria-expanded','false');}));
 const form=document.querySelector('[data-registration]');
 function updateBilling(){
+ const interval=document.querySelector('#billing_interval')?.value||'month';
+ document.querySelectorAll('#plan option').forEach(option=>{if(option.dataset[interval+'Label'])option.textContent=option.dataset[interval+'Label'];});
  const group=document.querySelector('[data-billing]');if(!group)return;
  const plan=document.querySelector('#plan'),type=group.querySelector('[data-billing-type]');
  const paid=!plan||plan.value!=='free';group.hidden=!paid;group.disabled=!paid;
@@ -33,6 +46,7 @@ function updateBilling(){
  for(const [target,source] of [['billing-name','name'],['billing-billing_email','email']]){const input=document.getElementById(target),value=document.getElementById(source);if(input&&value&&!input.value)input.value=value.value;}
 }
 document.querySelector('#plan')?.addEventListener('change',updateBilling);
+document.querySelector('#billing_interval')?.addEventListener('change',updateBilling);
 document.querySelector('[data-billing-type]')?.addEventListener('change',updateBilling);
 document.querySelector('[data-next]')?.addEventListener('click',updateBilling);
 updateBilling();

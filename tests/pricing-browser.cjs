@@ -4,7 +4,7 @@ const origin=process.env.TEST_URL||'http://localhost:8088';const dir=path.join(_
 let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
 const slugs=['free','120gb','250gb','500gb'];
 const registration={ro:'inregistrare',en:'register',fr:'inscription',de:'registrieren'};
-const expected={ro:['0,00 lei','9,99 lei','17,99 lei','29,99 lei'],en:['RON 0.00','RON 9.99','RON 17.99','RON 29.99'],fr:['0,00 RON','9,99 RON','17,99 RON','29,99 RON'],de:['0,00 RON','9,99 RON','17,99 RON','29,99 RON']};
+const expected={ro:['0,00 EUR','1,99 EUR','3,59 EUR','5,99 EUR'],en:['EUR 0.00','EUR 1.99','EUR 3.59','EUR 5.99'],fr:['0,00 EUR','1,99 EUR','3,59 EUR','5,99 EUR'],de:['0,00 EUR','1,99 EUR','3,59 EUR','5,99 EUR']};
 (async()=>{
  const browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'chrome',headless:true});const context=await browser.newContext();const page=await context.newPage();const errors=[];
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
@@ -28,7 +28,7 @@ const expected={ro:['0,00 lei','9,99 lei','17,99 lei','29,99 lei'],en:['RON 0.00
    check(await page.locator('link[rel=canonical]').getAttribute('href')===origin+'/'+locale+'/','canonical preserved');
    check(await page.locator('link[rel=alternate][hreflang]').count()===5,'hreflang preserved');
    const links=await page.locator('.plan .button').evaluateAll(a=>a.map(x=>x.getAttribute('href')));
-   check(links.every((href,i)=>href==='/'+locale+'/'+registration[locale]+'?plan='+slugs[i]),'all CTA routes preserved');
+   check(links.every((href,i)=>href==='/'+locale+'/'+registration[locale]+'?plan='+slugs[i]+'&billing_interval=month'),'all CTA routes preserved');
    check((await page.locator('.storage-comparison').innerText()).includes('120 GB'),'dedicated capacity from Personal');
    const range=page.locator('#shared-usage');await range.scrollIntoViewIfNeeded();await range.focus();await range.press('End');await page.waitForTimeout(450);
    check((await page.locator('[data-media]').textContent())==='20','interactive media capacity recalculates');
@@ -43,7 +43,17 @@ const expected={ro:['0,00 lei','9,99 lei','17,99 lei','29,99 lei'],en:['RON 0.00
  for(const locale of ['ro','en','fr','de'])for(const [i,slug] of slugs.entries()){
   await page.goto(origin+'/'+locale+'/'+registration[locale]+'?plan='+slug);
   check(await page.locator('#plan').inputValue()===slug,'CTA preselects '+locale+slug);
-  check((await page.locator('#plan option[value="250gb"]').textContent()).includes('17.99'),'registration matches new Plus price');
+  check((await page.locator('#plan option[value="250gb"]').textContent()).replace(',','.').includes('3.59'),'registration matches new Plus price');
+ }
+ for(const locale of ['ro','en','fr','de']){
+  await page.goto(origin+'/'+locale+'/#pricing');
+  await page.locator('[data-billing-switch] button[value=year]').click();
+  check((await page.locator('.price-amount').allTextContents()).map(t=>t.replace(',','.')).join(' ').includes('21.89'),'annual total localized '+locale);
+  check(await page.locator('.plan-name').last().textContent()==='Titan','Titan plan name');
+  check((await page.locator('.plan .button').nth(1).getAttribute('href')).includes('billing_interval=year'),'annual CTA preserves interval');
+  await page.locator('.plan .button').nth(1).click();
+  check(await page.locator('#billing_interval').inputValue()==='year','annual registration preselected');
+  check((await page.locator('#plan option[value="120gb"]').textContent()).replace(',','.').includes('21.89'),'annual registration total');
  }
  const nojs=await browser.newContext({javaScriptEnabled:false,viewport:{width:320,height:900}});const fallback=await nojs.newPage();
  for(const locale of ['ro','en','fr','de']){

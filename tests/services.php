@@ -4,7 +4,8 @@ final class FixtureHttp implements Stripe\HttpClient\ClientInterface {
  public array $calls=[];
  public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null) {
   $this->calls[]=[$method,$url,$params];
-  if(str_contains($url,'checkout/sessions'))$r=['id'=>'cs_fixture','object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/cs_fixture','expires_at'=>time()+3600];
+  if(str_contains($url,'/prices/')){$year=str_ends_with($url,'_year');$r=['id'=>$year?'price_120_year':'price_120','object'=>'price','active'=>true,'livemode'=>false,'currency'=>'eur','unit_amount'=>$year?2189:199,'recurring'=>['interval'=>$year?'year':'month','interval_count'=>1],'product'=>'prod_fixture'];}
+  elseif(str_contains($url,'checkout/sessions'))$r=['id'=>'cs_fixture','object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/cs_fixture','expires_at'=>time()+3600];
   elseif(str_contains($url,'billing_portal/configurations'))$r=['id'=>'bpc_fixture','object'=>'billing_portal.configuration','active'=>true,'features'=>['subscription_update'=>['enabled'=>false]]];
   else $r=['id'=>'bps_fixture','object'=>'billing_portal.session','url'=>'https://billing.stripe.com/p/session/test'];
   return [json_encode($r),200,[]];
@@ -16,16 +17,22 @@ $cu=$db->one('SELECT * FROM users WHERE id=?',[$checkoutId]);
 $realBilling=new Zion\StripeService($db,$plans,$mail,$store);
 $checkoutUrl=$realBilling->checkout($cu);
 check(str_starts_with($checkoutUrl,'https://checkout.stripe.com/'),'SDK checkout URL');
-check($http->calls[0][2]['mode']==='subscription','SDK checkout subscription mode');
-check($http->calls[0][2]['line_items'][0]['price']==='price_120','SDK uses configured price');
-check($http->calls[0][2]['locale']==='fr','SDK checkout locale');
-check($http->calls[0][2]['cancel_url']==='http://localhost:8088/fr/paiement-annule','SDK localized cancel route');
-check($http->calls[0][2]['subscription_data']['metadata']['user_id']===$checkoutId,'SDK authoritative user metadata');
-$realBilling->checkout($cu);check(count($http->calls)===1,'existing Checkout Session reused');
+check($http->calls[1][2]['mode']==='subscription','SDK checkout subscription mode');
+check($http->calls[1][2]['line_items'][0]['price']==='price_120','SDK uses configured price');
+check($http->calls[1][2]['locale']==='fr','SDK checkout locale');
+check($http->calls[1][2]['cancel_url']==='http://localhost:8088/fr/paiement-annule','SDK localized cancel route');
+check($http->calls[1][2]['subscription_data']['metadata']['user_id']===$checkoutId,'SDK authoritative user metadata');
+$realBilling->checkout($cu);check(count($http->calls)===2,'existing Checkout Session reused');
 $db->run('INSERT INTO subscriptions(user_id,stripe_customer_id,status) VALUES(?,?,?)',[$checkoutId,'cus_portal','pending']);
 check(str_starts_with($realBilling->portal($cu),'https://billing.stripe.com/'),'SDK customer portal');
-check($http->calls[2][2]['customer']==='cus_portal','portal uses stored customer');
-check(in_array($http->calls[1][2]['features']['subscription_update']['enabled'],[false,'false'],true) && $http->calls[2][2]['configuration']==='bpc_fixture','portal cannot bypass upgrade policy');
+check($http->calls[3][2]['customer']==='cus_portal','portal uses stored customer');
+check(in_array($http->calls[2][2]['features']['subscription_update']['enabled'],[false,'false'],true) && $http->calls[3][2]['configuration']==='bpc_fixture','portal cannot bypass upgrade policy');
+[$yearId,$yearToken]=signup('annual-checkout@example.com','120gb','de','year');$accounts->verify($yearToken);
+$realBilling->checkout($db->one('SELECT * FROM users WHERE id=?',[$yearId]));
+$request=$http->calls[5][2];
+check($request['line_items'][0]['price']==='price_120_year' && $request['subscription_data']['metadata']['billing_interval']==='year','annual Checkout uses annual Price and authoritative interval');
+$saved=$db->one('SELECT * FROM checkout_sessions WHERE user_id=?',[$yearId]);
+check($saved['price_id']==='price_120_year' && $saved['billing_interval']==='year','annual Checkout quote persists chosen Price and interval');
 
 final class AdapterFixture extends Zion\StorageProvisioningService {
  public array $calls=[];public array $records=[];

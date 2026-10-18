@@ -7,7 +7,7 @@ if($cmd==='key'){echo bin2hex(random_bytes(32)).PHP_EOL;exit;}
 if(in_array($cmd,['migrate','install'],true)){$db->migrate();$seeded=Zion\AccountControl::seedAdmin($db);echo "Database ready\n".($seeded?"Admin configured (existing passwords preserved)\n":"Set ADMIN_EMAIL and ADMIN_PASSWORD, then run install to create the administrator\n");exit;}
 $mail=new Zion\MailerService($db);
 if($cmd==='changes:retry'){
- $plans=new Zion\Plans();$storage=new Zion\StorageProvisioningService();$changes=(new Zion\StripeService($db,$plans,$mail,$storage))->changes();
+ $plans=new Zion\Plans($db);$storage=new Zion\StorageProvisioningService();$changes=(new Zion\StripeService($db,$plans,$mail,$storage))->changes();
  $failed=0;$processed=0;
  foreach($db->run("SELECT id FROM plan_changes WHERE status IN ('creating','pending','paid','applying','retry') ORDER BY created_at LIMIT 100")->fetchAll() as $r){
   try{$record=$changes->record($r['id']);if($record['status']==='creating' && !$record['checkout_session_id'] && $record['expires_at']<=time())$changes->cancel($r['id']);else $changes->retry($r['id']);$processed++;}

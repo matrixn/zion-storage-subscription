@@ -46,14 +46,15 @@ function fiscalInvoiceFixture(string $id, int $start, int $end, int $amount=799)
         'total'=>$amount,'total_discount_amounts'=>[['amount'=>102]],'status_transitions'=>['paid_at'=>$start+60],
         'created'=>$start,'hosted_invoice_url'=>'https://invoice.stripe.com/i/'.$id,
         'lines'=>['has_more'=>false,'data'=>[[
-            'id'=>'il_'.$id,'quantity'=>1,'price'=>['id'=>'price_120'],
+            'id'=>'il_'.$id,'quantity'=>1,'price'=>['id'=>'price_120_ron'],
             'period'=>['start'=>$start,'end'=>$end], 'proration'=>false,
         ]]],
     ];
 }
 
-$db = new Zion\Database(':memory:'); $db->migrate(); $db->migrate();
-$plans = new Zion\Plans(); $mail = new Zion\MailerService($db); $store = new TestStorage();
+$db = new Zion\Database(':memory:'); $db->migrate(); $db->migrate(); seedCatalog($db);
+$db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,status,created_at,updated_at) VALUES('price_120_ron','120gb','month','ron',799,'legacy',1,1)");
+$plans = new Zion\Plans($db); $mail = new Zion\MailerService($db); $store = new TestStorage();
 $accounts = new Zion\AccountService($db,$plans,$mail,$store);
 $config = require dirname(__DIR__).'/config/oblio.php';
 $config = array_replace($config,[
@@ -66,13 +67,13 @@ $billing = new TestStripe($db,$plans,$mail,$store,$fiscal);
 [$uid,$token] = signup('fiscal@example.com','120gb','fr'); $accounts->verify($token);
 $u=$db->one('SELECT * FROM users WHERE id=?',[$uid]);
 $profileService=new Zion\BillingProfileService($db);
-$p=$plans->get('120gb');
+$p=$plans->byPrice('price_120_ron');
 $oct=strtotime('2026-10-16T00:00:00Z');$nov=strtotime('2026-11-16T00:00:00Z');$dec=strtotime('2026-12-16T00:00:00Z');$jan=strtotime('2027-01-16T00:00:00Z');
 $invoice1=fiscalInvoiceFixture('in_fiscal_1',$oct,$nov,697);
 $invoice1['status_transitions']['paid_at']=strtotime('2026-10-15T22:30:00Z');
 $invoice2=fiscalInvoiceFixture('in_fiscal_2',$nov,$dec,799);
 $invoice3=fiscalInvoiceFixture('in_fiscal_3',$dec,$jan,799);
-$subscription=['id'=>'sub_fiscal','customer'=>'cus_fiscal','status'=>'active','metadata'=>['user_id'=>$uid,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120'],'current_period_end'=>$nov]]],'latest_invoice'=>$invoice1];
+$subscription=['id'=>'sub_fiscal','customer'=>'cus_fiscal','status'=>'active','metadata'=>['user_id'=>$uid,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120_ron'],'current_period_end'=>$nov]]],'latest_invoice'=>$invoice1];
 $billing->snapshot=$subscription;
 $billing->invoices=['in_fiscal_1'=>$invoice1,'in_fiscal_2'=>$invoice2,'in_fiscal_3'=>$invoice3];
 $event=['id'=>'evt_fiscal_1','type'=>'invoice.paid','data'=>['object'=>['id'=>'in_fiscal_1','subscription'=>'sub_fiscal']]];
@@ -160,7 +161,7 @@ $fiscal->retryPending();
 check(count($provider->documents)===$before && $db->one('SELECT status FROM fiscal_invoices WHERE id=?',[$id])['status']==='issued','interrupted worker reconciles safely');
 
 // Unsupported currencies and proration are blocked for review, never silently transformed.
-$currency=fiscalInvoiceFixture('in_eur',$nov,$dec);$currency['currency']='eur';
+$currency=fiscalInvoiceFixture('in_eur',$nov,$dec);$currency['currency']='usd';
 $id=$fiscal->capture($currency,$u,$subscription,$p);$before=count($provider->documents);
 check(!$fiscal->process($id) && count($provider->documents)===$before,'unconfigured currency blocks fiscal issuance');
 $db->run("UPDATE fiscal_invoices SET status='cancelled' WHERE id=?",[$id]); // retire this fixture, not provider document

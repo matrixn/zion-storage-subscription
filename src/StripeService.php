@@ -15,7 +15,7 @@ class StripeService implements BillingService {
   $profile=(new BillingProfileService($this->db))->get($u['id']);
   if(!$profile) throw new \InvalidArgumentException('billing.required');
   BillingProfileService::validate($profile,$u);
-  $p=$this->plans->get($u['selected_plan_id']);
+  $interval=$u['billing_interval']??'month';$p=$this->plans->get($u['selected_plan_id'],$interval);
   if(!$p || !$p['stripe_price_id'] || !env('STRIPE_SECRET_KEY')) throw new \RuntimeException('billing_unconfigured');
   // Serialize session creation so two tabs cannot create separate subscriptions.
   $lock=fopen(dirname(__DIR__).'/storage/checkout-'.$u['id'].'.lock','c'); flock($lock,LOCK_EX);
@@ -23,16 +23,19 @@ class StripeService implements BillingService {
    $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
    if($s && $s['stripe_subscription_id'] && !in_array($s['status'],['canceled','incomplete_expired'],true)) throw new \RuntimeException('subscription_exists');
    $old=$this->db->one('SELECT * FROM checkout_sessions WHERE user_id=? AND expires_at>?',[$u['id'],time()+60]);
-   if($old) return $old['url'];
+   if($old && $old['price_id']===$p['stripe_price_id'] && $old['billing_interval']===$interval)return $old['url'];
+   if($old)throw new \DomainException('checkout.pending_quote');
+   BillingCatalog::validatePrice($this->client->prices->retrieve($p['stripe_price_id'])->toArray(),$p);
    $l=$u['locale']; $epoch=intdiv(time(),1800);
    $session=$this->client->checkout->sessions->create([
     'mode'=>'subscription','customer_email'=>$u['email'],'client_reference_id'=>$u['id'],'locale'=>$l==='ro'?'ro':$l,
     'line_items'=>[['price'=>$p['stripe_price_id'],'quantity'=>1]],
-    'metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug']],
-    'subscription_data'=>['metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug']]],
+    'metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug'],'billing_interval'=>$interval],
+    'subscription_data'=>['metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug'],'billing_interval'=>$interval]],
     'success_url'=>base_url().Router::path($l,'status'),'cancel_url'=>base_url().Router::path($l,'cancel'),
-   ],['idempotency_key'=>'checkout-'.$u['id'].'-'.$epoch]);
+   ],['idempotency_key'=>'checkout-'.$u['id'].'-'.$p['stripe_price_id'].'-'.$epoch]);
    $this->db->run('INSERT INTO checkout_sessions(user_id,session_id,url,expires_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET session_id=excluded.session_id,url=excluded.url,expires_at=excluded.expires_at',[$u['id'],$session->id,$session->url,$session->expires_at]);
+   $this->db->run('UPDATE checkout_sessions SET price_id=?,billing_interval=? WHERE user_id=?',[$p['stripe_price_id'],$interval,$u['id']]);
    return $session->url;
   } finally { flock($lock,LOCK_UN); fclose($lock); }
  }
@@ -55,6 +58,7 @@ class StripeService implements BillingService {
   return $this->client->billingPortal->sessions->create(['customer'=>$s['stripe_customer_id'],'configuration'=>$config->id,'return_url'=>base_url().Router::path($u['locale'],'status')])->url;
  }
  public function changes(): SubscriptionChanges { return new SubscriptionChanges($this->db,$this->plans,$this->mail,$this->storage,$this->client,$this->fiscal); }
+ public function catalog(): BillingCatalog { return new BillingCatalog($this->db,$this->plans,$this->client); }
  public function receive(string $payload,string $signature): void {
   if(!env('STRIPE_WEBHOOK_SECRET')) throw new \RuntimeException('webhook_unconfigured');
   $event=\Stripe\Webhook::constructEvent($payload,$signature,env('STRIPE_WEBHOOK_SECRET'));
@@ -74,7 +78,7 @@ class StripeService implements BillingService {
   $lines=$invoice['lines']['data']??[];
   if(count($lines)===1) {
    $price=$lines[0]['price']['id']??$lines[0]['pricing']['price_details']['price']??'';
-   foreach($this->plans->all() as $plan) if(in_array($price,$plan['accepted_stripe_price_ids'],true)) return $plan;
+   if($plan=$this->plans->byPrice($price))return $plan;
   }
   return $fallback;
  }
@@ -116,11 +120,12 @@ class StripeService implements BillingService {
    $userLock=fopen(dirname(__DIR__).'/storage/provision-'.$uid.'.lock','c');flock($userLock,LOCK_EX);
    $this->changes()->reconcile($s);
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
-   $p=$this->plans->get($s['metadata']['plan']??'');
    $manual=(new AccountControl($this->db))->manual($uid);
    $price=$s['items']['data'][0]['price']['id']??'';
-   if(!$p || $p['slug']==='free' || !in_array($price,$p['accepted_stripe_price_ids'],true) || (!$manual && $p['slug']!==$u['selected_plan_id'])) throw new \RuntimeException('billing_plan_mismatch');
+   $p=$this->plans->byPrice($price);
+   if(!$p || $p['slug']==='free' || $p['slug']!==($s['metadata']['plan']??'') || (!$manual && $p['slug']!==$u['selected_plan_id']) || (isset($s['metadata']['billing_interval']) && $s['metadata']['billing_interval']!==$p['billing_interval']))throw new \RuntimeException('billing_plan_mismatch');
    if($paidInvoice && ($paidInvoice['id']!==$o['id'] || ($paidInvoice['customer']??null)!==$s['customer'])) throw new \RuntimeException('invoice_identity_mismatch');
+   if($paidInvoice && ($paidInvoice['currency']??'')!==$this->invoicePlan($paidInvoice,$p)['currency'])throw new \RuntimeException('invoice_currency_mismatch');
    $invoice=is_array($s['latest_invoice']??null)?$s['latest_invoice']:null;
    $paid=$invoice && ($invoice['status']??'')==='paid' && $s['status']==='active';
    $existing=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$uid]);
@@ -132,6 +137,10 @@ class StripeService implements BillingService {
    $fiscalId=$this->db->transaction(function() use($s,$uid,$p,$price,$paid,$invoice,$paidInvoice,$oldSubscription,$u) {
     if(!$oldSubscription) $this->db->run('INSERT INTO subscriptions(user_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,plan,renewal_at,last_invoice_id,paid_confirmed) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id=excluded.stripe_customer_id,stripe_subscription_id=excluded.stripe_subscription_id,stripe_price_id=excluded.stripe_price_id,status=excluded.status,plan=excluded.plan,renewal_at=excluded.renewal_at,last_invoice_id=excluded.last_invoice_id,paid_confirmed=excluded.paid_confirmed',[
      $uid,$s['customer'],$s['id'],$price,$s['status'],$p['slug'],$s['items']['data'][0]['current_period_end']??$s['current_period_end']??null,$invoice['id']??null,$paid?1:0]);
+    if(!$oldSubscription){
+     $this->db->run('UPDATE subscriptions SET billing_interval=?,currency=? WHERE user_id=?',[$p['billing_interval'],$p['currency'],$uid]);
+     $this->db->run('UPDATE users SET billing_interval=? WHERE id=?',[$p['billing_interval'],$uid]);
+    }
     if($invoice) $this->storeInvoice($invoice,$uid);
     if($paidInvoice) {
      $this->changes()->rememberOrigin($paidInvoice,$s,$uid);

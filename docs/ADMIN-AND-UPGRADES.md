@@ -14,7 +14,7 @@ docker compose run --rm --user www-data web php bin/console.php install
 
 Open `/admin`. Its one-hour session uses a separate HttpOnly, SameSite cookie scoped to `/admin`, CSRF protection, login throttling, no-store responses and noindex. Customer email-link sessions do not confer administrative privileges. All state changes require POST. Operator actions are recorded with administrator, customer, timestamp and reason.
 
-The dashboard provides customer search, manual customer creation, plan changes, ban/unban, pending quota synchronization, upgrade/payment history, cancellation of unpaid Checkout sessions, and retries of confirmed changes. Financial retries verify the original payment and do not take another payment.
+The dashboard includes an audited EUR monthly/yearly Stripe catalog; see [catalog setup](PRICING.md). It also provides customer search, manual customer creation, plan changes, ban/unban, pending quota synchronization, upgrade/payment history, cancellation of unpaid Checkout sessions, and retries of confirmed changes. Financial retries verify the original payment and do not take another payment.
 
 New manual customers receive an email confirmation. Give their initial password through an appropriate secure channel; it is never emailed or stored as plaintext. They must confirm their email and personally accept terms/privacy before activation. A manual plan is an operator entitlement, not a paid subscription: it creates neither a Stripe payment nor a fiscal invoice. To start recurring collection for a manually managed customer, use a separately agreed billing migration; granting a manual plan does not imply consent to recurring charges.
 
@@ -22,13 +22,13 @@ For existing active paid subscriptions, administrative upgrades/downgrades updat
 
 ## Customer upgrade policy
 
-- Paid monthly plans only, moving to strictly larger capacity and higher price. Free/manual accounts and banned accounts do not qualify.
+- Paid monthly or yearly plans only, moving to strictly larger capacity and higher price. Free/manual accounts and banned accounts do not qualify.
 - Window: five times 24 hours from the **original successful purchase**, using Stripe's paid timestamp. Receipt of a webhook, a renewal, an upgrade or an administrative change never starts a new window.
-- Full difference in monthly catalog prices, once, in RON integer minor units. Example with the current catalog: 120 GB 999 → 250 GB 1799 means a separate 800-minor-unit (8 RON) payment now, then 1799 monthly at the original renewal date. Existing subscriptions on an older Price are not migrated by the marketing redesign.
+- Full difference in the selected billing period, once, in EUR integer minor units. Personal → Plus costs 160 minor units (1.60 EUR) monthly, or 1760 (17.60 EUR) yearly; future renewal is 359/month or 3949/year at the original renewal date. Existing subscriptions on an older Price are not migrated by the marketing redesign.
 - Checkout uses `mode=payment`, the existing Stripe customer, card payments, a separate post-purchase invoice and durable operation metadata. The browser cannot supply an amount or activate the plan.
 - A signed webhook retrieves the exact saved Checkout session, expanded PaymentIntent/charge and invoice. Customer, metadata, test mode, currency, collected amount, successful payment and the five-day deadline are verified before applying the change.
-- The existing subscription item is updated using `proration_behavior=none`, `billing_cycle_anchor=unchanged` and an operation-specific idempotency key. No second subscription is created. Monthly renewal follows Stripe's existing calendar anchor, including February and short months.
-- Current and target Stripe Prices must match the catalog and be monthly RON prices. Existing grandfathered prices, schedules or pending Stripe updates need explicit operator migration; they are not silently repriced.
+- The existing subscription item is updated using `proration_behavior=none`, `billing_cycle_anchor=unchanged` and an operation-specific idempotency key. No second subscription is created. Renewal follows Stripe's existing monthly/yearly calendar anchor, including February and short months.
+- Current and target Stripe Prices must match the catalog and be EUR prices with the same billing interval. Existing grandfathered prices, schedules or pending Stripe updates need explicit operator migration; they are not silently repriced.
 - The generated billing portal configuration permits payment-method management, invoice history and cancellation at period end, with subscription updates disabled. A changed/unsafe portal configuration is rejected so the portal cannot bypass the five-day policy.
 
 **Checkout deadline:** Stripe requires each new Checkout session to have at least 30 minutes of validity. New upgrade sessions stop opening 30 minutes before the five-day deadline; existing sessions expire no later than that deadline. Both dates/conditions are disclosed before payment. Payment outside the deadline is rejected for entitlement changes and remains visible for operator review; refunds/corrective fiscal documents require the existing manual phase-2 procedure. Never tell a customer to pay a pending/confirmed operation again.

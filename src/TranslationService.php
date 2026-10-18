@@ -9,6 +9,7 @@ final class TranslationService {
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/account_changes.php')[$locale]);
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/pricing.php')[$locale]);
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/carousel.php')[$locale]);
+  $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/billing.php')[$locale]);
  }
  public function get(string $key,array $vars=[]): string {
   $s=$this->messages[$key]??throw new \RuntimeException('Missing translation: '.$key);

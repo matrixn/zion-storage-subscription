@@ -25,10 +25,15 @@ final class TestStripe extends Zion\StripeService {
 }
 $count=0;
 function check(bool $condition,string $name):void {global $count;if(!$condition)throw new RuntimeException('FAIL: '.$name);$count++;echo "PASS ".$name."\n";}
-$db=new Zion\Database(':memory:');$db->migrate();$plans=new Zion\Plans();$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
-function signup(string $email,string $plan='free',string $locale='en'):array{
+function seedCatalog(Zion\Database $db):void {
+ if(env('APP_ENV')!=='test' || $db->one('SELECT id FROM users LIMIT 1'))throw new RuntimeException('Fixture requires empty test database');
+ $db->run('DELETE FROM billing_prices');
+ foreach(['120gb'=>['price_120',199],'250gb'=>['price_250',359],'500gb'=>['price_500',599]] as $slug=>[$id,$amount])foreach(['month'=>1,'year'=>11] as $interval=>$multiple)$db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,product_id,status,created_at,updated_at) VALUES(?,?,?,'eur',?,'prod_fixture','active',?,?)",[$id.($interval==='year'?'_year':''),$slug,$interval,$amount*$multiple,time(),time()]);
+}
+$db=new Zion\Database(':memory:');$db->migrate();seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
+function signup(string $email,string $plan='free',string $locale='en',string $interval='month'):array{
  global $accounts,$db;
- $id=$accounts->register(['name'=>'Test User','email'=>$email,'password'=>'a-long-test-password','locale'=>$locale,'plan'=>$plan]);
+ $id=$accounts->register(['name'=>'Test User','email'=>$email,'password'=>'a-long-test-password','locale'=>$locale,'plan'=>$plan,'billing_interval'=>$interval]);
  if($plan!=='free') (new Zion\BillingProfileService($db))->save($id,['type'=>'individual','name'=>'Test User','billing_email'=>$email,'country'=>'RO','county'=>'Bucuresti','city'=>'Bucuresti','address'=>'Strada Test 1','postal_code'=>'010101']);
  $payload=Zion\MailerService::decode($db->one("SELECT payload FROM outbox WHERE recipient=? ORDER BY id DESC",[$email])['payload']);
  parse_str(parse_url($payload['url'],PHP_URL_QUERY),$q);return [$id,$q['token'],$payload['url']];
@@ -42,7 +47,7 @@ foreach(Zion\TranslationService::LOCALES as $l){
 check(Zion\TranslationService::preferred('de','ro')==='de','cookie preference');
 check(Zion\TranslationService::preferred('','fr;q=0.3,ro-RO;q=0.9,en;q=0.5')==='ro','Accept-Language priorities');
 check(Zion\TranslationService::preferred('','es')==='en','English fallback');
-check(count($plans->all())===4 && $plans->get('free')['storage_bytes']===10_000_000_000 && $plans->get('1tb')===null && array_column($plans->all(),'monthly_price')===[0,999,1799,2999],'configured plans and quotas');
+check(count($plans->all())===4 && $plans->get('free')['storage_bytes']===10_000_000_000 && $plans->get('1tb')===null && array_column($plans->all(),'monthly_price')===[0,199,359,599],'configured plans and quotas');
 check(!$plans->get('tampered'),'reject unknown plan');
 check(!Zion\AccountService::passwordValid('short'),'password length');
 [$free,$token,$link]=signup('free@example.com','free','ro');
@@ -63,7 +68,7 @@ check($accounts->register(['name'=>'Other','email'=>'FREE@example.com','password
 [$paid,$pt]=signup('paid@example.com','120gb');$accounts->verify($pt);
 check(!$accounts->provision($paid,'a-long-test-password'),'paid user cannot activate before webhook');
 $billing=new TestStripe($db,$plans,$mail,$store);
-$billing->snapshot=['id'=>'sub_test','customer'=>'cus_test','status'=>'active','metadata'=>['user_id'=>$paid,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120'],'current_period_end'=>time()+86400]]],'latest_invoice'=>['id'=>'in_test','status'=>'paid','hosted_invoice_url'=>'https://invoice.stripe.com/i/test','amount_paid'=>799,'currency'=>'ron','created'=>time()]];
+$billing->snapshot=['id'=>'sub_test','customer'=>'cus_test','status'=>'active','metadata'=>['user_id'=>$paid,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120'],'current_period_end'=>time()+86400]]],'latest_invoice'=>['id'=>'in_test','status'=>'paid','hosted_invoice_url'=>'https://invoice.stripe.com/i/test','amount_paid'=>799,'currency'=>'eur','created'=>time()]];
 $event=['id'=>'evt_paid','object'=>'event','livemode'=>false,'type'=>'invoice.paid','data'=>['object'=>['id'=>'in_test','subscription'=>'sub_test']]];
 $billing->invoices['in_test']=$billing->snapshot['latest_invoice']+['livemode'=>false,'customer'=>'cus_test','subscription'=>'sub_test','lines'=>['data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>1792108800,'end'=>1794787200]]],'has_more'=>false]];
 $raw=json_encode($event);$sig='t='.time().',v1='.hash_hmac('sha256',time().'.'.$raw,'whsec_fixture');
@@ -91,3 +96,4 @@ echo "\n$count assertions passed. No external service was contacted.\n";
 require __DIR__.'/services.php';
 require __DIR__.'/fiscal.php';
 require __DIR__.'/changes.php';
+require __DIR__.'/catalog.php';

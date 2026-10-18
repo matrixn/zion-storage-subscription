@@ -28,7 +28,7 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
    check(await flow.locator('html').getAttribute('lang')===locale,'upgrade document language');
    check(await flow.locator('meta[name=robots]').getAttribute('content')==='noindex,nofollow','upgrade private indexing');
    check(await flow.locator('button.button.full').count()===2,'only larger paid offers');
-   const text=await flow.locator('main').innerText();check(text.includes('8,00') && text.includes('17,99'),'upgrade difference and future monthly amount');
+   const text=await flow.locator('main').innerText();check(text.includes('1,60') && text.includes('3,59'),'upgrade difference and future monthly amount');
    check(await flow.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'upgrade no page overflow');
   }
   await flow.goto(origin+'/ro/upgrade');await flow.screenshot({path:path.join(artifacts,'upgrade-'+width+'.png'),fullPage:true});

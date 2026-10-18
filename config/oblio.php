@@ -10,6 +10,6 @@ return [
     'language' => env('OBLIO_LANGUAGE', 'RO'),
     'vat_rate' => env('OBLIO_VAT_RATE'),
     'vat_name' => env('OBLIO_VAT_NAME'),
-    'currencies' => ['RON'],
+    'currencies' => ['EUR','RON'],
     'allow_test_payments' => env('OBLIO_ALLOW_TEST_PAYMENTS', 'false') === 'true',
 ];

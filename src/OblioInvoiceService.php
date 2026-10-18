@@ -44,7 +44,7 @@ final class OblioInvoiceService
         return $this->db->transaction(function()use($invoice,$user,$change,$plan){
             $old=$this->db->one('SELECT id FROM fiscal_invoices WHERE stripe_invoice_id=?',[$invoice['id']]);
             if($old)return $old['id'];
-            $plan['invoice_name_ro']='Upgrade Zion Storage '.$change['from_plan'].' → '.$plan['name'].' '.$plan['capacity'];
+            $plan['invoice_name_ro']='Upgrade '.(($plan['billing_interval']??'month')==='year'?'anual ':'').'Zion Storage '.$change['from_plan'].' → '.$plan['name'].' '.$plan['capacity'];
             $plan['invoice_product_code'].='_UPGRADE';
             $id=$this->capture($invoice,$user,['id'=>$change['stripe_subscription_id'],'current_period_end'=>$change['period_end']],$plan);
             $row=$this->db->one('SELECT source_snapshot FROM fiscal_invoices WHERE id=?',[$id]);

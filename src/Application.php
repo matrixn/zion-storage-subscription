@@ -4,7 +4,7 @@ final class Application {
  public Database $db; public Plans $plans; public MailerService $mail; public AccountService $accounts; public BillingService $billing;
  private string $locale='en'; private string $page='home'; private TranslationService $tr;
  public function __construct() {
-  $this->db=new Database(); $this->plans=new Plans(); $this->mail=new MailerService($this->db);
+  $this->db=new Database(); $this->plans=new Plans($this->db); $this->mail=new MailerService($this->db);
   $storage=new StorageProvisioningService(); $this->accounts=new AccountService($this->db,$this->plans,$this->mail,$storage);
   $this->billing=new StripeService($this->db,$this->plans,$this->mail,$storage);
  }
@@ -65,6 +65,8 @@ final class Application {
    if(mb_strlen($d['name'])<2 || mb_strlen($d['name'])>150 || !filter_var($d['email'],FILTER_VALIDATE_EMAIL) || strlen($d['email'])>254 || !in_array($d['locale'],TranslationService::LOCALES,true) || empty($_POST['terms']) || empty($_POST['privacy'])){$this->fail('error.validation');return;}
    if(!AccountService::passwordValid($d['password']) || $d['password']!==$d['confirm']){$this->fail('error.password');return;}
    if(!$this->plans->get($d['plan'])){$this->fail('error.plan');return;}
+   $d['billing_interval']=(string)($_POST['billing_interval']??'month');
+   if(!in_array($d['billing_interval'],['month','year'],true)){$this->fail('error.plan');return;}
    if($d['plan']!=='free') {
     try { $d['billing']=BillingProfileService::validate(is_array($_POST['billing']??null)?$_POST['billing']:[], $d); }
     catch(\InvalidArgumentException $e) { $this->fail('billing.invalid');return; }
@@ -130,7 +132,8 @@ final class Application {
   }
   if($this->page==='checkout'){
    if(!(new BillingProfileService($this->db))->get($u['id']))$this->redirect(Router::path($this->locale,'billing-profile'));
-   $this->redirect($this->billing->checkout($u));
+   try{$this->redirect($this->billing->checkout($u));}
+   catch(\DomainException $e){$this->fail($e->getMessage()==='checkout.pending_quote'?'checkout.pending_quote':'error.generic');}
   }
   if($this->page==='portal'){$this->redirect($this->billing->portal($u));}
   if($this->page==='activate') {
@@ -146,7 +149,8 @@ final class Application {
  }
  private function render(string $view,array $data=[]): void {
   $locale=$this->locale; $page=$this->page; $t=fn(string $k,array $v=[])=>$this->tr->get($k,$v); $url=fn(string $p,string $l='')=>Router::path($l?:$locale,$p);
-  $plans=$this->plans->all();$user=$this->user();$eligible=$user?$this->accounts->eligible($user):false;
+  $billingInterval=(string)($_POST['billing_interval']??$_GET['billing_interval']??'month');if(!in_array($billingInterval,['month','year'],true))$billingInterval='month';
+  $plans=$this->plans->all($billingInterval);$user=$this->user();$eligible=$user?$this->accounts->eligible($user):false;
   $banned=$user?(new AccountControl($this->db))->banned($user['id']):false;
   $upgradeOffers=$user && $this->billing instanceof StripeService?$this->billing->changes()->offers($user):[];
   $latestChange=$user?$this->db->one('SELECT * FROM plan_changes WHERE user_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',[$user['id']]):null;

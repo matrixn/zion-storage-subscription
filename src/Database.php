@@ -15,6 +15,17 @@ final class Database {
   foreach(glob(dirname(__DIR__).'/database/migrations/*.sql') as $file) $this->pdo->exec(file_get_contents($file));
   // Preserve installations made before quota synchronization was introduced.
   if(!in_array('quota_sync',array_column($this->run('PRAGMA table_info(account_controls)')->fetchAll(),'name'),true))$this->pdo->exec("ALTER TABLE account_controls ADD COLUMN quota_sync TEXT NOT NULL DEFAULT 'ready'");
+  foreach(['users'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'subscriptions'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'",'currency'=>"TEXT NOT NULL DEFAULT 'ron'"], 'checkout_sessions'=>['price_id'=>'TEXT','billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'plan_changes'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"]] as $table=>$columns){
+   $existing=array_column($this->run('PRAGMA table_info('.$table.')')->fetchAll(),'name');
+   foreach($columns as $name=>$type)if(!in_array($name,$existing,true))$this->pdo->exec('ALTER TABLE '.$table.' ADD COLUMN '.$name.' '.$type);
+  }
+  // One-time read of former environment mappings. New purchases never use these RON IDs.
+  if(!$this->one("SELECT key FROM integration_settings WHERE key='catalog_env_import_v1'"))$this->transaction(function(){
+   foreach(['120gb','250gb','500gb'] as $plan)foreach(array_filter(array_map('trim',explode(',',env('STRIPE_PRICE_'.strtoupper($plan)).','.env('STRIPE_LEGACY_PRICE_'.strtoupper($plan))))) as $id)$this->run("INSERT OR IGNORE INTO billing_prices(price_id,plan,interval,currency,status,created_at,updated_at) VALUES(?,?,'month','ron','legacy',?,?)",[$id,$plan,time(),time()]);
+   foreach($this->run("SELECT plan,stripe_price_id FROM subscriptions WHERE stripe_price_id IS NOT NULL AND plan IN ('120gb','250gb','500gb')")->fetchAll() as $s)$this->run("INSERT OR IGNORE INTO billing_prices(price_id,plan,interval,currency,status,created_at,updated_at) VALUES(?,?,'month','ron','legacy',?,?)",[$s['stripe_price_id'],$s['plan'],time(),time()]);
+   foreach($this->run('SELECT from_plan,to_plan,from_price,to_price,currency FROM plan_changes')->fetchAll() as $r)foreach(['from','to'] as $side)if($r[$side.'_price'])$this->run("INSERT OR IGNORE INTO billing_prices(price_id,plan,interval,currency,status,created_at,updated_at) VALUES(?,?,'month',?,'legacy',?,?)",[$r[$side.'_price'],$r[$side.'_plan'],$r['currency'],time(),time()]);
+   $this->run("INSERT INTO integration_settings(key,value) VALUES('catalog_env_import_v1','done')");
+  });
  }
  public function run(string $sql,array $p=[]): \PDOStatement { $s=$this->pdo->prepare($sql); $s->execute($p); return $s; }
  public function one(string $sql,array $p=[]): ?array { return $this->run($sql,$p)->fetch() ?: null; }

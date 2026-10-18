@@ -1,0 +1,43 @@
+<?php
+return [
+ 'ro'=>[
+  'benefits.limits.desc'=>'Limite clare. Prețuri lunare și anuale transparente. Fără surprize.','pricing.paid'=>'Abonament lunar sau anual','checkout.desc'=>'Adresa de email este verificată. Continuă către partenerul de plăți pentru a începe abonamentul cu perioada aleasă.',
+  'billing.period'=>'Perioada de facturare','billing.month'=>'Lunar','billing.year'=>'Anual','billing.year.interval'=>'/ an','billing.discount'=>'O lună gratuită','billing.annual.caption'=>'12 luni de stocare, plătești 11',
+  'pricing.amount'=>'{amount} EUR','pricing.interval'=>'/ lună','pricing.personal'=>'{capacity} · {amount} EUR {interval}',
+  'pricing.note'=>'Prețuri în EUR. Lunar: plată în fiecare lună. Anual: suma afișată se încasează integral o dată pe an, cu o lună gratuită. Poți opri reînnoirea din facturare. GB zecimali.',
+  'upgrade.pay'=>'Plătește {amount} EUR o singură dată','upgrade.renewal'=>'Apoi {amount} EUR {interval}, de la {date}.',
+  'upgrade.intro'=>'Poți trece la un plan mai mare în primele 5 zile de la cumpărarea inițială. Plătești o singură dată diferența integrală dintre tarifele perioadei alese; intervalul și data de reînnoire rămân aceleași.',
+  'checkout.pending_quote'=>'Există o plată deschisă la un tarif anterior. Finalizeaz-o sau contactează-ne pentru anulare înainte de a cere un tarif nou.',
+  'email.subscription.body'=>'Abonamentul tău este activ. Poți gestiona reînnoirile și metoda de plată din setările de facturare.',
+ ],
+ 'en'=>[
+  'benefits.limits.desc'=>'Clear quotas and transparent monthly or yearly prices.','pricing.paid'=>'Monthly or yearly subscription','checkout.desc'=>'Your email is verified. Continue to our secure payment partner to start your subscription with your selected billing period.',
+  'billing.period'=>'Billing period','billing.month'=>'Monthly','billing.year'=>'Yearly','billing.year.interval'=>'/ year','billing.discount'=>'One month free','billing.annual.caption'=>'12 months of storage, pay for 11',
+  'pricing.amount'=>'EUR {amount}','pricing.interval'=>'/ month','pricing.personal'=>'{capacity} · EUR {amount} {interval}',
+  'pricing.note'=>'Prices in EUR. Monthly: charged each month. Yearly: the full displayed amount is charged once a year, with one month free. Manage renewals in billing. Decimal GB.',
+  'upgrade.pay'=>'Pay {amount} EUR once','upgrade.renewal'=>'Then {amount} EUR {interval}, starting {date}.',
+  'upgrade.intro'=>'Move to a larger plan within 5 days of your original purchase. Pay the full price difference for the selected billing period once; your billing interval and renewal date stay the same.',
+  'checkout.pending_quote'=>'A checkout with an earlier price is still open. Complete it or contact us to cancel it before requesting a new quote.',
+  'email.subscription.body'=>'Your subscription is active. Manage renewals and payment methods in your billing settings.',
+ ],
+ 'fr'=>[
+  'benefits.limits.desc'=>'Des quotas clairs et des tarifs mensuels ou annuels transparents.','pricing.paid'=>'Abonnement mensuel ou annuel','checkout.desc'=>'Votre adresse e-mail est vérifiée. Continuez vers notre partenaire de paiement pour démarrer votre abonnement selon la période choisie.',
+  'billing.period'=>'Période de facturation','billing.month'=>'Mensuelle','billing.year'=>'Annuelle','billing.year.interval'=>'/ an','billing.discount'=>'Un mois offert','billing.annual.caption'=>'12 mois de stockage, payez-en 11',
+  'pricing.amount'=>'{amount} EUR','pricing.interval'=>'/ mois','pricing.personal'=>'{capacity} · {amount} EUR {interval}',
+  'pricing.note'=>'Prix en EUR. Mensuel : paiement chaque mois. Annuel : le montant total affiché est prélevé une fois par an, avec un mois offert. Gérez les renouvellements dans la facturation. Go décimaux.',
+  'upgrade.pay'=>'Payer {amount} EUR une seule fois','upgrade.renewal'=>'Puis {amount} EUR {interval}, à partir du {date}.',
+  'upgrade.intro'=>'Passez à une offre supérieure dans les 5 jours suivant l’achat initial. Payez une fois la différence intégrale pour la période choisie ; la périodicité et la date de renouvellement restent identiques.',
+  'checkout.pending_quote'=>'Un paiement à un tarif antérieur est encore ouvert. Terminez-le ou contactez-nous pour l’annuler avant de demander un nouveau tarif.',
+  'email.subscription.body'=>'Votre abonnement est actif. Gérez les renouvellements et le moyen de paiement dans vos paramètres de facturation.',
+ ],
+ 'de'=>[
+  'benefits.limits.desc'=>'Klare Grenzen und transparente Monats- oder Jahrespreise.','pricing.paid'=>'Monatliches oder jährliches Abonnement','checkout.desc'=>'Deine E-Mail-Adresse ist bestätigt. Fahre zu unserem Zahlungspartner fort, um dein Abonnement mit dem gewählten Abrechnungszeitraum zu starten.',
+  'billing.period'=>'Abrechnungszeitraum','billing.month'=>'Monatlich','billing.year'=>'Jährlich','billing.year.interval'=>'/ Jahr','billing.discount'=>'Ein Monat gratis','billing.annual.caption'=>'12 Monate Speicher, nur 11 bezahlen',
+  'pricing.amount'=>'{amount} EUR','pricing.interval'=>'/ Monat','pricing.personal'=>'{capacity} · {amount} EUR {interval}',
+  'pricing.note'=>'Preise in EUR. Monatlich: Zahlung jeden Monat. Jährlich: Der angezeigte Gesamtbetrag wird einmal jährlich berechnet, mit einem Gratismonat. Verlängerungen in der Abrechnung verwalten. Dezimale GB.',
+  'upgrade.pay'=>'Einmalig {amount} EUR bezahlen','upgrade.renewal'=>'Danach {amount} EUR {interval} ab {date}.',
+  'upgrade.intro'=>'Wechseln Sie innerhalb von 5 Tagen nach dem ersten Kauf zu einem größeren Tarif. Zahlen Sie einmal die volle Preisdifferenz für den gewählten Zeitraum; Abrechnungsintervall und Verlängerungsdatum bleiben gleich.',
+  'checkout.pending_quote'=>'Eine Zahlung zum früheren Preis ist noch offen. Schließen Sie diese ab oder kontaktieren Sie uns zur Stornierung, bevor Sie einen neuen Preis anfordern.',
+  'email.subscription.body'=>'Ihr Abonnement ist aktiv. Verlängerungen und Zahlungsmethoden verwalten Sie in den Abrechnungseinstellungen.',
+ ],
+];
