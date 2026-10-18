@@ -40,6 +40,15 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
     check(await page.getByRole('button',{name:'Testează conexiunea Stripe',exact:true}).isVisible()&&await page.getByRole('button',{name:'Sincronizează automat catalogul',exact:true}).isVisible(),'Stripe connection and full catalog controls are available');
     check(await page.locator('input[name=secret_key]').getAttribute('type')==='text','Stripe key field displays readable text');
     check(await page.locator('input[name=secret_key]').inputValue()==='sk_test••••••••pSaved','saved TEST preview is the actual input value');
+    if(width===320){
+     await page.locator('input[name=secret_key]').fill('sk_test_httpSaved');
+     await page.locator('input[name=webhook_secret]').fill('whsec_httpSaved');
+     await page.getByRole('button',{name:'Salvează, testează și sincronizează TEST',exact:true}).click();
+     check(await page.locator('input[name=secret_key]').inputValue()==='sk_test••••••••pSaved' && await page.locator('input[name=webhook_secret]').inputValue()==='whsec_h••••••••pSaved','browser form submission replaces full credentials with saved masks');
+     await page.getByRole('button',{name:'Salvează, testează și sincronizează TEST',exact:true}).click();
+     await page.reload();
+     check(await page.locator('input[name=secret_key]').inputValue()==='sk_test••••••••pSaved' && await page.locator('input[name=webhook_secret]').inputValue()==='whsec_h••••••••pSaved','browser resave and reload preserve saved masks');
+    }
     await page.getByText('Oblio · Configurat din administrare',{exact:true}).click();
     check(await page.locator('input[name=secret]').getAttribute('type')==='text','Oblio field displays readable text');
     check(await page.locator('input[name=secret]').inputValue()==='httpObl••••••••Secret','saved Oblio preview is the actual input value');
