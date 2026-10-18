@@ -6,11 +6,14 @@ final class Plans {
   if(!in_array($interval,['month','year'],true))throw new \InvalidArgumentException('invalid_billing_interval');
   $plans=require dirname(__DIR__).'/config/plans.php';
   $mode=(new IntegrationSettings($this->db))->stripe($mode)['mode'];
+  $taxBps=(new BillingTax($this->db))->basisPoints();
   $vat=(new IntegrationSettings($this->db))->oblio()['vat_rate'];
   foreach($plans as &$p){
    $p['stripe_mode']=$mode;
    $p['invoice_vat_rate']=$vat;
+   $p['tax_bps']=$taxBps;
    $p['billing_interval']=$interval;$p['price_amount']=$interval==='year'?$p['yearly_price']:$p['monthly_price'];
+   $p['gross_amount']=BillingTax::total($p['price_amount'],$taxBps);
    if($interval==='year'){$p['invoice_name_ro']='Abonament anual Zion Storage '.$p['name'].' '.$p['capacity'];$p['invoice_product_code'].='_YEAR';}
    $row=$this->db->one("SELECT * FROM billing_prices WHERE plan=? AND interval=? AND stripe_mode=? AND status='active'",[$p['slug'],$interval,$mode]);
    $p['stripe_price_id']=$row['price_id']??'';

@@ -55,6 +55,17 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(status==200 and 'Totul, dintr-o privire.' in body,'administrator logs in to dashboard with installed env credentials')
             check('name="secret_key"' not in body and 'name="password"' not in body,'dashboard separates configuration and customer forms')
             check(request(admin,'/admin?section=unknown')[0]==404,'unknown admin section is rejected')
+            tax_body=request(admin,'/admin?section=tax')[1]
+            check('name="vat_rate"' in tax_body and 'value="21"' in tax_body and '2,41 EUR' in tax_body,'admin tax settings default to 21 percent and preview gross total')
+            check(request(admin,'/admin',{'action':'tax_save','vat_rate':'19'})[0]==419,'VAT updates require admin CSRF')
+            status,tax_body,_=request(admin,'/admin',{'_csrf':csrf(tax_body),'action':'tax_save','vat_rate':'19'})
+            check(status==200 and 'value="19"' in tax_body and '2,37 EUR' in tax_body,'admin can change global exclusive VAT')
+            status,tax_body,_=request(admin,'/admin',{'_csrf':csrf(tax_body),'action':'tax_save','vat_rate':'101'})
+            check(status==422 and 'value="19"' in tax_body,'invalid VAT does not replace saved rate')
+            request(admin,'/admin',{'_csrf':csrf(tax_body),'action':'tax_save','vat_rate':'21'})
+            for loc in ['ro','en','fr','de']:
+                html=request(customer,'/'+loc+'/')[1]
+                check('2,41' in html or '2.41' in html,'localized public pricing discloses VAT and gross total '+loc)
             body=request(admin,'/admin?section=catalog')[1]
             check('Catalog Stripe' in body and '21,89' in body and 'Titan' in body,'admin exposes six-option EUR catalog')
             check(request(admin,'/admin',{'action':'catalog_disable','plan':'120gb','billing_interval':'year'})[0]==419,'catalog writes require admin CSRF')

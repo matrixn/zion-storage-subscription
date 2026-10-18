@@ -9,7 +9,7 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
  await page.goto(origin+'/admin');await page.locator('input[name=email]').fill('admin-fixture@example.com');await page.locator('input[name=password]').fill('fixture-admin-password');await page.getByRole('button',{name:'Intră în administrare'}).click();
  check(await page.locator('h1').textContent()==='Dashboard','browser administrator lands on dashboard');
  const artifacts=path.join(__dirname,'artifacts');fs.mkdirSync(artifacts,{recursive:true});
- const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','integrations','catalog','audit','api-log'];
+ const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','integrations','catalog','tax','audit','api-log'];
  for(const width of [320,390,768,1440]){
   await page.setViewportSize({width,height:1000});
   for(const section of sections){
@@ -29,6 +29,7 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
     check(await page.locator('input[name=secret_key],input[name=password]').count()===0,'dashboard excludes management forms');
     await page.screenshot({path:path.join(artifacts,'admin-dashboard-'+width+'.png'),fullPage:true});
    }
+   if(section==='tax'){check(await page.locator('input[name=vat_rate]').inputValue()==='21','VAT default visible');check((await page.locator('table').innerText()).includes('2,41 EUR'),'VAT preview includes gross total');}
    if(section==='new-client')check(await page.locator('input[name=password]').getAttribute('type')==='password','new customer password masked');
    if(section==='clients'){
     const pending=page.locator('tr').filter({hasText:'pending-browser@example.com'});
@@ -101,6 +102,15 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
  check(new URL(nojs.url()).searchParams.get('section')==='clients','search preserves dedicated section without JavaScript');
  check((await nojs.locator('table').innerText()).includes('upgrade-browser@example.com')&&!(await nojs.locator('table').innerText()).includes('admin-client@example.com'),'client search filters matching records');
  await plain.close();
+ await page.goto(origin+'/ro/');
+ const personal=page.locator('.plan.recommended');
+ check(await page.locator('.price-net-label').count()===3 && (await personal.locator('.price-net-label').innerText())==='fără TVA','every paid plan labels its base price as excluding VAT');
+ check((await personal.locator('.plan-tax').innerText()).includes('2,41 EUR'),'public monthly gross total includes VAT');
+ await page.locator('[data-billing-switch] button[value=year]').click();
+ check((await personal.locator('.plan-tax').innerText()).includes('26,49 EUR'),'annual switch updates gross total including VAT');
+ await page.locator('[data-billing-switch] button[value=month]').click();
+ check((await personal.locator('.plan-tax').innerText()).includes('2,41 EUR'),'monthly switch restores gross total');
+
  const customer=await browser.newContext();const flow=await customer.newPage();flow.on('pageerror',e=>errors.push(e.message));
  await flow.goto(verify);await flow.locator('button[type=submit],form button').first().click();
  await flow.getByRole('link',{name:'Mai mult spațiu'}).click();
@@ -112,7 +122,7 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
    check(await flow.locator('html').getAttribute('lang')===locale,'upgrade document language');
    check(await flow.locator('meta[name=robots]').getAttribute('content')==='noindex,nofollow','upgrade private indexing');
    check(await flow.locator('button.button.full').count()===2,'only larger paid offers');
-   const text=await flow.locator('main').innerText();check(text.includes('1,60') && text.includes('3,59'),'upgrade difference and future monthly amount');
+   const text=await flow.locator('main').innerText();check(text.includes('1,94') && text.includes('4,34') && text.includes('21%'),'upgrade gross difference and recurring gross amount include disclosed VAT');
    check(await flow.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'upgrade no page overflow');
   }
   await flow.goto(origin+'/ro/upgrade');await flow.screenshot({path:path.join(artifacts,'upgrade-'+width+'.png'),fullPage:true});

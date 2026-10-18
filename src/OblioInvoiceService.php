@@ -47,6 +47,7 @@ final class OblioInvoiceService
             if($old)return $old['id'];
             $plan['invoice_name_ro']='Upgrade '.(($plan['billing_interval']??'month')==='year'?'anual ':'').'Zion Storage '.$change['from_plan'].' → '.$plan['name'].' '.$plan['capacity'];
             $plan['invoice_product_code'].='_UPGRADE';
+            if(($change['base_amount']??null)!==null){$plan['invoice_vat_rate']=BillingTax::percentage($change['tax_bps']);$plan['invoice_vat_name']='TVA';}
             $id=$this->capture($invoice,$user,['id'=>$change['stripe_subscription_id'],'current_period_end'=>$change['period_end']],$plan);
             $row=$this->db->one('SELECT source_snapshot FROM fiscal_invoices WHERE id=?',[$id]);
             $source=EncryptedPayload::decode($row['source_snapshot']);
@@ -102,7 +103,7 @@ final class OblioInvoiceService
         $profile = BillingProfileService::validate($profile, $source['user']);
         $rate = $source['plan']['invoice_vat_rate'];
         if ($rate === '') $rate = $this->config['vat_rate'];
-        $vatName = $this->config['vat_name'];
+        $vatName = $source['plan']['invoice_vat_name'] ?? $this->config['vat_name'];
         if (!$simulated && ($this->config['cif'] === '' || $this->config['series'] === '' || $rate === '' || $vatName === '')) throw new OblioException('fiscal_configuration_missing');
         if ($rate !== '' && (!is_numeric($rate) || (float)$rate < 0 || (float)$rate > 100)) throw new OblioException('invalid_vat_configuration');
         if (!in_array($this->config['language'], ['RO','EN','FR','DE'], true)) throw new OblioException('unsupported_document_language');

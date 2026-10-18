@@ -29,19 +29,20 @@ class StripeService implements BillingService {
    $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
    if($s && $s['stripe_subscription_id'] && !in_array($s['status'],['canceled','incomplete_expired'],true)) throw new \RuntimeException('subscription_exists');
    $old=$this->db->one('SELECT * FROM checkout_sessions WHERE user_id=? AND expires_at>?',[$u['id'],time()+60]);
-   if($old && $old['price_id']===$p['stripe_price_id'] && $old['billing_interval']===$interval && $old['stripe_mode']===$this->settings['mode'])return $old['url'];
+   if($old && $old['price_id']===$p['stripe_price_id'] && $old['billing_interval']===$interval && $old['stripe_mode']===$this->settings['mode'] && $old['tax_bps']===$p['tax_bps'])return $old['url'];
    if($old)throw new \DomainException('checkout.pending_quote');
    BillingCatalog::validatePrice($this->client->prices->retrieve($p['stripe_price_id'])->toArray(),$p);
+   $rates=(new BillingTax($this->db))->rates($this->client,$this->settings['mode'],$p['tax_bps']);
    $l=$u['locale']; $epoch=intdiv(time(),1800);
    $session=$this->client->checkout->sessions->create([
     'mode'=>'subscription','customer_email'=>$u['email'],'client_reference_id'=>$u['id'],'locale'=>$l==='ro'?'ro':$l,
-    'line_items'=>[['price'=>$p['stripe_price_id'],'quantity'=>1]],
+    'line_items'=>[['price'=>$p['stripe_price_id'],'quantity'=>1,'tax_rates'=>$rates]],
     'metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug'],'billing_interval'=>$interval,'stripe_mode'=>$this->settings['mode']],
-    'subscription_data'=>['metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug'],'billing_interval'=>$interval,'stripe_mode'=>$this->settings['mode']]],
+    'subscription_data'=>['metadata'=>['zion_vat_bps'=>(string)$p['tax_bps'],'user_id'=>$u['id'],'plan'=>$p['slug'],'billing_interval'=>$interval,'stripe_mode'=>$this->settings['mode']]],
     'success_url'=>base_url().Router::path($l,'status'),'cancel_url'=>base_url().Router::path($l,'cancel'),
-   ],['idempotency_key'=>'checkout-'.$u['id'].'-'.$p['stripe_price_id'].'-'.$epoch]);
+   ],['idempotency_key'=>'checkout-'.$u['id'].'-'.$p['stripe_price_id'].'-vat'.$p['tax_bps'].'-'.$epoch]);
    $this->db->run('INSERT INTO checkout_sessions(user_id,session_id,url,expires_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET session_id=excluded.session_id,url=excluded.url,expires_at=excluded.expires_at',[$u['id'],$session->id,$session->url,$session->expires_at]);
-   $this->db->run('UPDATE checkout_sessions SET price_id=?,billing_interval=?,stripe_mode=? WHERE user_id=?',[$p['stripe_price_id'],$interval,$this->settings['mode'],$u['id']]);
+   $this->db->run('UPDATE checkout_sessions SET price_id=?,billing_interval=?,stripe_mode=?,tax_bps=? WHERE user_id=?',[$p['stripe_price_id'],$interval,$this->settings['mode'],$p['tax_bps'],$u['id']]);
    return $session->url;
   } finally { flock($lock,LOCK_UN); fclose($lock); }
  }
@@ -135,8 +136,12 @@ class StripeService implements BillingService {
   $lines=$invoice['lines']['data']??[];
   if(count($lines)===1) {
    $price=$lines[0]['price']['id']??$lines[0]['pricing']['price_details']['price']??'';
-   if($plan=$this->plans->byPrice($price)){if($plan['stripe_mode']!==$this->settings['mode'])throw new \RuntimeException('invoice_mode_mismatch');return $plan;}
+   if($plan=$this->plans->byPrice($price)){if($plan['stripe_mode']!==$this->settings['mode'])throw new \RuntimeException('invoice_mode_mismatch');$fallback=array_replace($plan,array_intersect_key($fallback,array_flip(['invoice_vat_rate','invoice_vat_name'])));}
   }
+  $snapshot=$invoice['parent']['subscription_details']['metadata']['zion_vat_bps']??$invoice['subscription_details']['metadata']['zion_vat_bps']??null;
+  $rates=$lines[0]['tax_rates']??[];
+  if(count($rates)===1 && isset($rates[0]['percentage']))$snapshot=(int)round($rates[0]['percentage']*100);
+  if($snapshot!==null){$fallback['invoice_vat_rate']=BillingTax::percentage((int)$snapshot);$fallback['invoice_vat_name']='TVA';}
   return $fallback;
  }
  private function storeInvoice(array $invoice,string $uid): void {
@@ -199,6 +204,7 @@ class StripeService implements BillingService {
    $price=$s['items']['data'][0]['price']['id']??'';
    $this->trace('validate_plan');
    $p=$this->plans->byPrice($price);
+   if($p && isset($s['metadata']['zion_vat_bps'])){$p['invoice_vat_rate']=BillingTax::percentage((int)$s['metadata']['zion_vat_bps']);$p['invoice_vat_name']='TVA';}
    if(!$p || $p['stripe_mode']!==$this->settings['mode'] || $p['slug']==='free' || $p['slug']!==($s['metadata']['plan']??'') || (!$manual && $p['slug']!==$u['selected_plan_id']) || (isset($s['metadata']['billing_interval']) && $s['metadata']['billing_interval']!==$p['billing_interval']))throw new \RuntimeException('billing_plan_mismatch');
    if($paidInvoice && ($paidInvoice['id']!==$o['id'] || ($paidInvoice['customer']??null)!==$s['customer'])) throw new \RuntimeException('invoice_identity_mismatch');
    if($paidInvoice && ($paidInvoice['currency']??'')!==$this->invoicePlan($paidInvoice,$p)['currency'])throw new \RuntimeException('invoice_currency_mismatch');

@@ -10,8 +10,10 @@
 <fieldset data-plan><legend><?= e($t('register.step2')) ?></legend>
 <label for="billing_interval"><?= e($t('billing.period')) ?></label><select id="billing_interval" name="billing_interval"><?php foreach(['month','year'] as $period): ?><option value="<?= $period ?>" <?= $billingInterval===$period?'selected':'' ?>><?= e($t('billing.'.$period)) ?><?= $period==='year'?' · '.e($t('billing.discount')):'' ?></option><?php endforeach ?></select>
 <label for="plan"><?= e($t('form.plan')) ?></label><select id="plan" name="plan"><?php foreach($plans as $p):
+ $taxLabels=[];foreach(['month','year'] as $period)$taxLabels[$period]=$t('tax.summary',['rate'=>Zion\BillingTax::percentage($p['tax_bps']),'total'=>number_format(Zion\BillingTax::total($period==='year'?$p['yearly_price']:$p['monthly_price'],$p['tax_bps'])/100,2,$locale==='en'?'.':',','')]);
  $labels=[];foreach(['month','year'] as $period)$labels[$period]=$p['name'].' · '.$p['capacity'].' · '.number_format(($period==='year'?$p['yearly_price']:$p['monthly_price'])/100,2,$locale==='en'?'.':',','').' EUR '.$t($period==='year'?'billing.year.interval':'pricing.interval');
- ?><option value="<?= $p['slug'] ?>" <?= $selected===$p['slug']?'selected':'' ?> data-month-label="<?= e($labels['month']) ?>" data-year-label="<?= e($labels['year']) ?>"><?= e($labels['month'].' · '.number_format($p['yearly_price']/100,2,$locale==='en'?'.':',','').' EUR '.$t('billing.year.interval')) ?></option><?php endforeach ?></select>
+ ?><option value="<?= $p['slug'] ?>" <?= $selected===$p['slug']?'selected':'' ?> data-month-tax="<?= e($taxLabels['month']) ?>" data-year-tax="<?= e($taxLabels['year']) ?>" data-month-label="<?= e($labels['month']) ?>" data-year-label="<?= e($labels['year']) ?>"><?= e($labels['month'].' · '.number_format($p['yearly_price']/100,2,$locale==='en'?'.':',','').' EUR '.$t('billing.year.interval')) ?></option><?php endforeach ?></select>
+<p class="micro" data-plan-tax><?= e($t('tax.notice',['rate'=>Zion\BillingTax::percentage((new Zion\BillingTax($this->db))->basisPoints())])) ?></p>
 <p class="micro"><?= e($t('pricing.note')) ?></p>
 <?php require __DIR__.'/billing-fields.php' ?>
 <label class="checkbox"><input type="checkbox" name="terms" required value="1"><span><?= e($t('form.terms')) ?> <a target="_blank" rel="noopener" href="<?= $url('legal') ?>?document=terms">↗</a></span></label>

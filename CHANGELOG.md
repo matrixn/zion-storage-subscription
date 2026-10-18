@@ -2,6 +2,8 @@
 
 ## 2026-10-18
 
+- Added global exclusive VAT configuration in admin (Romania standard 21% by default), automatically managed Stripe TEST/LIVE Tax Rates, separate Checkout tax lines for monthly/annual subscriptions and one-time upgrades, localized gross totals and immutable fiscal VAT snapshots. Existing subscriptions and open quotes retain their original tax policy.
+
 - Added automatic storage activation after verified payment, with a temporary encrypted onboarding credential, automatic status updates, serialized retries and credential removal on completion or after 24 hours. Existing accounts can submit their password once to enter the retry flow.
 
 - Added confirmed TEST-account resets that remove local billing records, expire open Checkout sessions, delete the owned Stripe test customer and optionally purge its verified Immich account. Remote cleanup is resumable, LIVE/real-fiscal histories are protected, and delayed callbacks cannot recreate deleted records.

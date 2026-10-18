@@ -10,7 +10,7 @@ final class ModeStripeHttp implements Stripe\HttpClient\ClientInterface {
   if(preg_match('~/subscriptions/([^/]+)$~',$path,$m)){
    if(!isset($this->subscriptions[$mode][$m[1]]))throw new RuntimeException('Fixture mode mismatch');
    $s=&$this->subscriptions[$mode][$m[1]];
-   if($post){$s['items']['data'][0]['price']=$this->catalogs[$mode]->prices[$params['items'][0]['price']];$s['metadata']=array_replace($s['metadata'],$params['metadata']);check($params['proration_behavior']==='none'&&$params['billing_cycle_anchor']==='unchanged','mode-aware subscription update preserves renewal');if($this->loseUpdate){$this->loseUpdate=false;throw new RuntimeException('fixture-response-lost');}}
+   if($post){if(array_key_exists('tax_rates',$params['items'][0]))$s['items']['data'][0]['tax_rates']=$params['items'][0]['tax_rates'];if(array_key_exists('default_tax_rates',$params))$s['default_tax_rates']=$params['default_tax_rates'];$s['items']['data'][0]['price']=$this->catalogs[$mode]->prices[$params['items'][0]['price']];$s['metadata']=array_replace($s['metadata'],$params['metadata']);check($params['proration_behavior']==='none'&&$params['billing_cycle_anchor']==='unchanged','mode-aware subscription update preserves renewal');if($this->loseUpdate){$this->loseUpdate=false;throw new RuntimeException('fixture-response-lost');}}
    $r=$s;
   }elseif(str_ends_with($path,'/checkout/sessions')&&$post){
    $id='cs_'.$mode.'_'.(count($this->sessions[$mode])+1);
@@ -29,7 +29,7 @@ final class ModeStripeHttp implements Stripe\HttpClient\ClientInterface {
   $s['invoice']=['id'=>'in_'.$id,'object'=>'invoice','status'=>'paid','livemode'=>$mode==='live','customer'=>$s['customer'],'amount_paid'=>$s['amount_total'],'currency'=>'eur','created'=>$now,'status_transitions'=>['paid_at'=>$now],'metadata'=>$s['metadata'],'lines'=>['has_more'=>false,'data'=>[['quantity'=>1,'period'=>['start'=>$now,'end'=>$now]]]]];$this->invoices[$mode][$s['invoice']['id']]=$s['invoice'];return $s;
  }
 }
-$db=new Zion\Database(':memory:');$db->migrate();$db->run('DELETE FROM billing_prices');$settings=new Zion\IntegrationSettings($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
+$db=new Zion\Database(':memory:');$db->migrate();$db->run("INSERT INTO integration_settings(key,value) VALUES('billing:vat_bps','0')");$db->run('DELETE FROM billing_prices');$settings=new Zion\IntegrationSettings($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
 $_ENV['ADMIN_EMAIL']='mode-fixture@example.com';$_ENV['ADMIN_PASSWORD']='mode-fixture-password';Zion\AccountControl::seedAdmin($db);$admin=$db->one('SELECT id FROM administrators')['id'];$_ENV['ADMIN_EMAIL']='';$_ENV['ADMIN_PASSWORD']='';
 $settings->save('stripe',['credential_mode'=>'test','secret_key'=>'sk_test_fake','webhook_secret'=>'whsec_testFixture'],$admin);
 $settings->save('stripe',['credential_mode'=>'live','secret_key'=>'sk_live_fake','webhook_secret'=>'whsec_liveFixture'],$admin);

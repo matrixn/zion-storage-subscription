@@ -29,6 +29,7 @@ check(Zion\IntegrationSettings::maskedSecret('sk_test_abcdefghijk123456')==='sk_
 check(Zion\IntegrationSettings::maskedSecret('')==='' && Zion\IntegrationSettings::maskedSecret('short')==='••••••••' && Zion\IntegrationSettings::maskedSecret('1234567890123')==='••••••••','empty and short secrets never reveal a complete credential');
 function seedCatalog(Zion\Database $db):void {
  if(env('APP_ENV')!=='test' || $db->one('SELECT id FROM users LIMIT 1'))throw new RuntimeException('Fixture requires empty test database');
+ $db->run("INSERT INTO integration_settings(key,value) VALUES('billing:vat_bps','0') ON CONFLICT(key) DO UPDATE SET value='0'"); // Historical tax-free fixtures; dedicated VAT tests exercise the default and nonzero rates.
  $db->run('DELETE FROM billing_prices');
  foreach(['120gb'=>['price_120',199],'250gb'=>['price_250',359],'500gb'=>['price_500',599]] as $slug=>[$id,$amount])foreach(['month'=>1,'year'=>11] as $interval=>$multiple)$db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,product_id,status,created_at,updated_at) VALUES(?,?,?,'eur',?,'prod_fixture','active',?,?)",[$id.($interval==='year'?'_year':''),$slug,$interval,$amount*$multiple,time(),time()]);
 }
@@ -108,3 +109,5 @@ require __DIR__.'/webhook-diagnostics.php';
 require __DIR__.'/test-account-reset.php';
 
 require __DIR__.'/automatic-activation.php';
+
+require __DIR__.'/billing-tax.php';

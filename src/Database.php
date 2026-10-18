@@ -16,7 +16,7 @@ final class Database {
   // Preserve installations made before quota synchronization was introduced.
   if(!in_array('user_id',array_column($this->run('PRAGMA table_info(billing_events)')->fetchAll(),'name'),true))$this->pdo->exec('ALTER TABLE billing_events ADD COLUMN user_id TEXT');
   if(!in_array('quota_sync',array_column($this->run('PRAGMA table_info(account_controls)')->fetchAll(),'name'),true))$this->pdo->exec("ALTER TABLE account_controls ADD COLUMN quota_sync TEXT NOT NULL DEFAULT 'ready'");
-  foreach(['users'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'subscriptions'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'",'currency'=>"TEXT NOT NULL DEFAULT 'ron'"], 'checkout_sessions'=>['price_id'=>'TEXT','billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'plan_changes'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"]] as $table=>$columns){
+  foreach(['users'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'subscriptions'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'",'currency'=>"TEXT NOT NULL DEFAULT 'ron'"], 'checkout_sessions'=>['tax_bps'=>'INTEGER NOT NULL DEFAULT 0','price_id'=>'TEXT','billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'plan_changes'=>['tax_bps'=>'INTEGER NOT NULL DEFAULT 0','tax_rate_id'=>"TEXT NOT NULL DEFAULT ''",'base_amount'=>'INTEGER','billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"]] as $table=>$columns){
    $existing=array_column($this->run('PRAGMA table_info('.$table.')')->fetchAll(),'name');
    foreach($columns as $name=>$type)if(!in_array($name,$existing,true))$this->pdo->exec('ALTER TABLE '.$table.' ADD COLUMN '.$name.' '.$type);
   }

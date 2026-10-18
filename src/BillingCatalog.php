@@ -6,7 +6,7 @@ final class BillingCatalog {
  private string $mode;
  public function __construct(private Database $db,private Plans $plans,private \Stripe\StripeClient $stripe,?string $mode=null) {$this->mode=(new IntegrationSettings($db))->stripe($mode)['mode'];}
  public static function validatePrice(array $price,array $plan): void {
-  if(!isset($price['livemode']) || $price['livemode']!==($plan['stripe_mode']==='live') || !($price['active']??false) || ($price['currency']??'')!==$plan['currency'] || ($price['unit_amount']??null)!==$plan['price_amount'] || ($price['recurring']['interval']??'')!==$plan['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || ($price['billing_scheme']??'per_unit')!=='per_unit')throw new \DomainException('Price ID-ul nu corespunde sumei EUR, intervalului și modului Stripe din catalog.');
+  if(!isset($price['livemode']) || $price['livemode']!==($plan['stripe_mode']==='live') || !($price['active']??false) || ($price['currency']??'')!==$plan['currency'] || ($price['unit_amount']??null)!==$plan['price_amount'] || ($price['recurring']['interval']??'')!==$plan['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || ($price['billing_scheme']??'per_unit')!=='per_unit' || ($price['tax_behavior']??'unspecified')==='inclusive')throw new \DomainException('Price ID-ul nu corespunde sumei EUR, intervalului și modului Stripe din catalog.');
  }
  private function audit(string $admin,string $detail): void { $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin,'billing_catalog',$detail,time()]); }
  public function save(string $slug,string $interval,string $priceId,string $admin): void {
@@ -68,7 +68,7 @@ final class BillingCatalog {
     $this->db->run('INSERT INTO stripe_catalog_products(plan,product_id,updated_at,stripe_mode) VALUES(?,?,?,?) ON CONFLICT(plan,stripe_mode) DO UPDATE SET product_id=excluded.product_id,updated_at=excluded.updated_at',[$slug,$product->id,time(),$this->mode]);$row=['product_id'=>$product->id];
    $lookup='zs_eur_'.$slug.'_'.$interval.'_'.$p['price_amount'];
    $found=$this->stripe->prices->all(['lookup_keys'=>[$lookup],'limit'=>2])->data;
-   $price=$found[0]??$this->stripe->prices->create(['product'=>$row['product_id'],'currency'=>'eur','unit_amount'=>$p['price_amount'],'recurring'=>['interval'=>$interval],'lookup_key'=>$lookup,'metadata'=>['zion_plan'=>$slug]],['idempotency_key'=>'zion-price-'.$this->mode.'-'.$lookup]);
+   $price=$found[0]??$this->stripe->prices->create(['product'=>$row['product_id'],'currency'=>'eur','unit_amount'=>$p['price_amount'],'tax_behavior'=>'exclusive','recurring'=>['interval'=>$interval],'lookup_key'=>$lookup,'metadata'=>['zion_plan'=>$slug]],['idempotency_key'=>'zion-price-'.$this->mode.'-'.$lookup]);
    $array=$price->toArray();
    if(!$array['active'] && ($array['metadata']['zion_plan']??'')===$slug){
     self::validatePrice(array_replace($array,['active'=>true]),$p);

@@ -6,6 +6,7 @@ document.querySelector('[data-billing-switch]')?.addEventListener('submit',event
   card.querySelector('.price-amount').textContent=card.dataset[interval+'Amount'];
   card.querySelector('.price-interval').textContent=card.dataset[interval+'Interval'];
   card.querySelector('.plan-caption').textContent=card.dataset[interval+'Caption'];
+  const tax=card.querySelector('.plan-tax');if(tax)tax.textContent=tax.dataset[interval+'Tax'];
   const link=card.querySelector('.button'),target=new URL(link.href);target.searchParams.set('billing_interval',interval);link.href=target.pathname+target.search;
  });
  const target=new URL(location.href);target.searchParams.set('billing_interval',interval);history.replaceState(null,'',target);
@@ -37,6 +38,8 @@ const form=document.querySelector('[data-registration]');
 function updateBilling(){
  const interval=document.querySelector('#billing_interval')?.value||'month';
  document.querySelectorAll('#plan option').forEach(option=>{if(option.dataset[interval+'Label'])option.textContent=option.dataset[interval+'Label'];});
+ const taxSummary=document.querySelector('[data-plan-tax]'),selectedOption=document.querySelector('#plan')?.selectedOptions[0];
+ if(taxSummary && selectedOption){taxSummary.textContent=selectedOption.dataset[interval+'Tax'];taxSummary.hidden=selectedOption.value==='free';}
  const group=document.querySelector('[data-billing]');if(!group)return;
  const plan=document.querySelector('#plan'),type=group.querySelector('[data-billing-type]');
  const paid=!plan||plan.value!=='free';group.hidden=!paid;group.disabled=!paid;

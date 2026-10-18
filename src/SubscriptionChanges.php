@@ -28,7 +28,7 @@ class SubscriptionChanges {
   if(!$origin || !$from || $from['slug']==='free' || $now>$origin['purchased_at']+5*86400 || $now>=$origin['original_period_end'])return [];
   $offers=[];
   foreach($this->plans->all($interval,$s['stripe_mode']) as $p) if($p['storage_bytes']>$from['storage_bytes'] && $p['price_amount']>$from['price_amount']) {
-   $offers[]=['plan'=>$p,'amount'=>$p['price_amount']-$from['price_amount'],'deadline'=>$origin['purchased_at']+5*86400,'renewal_at'=>$s['renewal_at']];
+   $offers[]=['plan'=>$p,'base_amount'=>$p['price_amount']-$from['price_amount'],'amount'=>BillingTax::total($p['price_amount']-$from['price_amount'],$p['tax_bps']),'deadline'=>$origin['purchased_at']+5*86400,'renewal_at'=>$s['renewal_at']];
   }
   return $offers;
  }
@@ -49,7 +49,7 @@ class SubscriptionChanges {
    if(!$offer)throw new \DomainException('upgrade.unavailable');
    $pending=$this->db->one("SELECT * FROM plan_changes WHERE user_id=? AND status IN ('creating','pending','paid','applying','retry')",[$u['id']]);
    if($pending) {
-    if(in_array($pending['status'],['creating','pending'],true) && $pending['to_plan']===$target && ($pending['expires_at']??PHP_INT_MAX)>time())return $this->createSession($pending,$u);
+    if(in_array($pending['status'],['creating','pending'],true) && $pending['to_plan']===$target && ($pending['base_amount']===null || $pending['tax_bps']===$offer['plan']['tax_bps']) && ($pending['expires_at']??PHP_INT_MAX)>time())return $this->createSession($pending,$u);
     throw new \DomainException('upgrade.pending');
    }
    // Checkout requires at least 30 minutes. Existing sessions remain valid up to the exact five-day cutoff.
@@ -61,12 +61,13 @@ class SubscriptionChanges {
    $this->validateSubscription($s,$u,$from,$local['renewal_at']);
    if(!$p['stripe_price_id'] || !(new IntegrationSettings($this->db))->stripe($this->mode)['secret_key'])throw new \DomainException('upgrade.unconfigured');
    $price=$this->stripe->prices->retrieve($p['stripe_price_id'])->toArray();
-   if(($price['currency']??'')!==$p['currency'] || ($price['unit_amount']??null)!==$p['price_amount'] || ($price['recurring']['interval']??'')!==$p['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || !($price['active']??false))throw new \DomainException('upgrade.unconfigured');
+   if(($price['currency']??'')!==$p['currency'] || ($price['unit_amount']??null)!==$p['price_amount'] || ($price['recurring']['interval']??'')!==$p['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || !($price['active']??false) || ($price['tax_behavior']??'unspecified')==='inclusive')throw new \DomainException('upgrade.unconfigured');
    if(!(new BillingProfileService($this->db))->get($u['id']))throw new \DomainException('billing.required');
+   $rates=(new BillingTax($this->db))->rates($this->stripe,$this->mode,$p['tax_bps']);
    $id=bin2hex(random_bytes(16));$expires=min(time()+86400,$offer['deadline']);
-   $this->db->transaction(function()use($id,$u,$s,$item,$from,$p,$offer,$local,$expires){
+   $this->db->transaction(function()use($id,$u,$s,$item,$from,$p,$offer,$local,$expires,$rates){
    $this->db->run("INSERT INTO plan_changes(id,user_id,kind,stripe_subscription_id,customer_id,item_id,from_plan,to_plan,from_price,to_price,amount,period_end,deadline,expires_at,status,created_at,updated_at) VALUES(?,?,'customer',?,?,?,?,?,?,?,?,?,?,?,'creating',?,?)",[$id,$u['id'],$s['id'],$s['customer'],$item['id'],$from['slug'],$p['slug'],$from['stripe_price_id'],$p['stripe_price_id'],$offer['amount'],$local['renewal_at'],$offer['deadline'],$expires,time(),time()]);
-   $this->db->run('UPDATE plan_changes SET currency=?,billing_interval=?,stripe_mode=? WHERE id=?',[$p['currency'],$p['billing_interval'],$this->mode,$id]);
+   $this->db->run('UPDATE plan_changes SET currency=?,billing_interval=?,stripe_mode=?,base_amount=?,tax_bps=?,tax_rate_id=? WHERE id=?',[$p['currency'],$p['billing_interval'],$this->mode,$offer['base_amount'],$p['tax_bps'],$rates[0]??'',$id]);
    });
    return $this->createSession($this->record($id),$u);
   });
@@ -80,7 +81,7 @@ class SubscriptionChanges {
    'mode'=>'payment','customer'=>$r['customer_id'],'client_reference_id'=>$u['id'],'payment_method_types'=>['card'],
    'locale'=>$u['locale'],'expires_at'=>$r['expires_at'],'metadata'=>$meta,'payment_intent_data'=>['metadata'=>$meta],
    'invoice_creation'=>['enabled'=>true,'invoice_data'=>['metadata'=>$meta,'description'=>'Upgrade Zion Storage '.$r['from_plan'].' → '.$r['to_plan']]],
-   'line_items'=>[['price_data'=>['currency'=>$r['currency'],'unit_amount'=>$r['amount'],'product_data'=>['name'=>'Upgrade Zion Storage '.$p['capacity']]],'quantity'=>1]],
+   'line_items'=>[['price_data'=>['currency'=>$r['currency'],'unit_amount'=>$r['base_amount']??$r['amount'],'tax_behavior'=>'exclusive','product_data'=>['name'=>'Upgrade Zion Storage '.$p['capacity']]],'quantity'=>1,'tax_rates'=>$r['tax_rate_id']?[$r['tax_rate_id']]:[]]],
    'success_url'=>base_url().Router::path($u['locale'],'status'),'cancel_url'=>base_url().Router::path($u['locale'],'upgrade'),
   ],['idempotency_key'=>'upgrade-checkout-'.$r['id']]);
   $this->db->run("UPDATE plan_changes SET status='pending',checkout_session_id=?,checkout_url=?,updated_at=? WHERE id=?",[$session->id,$session->url,time(),$r['id']]);
@@ -136,10 +137,14 @@ class SubscriptionChanges {
    $s=$this->stripe->subscriptions->retrieve($r['stripe_subscription_id'])->toArray();
    $item=$s['items']['data'][0]??[];
    if(($s['customer']??'')!==$r['customer_id'] || ($s['metadata']['user_id']??'')!==$uid || count($s['items']['data']??[])!==1 || ($item['id']??'')!==$r['item_id'] || !in_array($item['price']['id']??'!',[$r['from_price'],$r['to_price']],true) || ($item['current_period_end']??$s['current_period_end']??0)!==$r['period_end'] || ($s['status']??'')!=='active')throw new \RuntimeException('subscription_changed_requires_review');
+   $taxUpdate=$r['kind']==='customer' && $r['base_amount']!==null;
+   $updatedItem=['id'=>$r['item_id'],'price'=>$r['to_price'],'quantity'=>1];
+   $metadata=['plan'=>$r['to_plan']];$taxOptions=[];
+   if($taxUpdate){$updatedItem['tax_rates']=$r['tax_rate_id']?[$r['tax_rate_id']]:[];$metadata['zion_vat_bps']=(string)$r['tax_bps'];$taxOptions['default_tax_rates']=[];}
    if(($item['price']['id']??'')!==$r['to_price']) $s=$this->stripe->subscriptions->update($s['id'],[
-    'items'=>[['id'=>$r['item_id'],'price'=>$r['to_price'],'quantity'=>1]],'metadata'=>['plan'=>$r['to_plan']],
+    'items'=>[$updatedItem],'metadata'=>$metadata,
     'proration_behavior'=>'none','billing_cycle_anchor'=>'unchanged','payment_behavior'=>'error_if_incomplete',
-   ],['idempotency_key'=>'plan-change-'.$r['id']])->toArray();
+   ]+$taxOptions,['idempotency_key'=>'plan-change-'.$r['id']])->toArray();
    if(($s['items']['data'][0]['price']['id']??'')!==$r['to_price'] || ($s['items']['data'][0]['current_period_end']??$s['current_period_end']??0)!==$r['period_end'])throw new \RuntimeException('subscription_sync_requires_review');
    $this->reconcile($s);
   }catch(\Throwable $e){$this->db->run("UPDATE plan_changes SET status='retry',error_code='change_requires_retry',updated_at=? WHERE id=?",[time(),$r['id']]);throw $e;}
@@ -151,6 +156,11 @@ class SubscriptionChanges {
   if(!$r || ($r['kind']==='customer' && !$r['paid_at']))return;
   if(($s['livemode']??false)!==($r['stripe_mode']==='live'))throw new \RuntimeException('change_mode_mismatch');
   if(($s['metadata']['user_id']??'')!==$r['user_id'] || ($s['metadata']['plan']??'')!==$r['to_plan'] || ($s['items']['data'][0]['current_period_end']??$s['current_period_end']??0)!==$r['period_end'])throw new \RuntimeException('change_reconciliation_mismatch');
+  if($r['kind']==='customer' && $r['base_amount']!==null){
+   $actual=array_map(static fn($rate)=>is_array($rate)?($rate['id']??''):$rate,$s['items']['data'][0]['tax_rates']??[]);
+   $expected=$r['tax_rate_id']?[$r['tax_rate_id']]:[];
+   if($actual!==$expected || (string)($s['metadata']['zion_vat_bps']??'')!==(string)$r['tax_bps'] || (!$expected && !empty($s['default_tax_rates'])))throw new \RuntimeException('subscription_tax_sync_requires_review');
+  }
   $p=$this->plans->get($r['to_plan'],$r['billing_interval'],$r['stripe_mode']);$u=$this->db->one('SELECT * FROM users WHERE id=?',[$r['user_id']]);
   // Persist billing identity before provisioning. A failed quota update remains retryable.
   $this->db->transaction(function()use($r,$p){
@@ -188,7 +198,7 @@ class SubscriptionChanges {
     $s=$this->stripe->subscriptions->retrieve($local['stripe_subscription_id'])->toArray();$from=$this->plans->get($u['selected_plan_id'],$local['billing_interval'],$local['stripe_mode']);$p=$this->plans->get($target,$local['billing_interval'],$local['stripe_mode']);
     $this->validateSubscription($s,$u,$from,$local['renewal_at']);
     $price=$this->stripe->prices->retrieve($p['stripe_price_id'])->toArray();
-    if(($price['unit_amount']??null)!==$p['price_amount'] || ($price['currency']??'')!==$p['currency'] || ($price['recurring']['interval']??'')!==$p['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || !($price['active']??false))throw new \DomainException('Preț Stripe neconfigurat.');
+    if(($price['unit_amount']??null)!==$p['price_amount'] || ($price['currency']??'')!==$p['currency'] || ($price['recurring']['interval']??'')!==$p['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || !($price['active']??false) || ($price['tax_behavior']??'unspecified')==='inclusive')throw new \DomainException('Preț Stripe neconfigurat.');
     $id=bin2hex(random_bytes(16));
     $this->db->transaction(function()use($id,$uid,$s,$from,$p,$local,$admin,$reason){
      $this->db->run("INSERT INTO plan_changes(id,user_id,kind,stripe_subscription_id,customer_id,item_id,from_plan,to_plan,from_price,to_price,amount,period_end,status,created_at,updated_at) VALUES(?,?,'admin',?,?,?,?,?,?,?,0,?,'applying',?,?)",[$id,$uid,$s['id'],$s['customer'],$s['items']['data'][0]['id'],$from['slug'],$p['slug'],$from['stripe_price_id'],$p['stripe_price_id'],$local['renewal_at'],time(),time()]);

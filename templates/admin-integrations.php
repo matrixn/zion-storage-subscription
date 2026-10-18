@@ -34,7 +34,7 @@
 <small>În contul Oblio, deschide <strong>Setări → Date Cont</strong> și copiază tokenul <code>client_secret</code>. Nu introduce parola contului sau un <code>access_token</code> temporar. Secretul se regenerează când resetezi parola Oblio și trebuie actualizat aici. <a href="https://www.oblio.eu/api/" target="_blank" rel="noopener noreferrer">Documentație API Oblio</a>.</small>
 <label class="check"><input type="checkbox" name="clear_secret" value="1"> Șterge secretul API salvat</label>
 <div class="grid">
-<?php foreach(['cif'=>'CIF firmă emitentă','series'=>'Serie facturi','workstation'=>'Punct de lucru (opțional)','vat_rate'=>'Cotă TVA (%)','vat_name'=>'Denumire cotă TVA'] as $key=>$label): ?>
+<?php foreach(['cif'=>'CIF firmă emitentă','series'=>'Serie facturi','workstation'=>'Punct de lucru (opțional)','vat_rate'=>'Cotă TVA istorică / fallback Oblio (%)','vat_name'=>'Denumire cotă TVA'] as $key=>$label): ?>
 <label><?= e($label) ?><input name="<?= $key ?>" maxlength="254" value="<?= e($oblioSettings[$key]) ?>"></label>
 <?php endforeach ?>
 <label>Limba documentelor<select name="language"><?php foreach(['RO','EN','FR','DE'] as $language): ?><option <?= $oblioSettings['language']===$language?'selected':'' ?>><?= $language ?></option><?php endforeach ?></select></label>
@@ -42,3 +42,4 @@
 <label class="check"><input type="checkbox" name="allow_test_payments" value="1" <?= $oblioSettings['allow_test_payments']?'checked':'' ?>> Permite emiterea reală pentru plăți Stripe TEST</label>
 <button>Salvează configurația Oblio</button></form></details>
 </section>
+<p class="micro">Pentru plățile noi, TVA se configurează în <a href="/admin?section=tax">TVA produse</a>. Factura folosește cota păstrată pentru tranzacția Stripe; valoarea Oblio este fallback pentru istoricul fără cotă Stripe.</p>
