@@ -1,0 +1,46 @@
+<?php
+// Independent fixtures: no storage/payment network requests.
+$autoDb=new Zion\Database(':memory:');$autoDb->migrate();seedCatalog($autoDb);
+$autoPlans=new Zion\Plans($autoDb);$autoMail=new Zion\MailerService($autoDb);$autoStore=new TestStorage();
+$autoAccounts=new Zion\AccountService($autoDb,$autoPlans,$autoMail,$autoStore);
+$autoSignup=function(string $email,string $plan='free')use($autoAccounts){return $autoAccounts->register(['name'=>'Auto User','email'=>$email,'password'=>'automatic-password-fixture','locale'=>'en','plan'=>$plan]);};
+$autoVerify=function(string $id)use($autoDb){$autoDb->run("UPDATE users SET email_verified_at=?,status='verified' WHERE id=?",[time(),$id]);};
+$id=$autoSignup('auto@example.com');
+$credential=$autoDb->one('SELECT * FROM activation_credentials WHERE user_id=?',[$id]);
+check(!str_contains($credential['payload'],'automatic-password-fixture') && Zion\EncryptedPayload::decode($credential['payload'])['password']==='automatic-password-fixture','automatic onboarding password is encrypted');
+check(!$autoAccounts->automatic($id) && $autoStore->created===0,'automatic activation refuses unverified email');
+$autoVerify($id);$autoStore->fail=true;
+check(!$autoAccounts->automatic($id) && $autoAccounts->automaticPending($id),'storage outage retains encrypted credential for retry');
+$autoStore->fail=false;
+check(!$autoAccounts->automatic($id) && $autoStore->created===0,'browser and worker share retry backoff');
+$autoDb->run('UPDATE activation_credentials SET next_attempt_at=0 WHERE user_id=?',[$id]);
+$result=$autoAccounts->retryAutomatic();
+check($result['ready']===1 && $autoDb->one('SELECT status FROM users WHERE id=?',[$id])['status']==='active','worker activates eligible account without browser/password submission');
+check(!$autoAccounts->automaticPending($id) && !$autoDb->one('SELECT * FROM activation_credentials WHERE user_id=?',[$id]),'successful activation immediately removes encrypted credential');
+$autoAccounts->retryAutomatic();check($autoStore->created===1,'automatic retries do not duplicate accounts');
+$id=$autoSignup('paid-auto@example.com','120gb');$autoVerify($id);
+check(!$autoAccounts->automatic($id) && $autoStore->created===1,'automatic paid activation refuses checkout return without confirmed payment');
+$autoBilling=new TestStripe($autoDb,$autoPlans,$autoMail,$autoStore);
+$autoBilling->snapshot=['id'=>'sub_auto','customer'=>'cus_auto','status'=>'active','metadata'=>['user_id'=>$id,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120'],'current_period_end'=>time()+86400]]],'latest_invoice'=>['id'=>'in_auto','status'=>'paid','amount_paid'=>199,'currency'=>'eur','created'=>time()]];
+$autoBilling->process(['id'=>'evt_auto','livemode'=>false,'type'=>'customer.subscription.created','data'=>['object'=>['id'=>'sub_auto']]]);
+check($autoStore->created===1,'webhook persists payment without slow activation API calls');
+check($autoAccounts->automatic($id) && $autoStore->created===2,'authoritative paid subscription automatically permits activation');
+$id=$autoSignup('expired-auto@example.com');$autoVerify($id);
+$autoDb->run('UPDATE activation_credentials SET expires_at=? WHERE user_id=?',[time()-1,$id]);
+check(!$autoAccounts->automatic($id) && !$autoDb->one('SELECT * FROM activation_credentials WHERE user_id=?',[$id]),'expired password is purged and never used');
+check(!$autoAccounts->provision($id,'wrong-password'),'expired/legacy fallback rejects wrong password');
+check($autoAccounts->provision($id,'automatic-password-fixture'),'expired/legacy account can activate with one password confirmation');
+$id=$autoSignup('consent-auto@example.com');$autoVerify($id);$autoDb->run('UPDATE users SET terms_at=0 WHERE id=?',[$id]);
+check(!$autoAccounts->automatic($id),'automatic activation requires consent');
+$id=$autoSignup('banned-auto@example.com');$autoVerify($id);
+$autoDb->run("INSERT INTO account_controls(user_id,banned_at,updated_at) VALUES(?,?,?)",[$id,time(),time()]);
+check(!$autoAccounts->automatic($id),'automatic activation cannot bypass account ban');
+$id=$autoSignup('deleted-auto@example.com');$autoDb->run('DELETE FROM email_verifications WHERE user_id=?',[$id]);$autoDb->run('DELETE FROM users WHERE id=?',[$id]);
+check(!$autoDb->one('SELECT * FROM activation_credentials WHERE user_id=?',[$id]) && !$autoAccounts->automatic($id),'account deletion cascades pending activation credentials');
+echo "Automatic activation assertions complete.\n";
+
+$autoDb->run('DELETE FROM activation_credentials');
+for($i=0;$i<101;$i++)$autoSignup('unverified'.$i.'@example.com');
+$id=$autoSignup('eligible-after-unverified@example.com');$autoVerify($id);
+check($autoAccounts->retryAutomatic()['ready']===1,'unverified signups cannot starve eligible worker jobs');
+echo "$count total backend assertions passed. No external services contacted.\n";

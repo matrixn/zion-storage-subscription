@@ -54,3 +54,9 @@ Back up the SQLite database consistently (SQLite backup API or a stopped applica
 No production deploy, real customer mutation, live payment, destructive storage API call or external email send was performed in development.
 
 For `/admin`, manual customer grants, Stripe plan changes and full Immich access suspension, follow [administration and upgrade deployment](ADMIN-AND-UPGRADES.md). Run installation/migration before serving this version. Full ban enforcement needs the private Immich auth_request gateway and a firewall preventing direct upstream access; do not set STORAGE_GATEWAY_ENFORCED until verified.
+
+## Automatic storage activation
+
+Run migrations before serving this release. New registrations retain an APP_KEY-encrypted onboarding password for at most 24 hours; successful provisioning deletes it immediately. The normal password hash remains the authentication credential. Do not rotate APP_KEY while pending jobs exist without planning recovery. Expired/missing credentials require one password confirmation; no hash can reconstruct an existing customer's password.
+
+The existing every-minute `changes:retry` worker also retries automatic activation, even when the customer has closed the browser. Alternatively schedule `php bin/console.php activation:retry` every minute. Run `maintenance` daily to purge expired credentials. These are scheduler instructions, not automatically installed tasks. API journal Immich entries show failures. Retries have a shared 60-second backoff and require verified email, accepted terms, an eligible current plan and no ban. No storage calls are added to the webhook response path. The authenticated status page updates itself and posts a CSRF-protected activation request after payment is confirmed; GET polling does not create accounts.

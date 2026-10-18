@@ -12,6 +12,7 @@ final class AccountService {
     $interval=$data['billing_interval']??'month';if(!in_array($interval,['month','year'],true))throw new \InvalidArgumentException('invalid_billing_interval');
     $this->db->run('UPDATE users SET billing_interval=? WHERE id=?',[$interval,$id]);
     $this->db->run('UPDATE users SET stripe_mode=? WHERE id=?',[(new IntegrationSettings($this->db))->stripe()['mode'],$id]);
+    $this->rememberPassword($id,$data['password']);
     if($data['plan']!=='free' && isset($data['billing'])) (new BillingProfileService($this->db))->save($id,$data['billing']);
    });
   } catch(\PDOException $e) { if($this->db->one('SELECT id FROM users WHERE email=?',[$data['email']])) return null; throw $e; }
@@ -46,25 +47,80 @@ final class AccountService {
   $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
   return $s && $s['paid_confirmed'] && $s['status']==='active';
  }
+ /** Keep the onboarding password encrypted for at most 24 hours, never in session/logs. */
+ private function rememberPassword(string $id,string $password): void {
+  $this->db->run('INSERT INTO activation_credentials(user_id,payload,expires_at,next_attempt_at) VALUES(?,?,?,0) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload,expires_at=excluded.expires_at,next_attempt_at=0',[$id,EncryptedPayload::encode(['password'=>$password]),time()+86400]);
+ }
+ public function automaticPending(string $id): bool {
+  return (bool)$this->db->one('SELECT user_id FROM activation_credentials WHERE user_id=? AND expires_at>?',[$id,time()]);
+ }
+ private function locked(string $id,callable $fn): mixed {
+  if(!preg_match('/^[a-f0-9]{32}$/D',$id))return false;
+  // Match billing/admin/reset lock order so entitlements cannot change mid-creation.
+  $global=fopen(dirname(__DIR__).'/storage/billing.lock','c');flock($global,LOCK_EX);
+  $lock=fopen(dirname(__DIR__).'/storage/provision-'.$id.'.lock','c');flock($lock,LOCK_EX);
+  try{return $fn();}finally{flock($lock,LOCK_UN);fclose($lock);flock($global,LOCK_UN);fclose($global);}
+ }
+ public function automatic(string $id): bool {
+  return $this->locked($id,function()use($id){
+   $credential=$this->db->one('SELECT * FROM activation_credentials WHERE user_id=?',[$id]);
+   if(!$credential)return false;
+   if($credential['expires_at']<=time()){$this->db->run('DELETE FROM activation_credentials WHERE user_id=?',[$id]);return false;}
+   if($credential['next_attempt_at']>time())return false;
+   $u=$this->db->one('SELECT * FROM users WHERE id=?',[$id]);
+   if(!$u || !$u['terms_at'] || !$u['privacy_at'] || !$this->eligible($u))return false;
+   // Durable backoff applies to worker and browser requests alike.
+   $this->db->run('UPDATE activation_credentials SET next_attempt_at=? WHERE user_id=?',[time()+60,$id]);
+   $password='';
+   try {
+    $password=EncryptedPayload::decode($credential['payload'])['password'];
+    return $this->provisionLocked($id,$password);
+   }catch(\Throwable $e){
+    if($e->getMessage()!=='provisioning_pending')ApiLog::record('immich','POST','/activation',503,microtime(true),['code'=>'activation_credential_unavailable','message'=>'Datele temporare de activare nu pot fi citite. Verifică APP_KEY și reia confirmarea parolei dacă este necesar.','context'=>['user_id'=>$id,'stage'=>'activation']]);
+    return false;
+   }
+   finally{if($password!=='')sodium_memzero($password);}
+  });
+ }
+ public function retryAutomatic(): array {
+  $this->db->run('DELETE FROM activation_credentials WHERE expires_at<=?',[time()]);
+  $ready=0;$pending=0;
+  foreach($this->db->run("SELECT c.user_id FROM activation_credentials c JOIN users u ON u.id=c.user_id LEFT JOIN account_controls a ON a.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id WHERE c.next_attempt_at<=? AND u.email_verified_at IS NOT NULL AND u.terms_at>0 AND u.privacy_at>0 AND u.storage_user_id IS NULL AND a.banned_at IS NULL AND (u.selected_plan_id='free' OR a.manual_plan=u.selected_plan_id OR (s.paid_confirmed=1 AND s.status='active')) ORDER BY c.next_attempt_at LIMIT 100",[time()])->fetchAll() as $r){
+   if($this->automatic($r['user_id']))$ready++;else $pending++;
+  }
+  return ['ready'=>$ready,'pending'=>$pending];
+ }
  public function provision(string $id,string $password): bool {
-  $lock=fopen(dirname(__DIR__).'/storage/provision-'.$id.'.lock','c'); flock($lock,LOCK_EX);
+  try{return $this->locked($id,function()use($id,$password){
+   $u=$this->db->one('SELECT * FROM users WHERE id=?',[$id]);
+   if(!$u || !$this->eligible($u) || !$u['terms_at'] || !$u['privacy_at'] || !password_verify($password,$u['password_hash']))return false;
+   if(!$u['storage_user_id'])$this->rememberPassword($id,$password);
+   return $this->provisionLocked($id,$password);
+  });}finally{if($password!=='')sodium_memzero($password);}
+ }
+ private function provisionLocked(string $id,string $password): bool {
+  $previous=ApiLog::context(['user_id'=>$id,'stage'=>'activation']);
   try {
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$id]);
-   if(!$u || !$this->eligible($u) || !password_verify($password,$u['password_hash'])) return false;
-   if($u['storage_user_id']) return true;
+   if(!$u || !$this->eligible($u) || !$u['terms_at'] || !$u['privacy_at'] || !password_verify($password,$u['password_hash'])) return false;
+   if($u['storage_user_id']){$this->db->run('DELETE FROM activation_credentials WHERE user_id=?',[$id]);return true;}
    $p=$this->plans->get($u['selected_plan_id']); if(!$p) return false;
    $this->db->run("INSERT INTO provisioning_events(user_id,action,status,created_at) VALUES(?,'create','started',?)",[$id,time()]);
    $external=$this->storage->createUser($u,$password,$p['storage_bytes']);
    $this->storage->enableUser($external,$p['storage_bytes']);
    $this->db->transaction(function() use($id,$u,$p,$external) {
     $this->db->run("UPDATE users SET storage_user_id=?,storage_quota_bytes=?,status='active',updated_at=? WHERE id=?",[$external,$p['storage_bytes'],time(),$id]);
+    $this->db->run('DELETE FROM activation_credentials WHERE user_id=?',[$id]);
     $this->db->run("INSERT INTO provisioning_events(user_id,action,status,created_at) VALUES(?,'create','complete',?)",[$id,time()]);
     $this->mail->queue($u['email'],$u['locale'],'activated',[], 'activated:'.$id);
    });
    return true;
   } catch(\Throwable $e) {
+   $this->db->run('UPDATE activation_credentials SET next_attempt_at=? WHERE user_id=?',[time()+60,$id]);
    $this->db->run("INSERT INTO provisioning_events(user_id,action,status,created_at) VALUES(?,'create','retry_required',?)",[$id,time()]);
+   $known=['storage_unconfigured','storage_requires_tls','storage_identity_conflict','storage_missing_id'];
+   ApiLog::record('immich','POST','/activation',503,microtime(true),['code'=>in_array($e->getMessage(),$known,true)?$e->getMessage():'activation_pending','message'=>'Activarea automată necesită reîncercare. Verifică și cererile Immich asociate.','context'=>['user_id'=>$id,'stage'=>'activation']]);
    throw new \RuntimeException('provisioning_pending');
-  } finally { flock($lock,LOCK_UN); fclose($lock); sodium_memzero($password); }
+  } finally { ApiLog::context($previous);if($password!=='')sodium_memzero($password); }
  }
 }

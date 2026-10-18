@@ -8,7 +8,8 @@ if(in_array($cmd,['migrate','install'],true)){$db->migrate();$seeded=Zion\Accoun
 $mail=new Zion\MailerService($db);
 if($cmd==='changes:retry'){
  $plans=new Zion\Plans($db);$storage=new Zion\StorageProvisioningService();$changes=(new Zion\StripeService($db,$plans,$mail,$storage))->changes();
- $failed=0;$processed=0;
+ $activation=(new Zion\AccountService($db,$plans,$mail,$storage))->retryAutomatic();
+ $failed=0;$processed=$activation['ready'];
  foreach($db->run("SELECT id FROM plan_changes WHERE status IN ('creating','pending','paid','applying','retry') ORDER BY created_at LIMIT 100")->fetchAll() as $r){
   try{$record=$changes->record($r['id']);if($record['status']==='creating' && !$record['checkout_session_id'] && $record['expires_at']<=time())$changes->cancel($r['id']);else $changes->retry($r['id']);$processed++;}
   catch(Throwable $e){$failed++;error_log('Plan change requires retry; id='.$r['id']);}
@@ -22,7 +23,12 @@ if($cmd==='oblio:retry'){
  echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;exit($result['pending']>0?1:0);
 }
 if($cmd==='mail:work'){echo 'Delivered: '.$mail->deliver().PHP_EOL;exit;}
+if($cmd==='activation:retry'){
+ $result=(new Zion\AccountService($db,new Zion\Plans($db),$mail,new Zion\StorageProvisioningService()))->retryAutomatic();
+ echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;exit;
+}
 if($cmd==='maintenance'){
+ $db->run('DELETE FROM activation_credentials WHERE expires_at<=?',[time()]);
  $db->run('DELETE FROM email_verifications WHERE expires_at<?',[time()-86400]);
  $db->run('DELETE FROM rate_limits WHERE expires_at<?',[time()]);
  $db->run('DELETE FROM outbox WHERE sent_at IS NOT NULL AND created_at<?',[time()-30*86400]);
@@ -55,4 +61,4 @@ $queries=[
  ,'fiscal-invoices'=>'SELECT id,user_id,stripe_invoice_id,stripe_subscription_id,oblio_invoice_id,oblio_series,oblio_number,amount,currency,status,error_message,attempts,issued_at,notification_sent_at,completed_at FROM fiscal_invoices ORDER BY created_at DESC LIMIT 100'
 ];
 if(isset($queries[$cmd])){echo json_encode($db->run($queries[$cmd])->fetchAll(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE).PHP_EOL;exit;}
-echo "Commands: key, install, migrate, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";
+echo "Commands: key, install, migrate, activation:retry, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";

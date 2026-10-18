@@ -61,3 +61,8 @@ if(form){
  back.addEventListener('click',()=>{details.hidden=false;plan.hidden=true;next.hidden=false;back.hidden=true;steps[0].classList.add('active');steps[1].classList.remove('active');details.querySelector('input').focus();});
  form.addEventListener('invalid',e=>{if(details.contains(e.target)&&details.hidden)back.click();if(plan.contains(e.target)&&plan.hidden)next.click();},true);
 }
+
+// Only a CSRF-protected POST creates storage access; GET polling only reads local state.
+const activation=document.querySelector('[data-auto-activation]');
+if(activation)setTimeout(()=>activation.requestSubmit(),300);
+else if(document.querySelector('[data-status-poll]'))setTimeout(()=>location.reload(),5000);

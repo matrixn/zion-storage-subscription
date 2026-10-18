@@ -43,7 +43,7 @@ final class Application {
   header('Cache-Control: private, no-store');
   if($method==='POST') {
    if(!Security::checkCsrf()){$this->fail('error.csrf',419);return;}
-   if(!Security::limit($this->db,'post:'.$this->page.':'.Security::clientIp(),$this->page==='contact'?5:15,900)){$this->fail('error.rate',429);return;}
+   if(!Security::limit($this->db,'post:'.$this->page.':'.Security::clientIp(),$this->page==='contact'?5:((($_POST['automatic']??'')==='1' && $this->page==='activate')?20:15),900)){$this->fail('error.rate',429);return;}
    try{$this->post();}catch(\Throwable $e){error_log('Request failed; page='.$this->page);$this->fail($this->page==='activate'?'status.retry':'error.generic',503);}
    return;
   }
@@ -143,6 +143,9 @@ final class Application {
     if(empty($_POST['accept']) || (production() && env('LEGAL_READY')!=='true')){$this->fail('error.validation');return;}
     $this->db->run('UPDATE users SET terms_at=?,privacy_at=? WHERE id=?',[time(),time(),$u['id']]);
    }
+   if(($_POST['automatic']??'')==='1') {
+    $this->accounts->automatic($u['id']);$this->redirect(Router::path($this->locale,'status'));
+   }
    if(!Security::limit($this->db,'activate:'.$u['id'],8,900)){$this->fail('error.rate',429);return;}
    if(!$this->accounts->provision($u['id'],(string)($_POST['password']??''))){$this->fail('error.validation');return;}
    $this->redirect(Router::path($this->locale,'status'));
@@ -153,6 +156,8 @@ final class Application {
   $locale=$this->locale; $page=$this->page; $t=fn(string $k,array $v=[])=>$this->tr->get($k,$v); $url=fn(string $p,string $l='')=>Router::path($l?:$locale,$p);
   $billingInterval=(string)($_POST['billing_interval']??$_GET['billing_interval']??'month');if(!in_array($billingInterval,['month','year'],true))$billingInterval='month';
   $plans=$this->plans->all($billingInterval);$user=$this->user();$eligible=$user?$this->accounts->eligible($user):false;
+  $automaticActivation=$user && !$user['storage_user_id'] && $this->accounts->automaticPending($user['id']);
+  $activationDue=$automaticActivation && !(bool)$this->db->one('SELECT user_id FROM activation_credentials WHERE user_id=? AND next_attempt_at>?',[$user['id'],time()]);
   $stripeMode=(new IntegrationSettings($this->db))->stripe()['mode'];
   $banned=$user?(new AccountControl($this->db))->banned($user['id']):false;
   $upgradeOffers=$user && $this->billing instanceof StripeService?$this->billing->changes()->offers($user):[];

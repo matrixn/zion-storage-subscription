@@ -2,6 +2,8 @@
 
 ## 2026-10-18
 
+- Added automatic storage activation after verified payment, with a temporary encrypted onboarding credential, automatic status updates, serialized retries and credential removal on completion or after 24 hours. Existing accounts can submit their password once to enter the retry flow.
+
 - Added confirmed TEST-account resets that remove local billing records, expire open Checkout sessions, delete the owned Stripe test customer and optionally purge its verified Immich account. Remote cleanup is resumable, LIVE/real-fiscal histories are protected, and delayed callbacks cannot recreate deleted records.
 - Added webhook receipt/processing stages, signature diagnostics, event/delivery correlation and authenticated Stripe event recovery to the admin API journal, preserving payment and fiscal idempotency.
 - Added audited activation-link disclosure for new unconfirmed customers in admin, reusing valid links or issuing a fresh one-hour link when needed so onboarding works before SMTP is configured.
