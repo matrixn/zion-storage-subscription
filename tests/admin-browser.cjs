@@ -74,10 +74,17 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
    if(section==='catalog')check(await page.locator('.table').first().locator('input[name=price_id]').count()===0,'main catalog no longer asks for manual Price IDs');
    if(section==='api-log'){
     check(await page.locator('h2').textContent()==='Comunicare API','API journal has a dedicated page');
+    await page.getByText('Debug webhook și recuperarea unei plăți confirmate',{exact:true}).click();
+    check(await page.locator('input[name=event_id]').isVisible() && await page.locator('select[name=credential_mode]').isVisible(),'webhook recovery offers event ID and explicit TEST LIVE selection');
+    check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'expanded webhook troubleshooting guide fits viewport');
+    await page.getByText('Debug webhook și recuperarea unei plăți confirmate',{exact:true}).click();
     await page.locator('select[name=provider]').selectOption('immich');await page.locator('select[name=status]').selectOption('ok');
     await page.getByRole('button',{name:'Filtrează',exact:true}).click();
     check(new URL(page.url()).searchParams.get('section')==='api-log' && (await page.locator('table').innerText()).includes('Immich'),'API log filters preserve section and show recorded traffic');
     await page.screenshot({path:path.join(artifacts,'admin-api-log-'+width+'.png'),fullPage:true});
+    await page.getByRole('link',{name:'Webhookuri cu erori',exact:true}).click();
+    check((await page.locator('table').innerText()).includes('signature_invalid') && (await page.locator('table').innerText()).includes('signature'),'webhook journal exposes signature rejection and stage');
+    await page.screenshot({path:path.join(artifacts,'admin-webhook-log-'+width+'.png'),fullPage:true});
    }
   }
  }

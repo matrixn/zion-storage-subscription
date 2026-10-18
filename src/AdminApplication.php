@@ -21,7 +21,7 @@ final class AdminApplication {
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
   $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
-  $default=match(true){$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $default=match(true){$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
@@ -58,6 +58,12 @@ final class AdminApplication {
       $result=(new StripeIntegration($this->db,$this->plans,null,$stripeMode))->synchronize($admin['id']);$message.=' '.$result['message'];
      }
      $_SESSION['admin_notice']=$message;$this->redirect();
+    }
+    if($action==='stripe_event_replay'){
+     if(!Security::limit($this->db,'stripe-replay:'.$admin['id'],10,900))throw new \DomainException('Prea multe reprocesări. Reîncearcă mai târziu.');
+     $service=new StripeService($this->db,$this->plans,new MailerService($this->db),new StorageProvisioningService(),null,$stripeMode);
+     $result=$service->replayEvent((string)($_POST['event_id']??''),$admin['id']);
+     $_SESSION['admin_notice']=WebhookDiagnostics::result($result).' Reprocesarea nu confirmă configurarea destinației webhook.';$this->section='api-log';$this->redirect();
     }
     if(in_array($action,['stripe_check','stripe_sync','stripe_activate'],true)){
      if(!Security::limit($this->db,'stripe-actions:'.$admin['id'],12,900))throw new \DomainException('Prea multe verificări Stripe. Reîncearcă mai târziu.');
@@ -110,7 +116,7 @@ final class AdminApplication {
     if($this->db->one('SELECT v.token_hash FROM email_verifications v JOIN users u ON u.id=v.user_id LEFT JOIN account_controls c ON c.user_id=u.id WHERE v.token_hash=? AND v.user_id=? AND v.used_at IS NULL AND v.expires_at>? AND u.email_verified_at IS NULL AND c.banned_at IS NULL',[$candidate['token_hash'],$candidate['user_id'],time()]))$activationLink=$candidate;
    }
    if($section==='api-log'){
-    foreach(['provider','status','mode','direction'] as $key)$apiFilters[$key]=is_string($_GET[$key]??null)?$_GET[$key]:'';
+    foreach(['provider','status','mode','direction','event'] as $key)$apiFilters[$key]=is_string($_GET[$key]??null)?$_GET[$key]:'';
     $apiEntries=ApiLog::page($apiFilters,max(1,(int)($_GET['page']??1)));
    }
    $integrations=new IntegrationSettings($this->db);$stripeSettings=$integrations->stripe($section==='integrations'?$stripeMode:$stripeActiveMode);$oblioSettings=$integrations->oblio();$stripeProfiles=$integrations->stripeProfiles();

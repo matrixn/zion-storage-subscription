@@ -2,6 +2,7 @@
 
 ## 2026-10-18
 
+- Added webhook receipt/processing stages, signature diagnostics, event/delivery correlation and authenticated Stripe event recovery to the admin API journal, preserving payment and fiscal idempotency.
 - Added audited activation-link disclosure for new unconfirmed customers in admin, reusing valid links or issuing a fresh one-hour link when needed so onboarding works before SMTP is configured.
 - Added an admin API communication journal with filtered/paginated Stripe, Oblio, Immich, CAPTCHA and webhook records, redacted diagnostics, connection errors, HTTP status, timing and Stripe request IDs. Logs survive billing rollbacks and retain up to 30 days/10,000 entries.
 - Changed admin API fields to text inputs containing the saved masked preview, preserving complete credentials when unchanged previews are submitted.

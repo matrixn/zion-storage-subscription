@@ -114,6 +114,9 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(status==200 and 'value="sk_test••••••••pSaved"' in body and 'value="whsec_h••••••••pSaved"' in body,'saving displayed input values preserves credentials and renders actual masked values')
             check('Verificare nereușită' in body and 'Nesincronizat' not in body,'automatic sync reports isolated transport failure instead of false success')
             check(request(admin,'/admin',{'action':'stripe_check'})[0]==419 and request(admin,'/admin',{'action':'stripe_sync'})[0]==419,'connection test and synchronization require CSRF')
+            check(request(admin,'/admin',{'action':'stripe_event_replay','event_id':'evt_fixture'})[0]==419,'Stripe event recovery requires administrator CSRF')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'stripe_event_replay','event_id':'evt_fixture','credential_mode':'test'})
+            check(status==422 and 'testele izolate' in body,'event recovery never contacts Stripe from isolated HTTP tests')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'stripe_check','credential_mode':'test'})
             check(status==200 and 'Verificare nereușită' in body,'connection diagnostic fails safely without contacting external services in test environment')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','secret_key':'sk_live_httpRejected'})
@@ -130,6 +133,10 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
                 check(urllib.request.urlopen(event).status==204,'signed webhook reaches correct mode '+mode)
                 health=request(admin,'/admin?section=integrations&stripe_mode='+mode)[1]
                 check('Eveniment semnat primit' in health,'webhook health reflects verified HTTP receipt '+mode)
+            payload=json.dumps({'id':'evt_http_rejected','object':'event','livemode':False,'type':'invoice.paid','data':{'object':{'id':'in_fixture'}}}).encode()
+            rejected=urllib.request.Request('http://127.0.0.1:8093/webhooks/stripe?mode=test',data=payload,headers={'Content-Type':'application/json','Stripe-Signature':'t=1,v1=invalid'})
+            try:urllib.request.urlopen(rejected);check(False,'invalid webhook accepted')
+            except urllib.error.HTTPError as error:check(error.code==400,'invalid webhook signature is rejected over HTTP')
             sandbox={'ro':'Sandbox: conturile noi folosesc plăți de test.','en':'Sandbox: new accounts use test payments.','fr':'Sandbox : paiements de test pour les nouveaux comptes.','de':'Sandbox: Neue Konten verwenden Testzahlungen.'}
             for locale,text in sandbox.items():check(text in request(customer,'/'+locale+'/')[1],'localized public sandbox notice '+locale)
             # Fixture-only mode change exercises rendering without remote API operations.
@@ -146,7 +153,9 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(status==200 and 'Comunicare API' in body and 'Immich' in body and 'Reușită' in body and 'HTTP 200' in body,'API journal records real HTTP communication with isolated Immich fixture')
             check('no-store' in headers['Cache-Control'] and 'admin-client@example.com' not in body and 'fixture-key' not in body,'API journal is private and excludes request and response personal data')
             status,body,_=request(admin,'/admin?section=api-log&provider=stripe&direction=in&mode=test')
-            check('Webhook procesat.' in body and 'HTTP 204' in body,'API journal includes incoming Stripe TEST webhooks')
+            check('Tip de eveniment nefolosit' in body and 'HTTP 204' in body and 'Semnătură' in body and 'valid' in body and 'evt_http_test' in body,'API journal distinguishes valid signature from ignored webhook processing')
+            status,body,_=request(admin,'/admin?section=api-log&provider=stripe&event=evt_http_rejected')
+            check('signature_invalid' in body and 'HTTP 400' in body and 'Etapă' in body and 'Corelează' in body,'webhook event filter exposes failed signature stage and correlation link')
             status,body,_=request(admin,'/admin?section=api-log&provider=stripe&mode=test&status=error')
             check('curl_60' in body and 'issuer certificate' in body and 'certificatele CA' in body and '&lt;script&gt;' in body and '<script>' not in body,'API journal renders detailed TLS error and escapes provider text')
             db=sqlite3.connect(temp+'/app.sqlite')

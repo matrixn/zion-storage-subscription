@@ -1,6 +1,9 @@
 <?php
 namespace Zion;
 class StripeService implements BillingService {
+ public const WEBHOOK_TYPES=['checkout.session.completed','invoice.paid','invoice.payment_failed','customer.subscription.created','customer.subscription.updated','customer.subscription.deleted'];
+ protected array $webhookDebug=[];
+ private function trace(string $stage,array $context=[]): void {$this->webhookDebug=array_replace($this->webhookDebug,$context,['stage'=>$stage]);ApiLog::context($this->webhookDebug);}
  protected \Stripe\StripeClient $client;
  protected OblioInvoiceService $fiscal;
  protected array $settings;
@@ -65,17 +68,59 @@ class StripeService implements BillingService {
  public function changes(): SubscriptionChanges { return new SubscriptionChanges($this->db,$this->plans,$this->mail,$this->storage,$this->client,$this->fiscal,$this->settings['mode']); }
  public function catalog(): BillingCatalog { return new BillingCatalog($this->db,$this->plans,$this->client,$this->settings['mode']); }
  public function receive(string $payload,string $signature): void {
+  $started=microtime(true);$http=204;$error=[];
+  $this->webhookDebug=['source'=>'webhook','delivery_id'=>bin2hex(random_bytes(8)),'signature'=>$signature===''?'missing':'not_checked','expected_mode'=>is_string($_GET['mode']??null)?$_GET['mode']:'','stage'=>'received','outcome'=>'received'];
+  $previous=ApiLog::context($this->webhookDebug);
+  ApiLog::record('stripe','POST','/webhooks/stripe',202,$started,['direction'=>'in','mode'=>$_GET['mode']??'','message'=>WebhookDiagnostics::result($this->webhookDebug),'context'=>$this->webhookDebug]);
+  try{
+  $this->trace('decode');
   $raw=json_decode($payload,true,512,JSON_THROW_ON_ERROR);
+  if(!is_array($raw))throw new \UnexpectedValueException('webhook_mode_missing');
+  $this->trace('mode',['event_id'=>$raw['id']??'','event_type'=>$raw['type']??'','api_version'=>$raw['api_version']??'']);
   if(!is_bool($raw['livemode']??null))throw new \UnexpectedValueException('webhook_mode_missing');
   $mode=$raw['livemode']?'live':'test';
+  $this->trace('mode',['payload_mode'=>$mode]);
   if(isset($_GET['mode']) && $_GET['mode']!==$mode)throw new \UnexpectedValueException('webhook_mode_mismatch');
+  $this->trace('secret');
   $settings=(new IntegrationSettings($this->db))->stripe($mode);
   if(!$settings['webhook_secret'])throw new \RuntimeException('webhook_unconfigured');
+  $this->trace('signature');
   $event=\Stripe\Webhook::constructEvent($payload,$signature,$settings['webhook_secret']);
+  $this->trace('validated',['signature'=>'valid']);
   if($event->livemode!==($mode==='live'))throw new \RuntimeException('webhook_mode_mismatch');
   StripeIntegration::received($this->db,$settings,(string)$event->id,(string)$event->type);
-  if($mode!==$this->settings['mode']){(new self($this->db,$this->plans,$this->mail,$this->storage,null,$mode))->process($event->toArray());return;}
+  if($mode!==$this->settings['mode']){
+   $other=new self($this->db,$this->plans,$this->mail,$this->storage,null,$mode);$other->webhookDebug=$this->webhookDebug;
+   try{$other->process($event->toArray());}finally{$this->webhookDebug=$other->webhookDebug;}return;
+  }
   $this->process($event->toArray());
+  }catch(\Throwable $e){
+   $http=$e instanceof \JsonException || $e instanceof \UnexpectedValueException || $e instanceof \Stripe\Exception\SignatureVerificationException?400:503;
+   $error=WebhookDiagnostics::error($e);$this->webhookDebug['outcome']='failed';
+   if($e instanceof \Stripe\Exception\SignatureVerificationException)$this->webhookDebug['signature']=$signature===''?'missing':($error['code']==='signature_expired'?'expired':'invalid');
+   throw $e;
+  }finally{
+   ApiLog::record('stripe','POST','/webhooks/stripe',$http,$started,['direction'=>'in','mode'=>$this->webhookDebug['payload_mode']??$_GET['mode']??'','context'=>$this->webhookDebug]+$error+['message'=>WebhookDiagnostics::result($this->webhookDebug)]);
+   ApiLog::context($previous);
+  }
+ }
+ protected function fetchEvent(string $id): array {if(env('APP_ENV')==='test')throw new \RuntimeException('test_network_forbidden');return $this->client->events->retrieve($id)->toArray();}
+ public function replayEvent(string $id,string $admin): array {
+  if(!preg_match('/^evt_[a-zA-Z0-9_]{1,140}$/D',$id))throw new \DomainException('Introdu un Event ID Stripe valid (evt_…).');
+  $started=microtime(true);$error=[];$http=200;
+  $this->webhookDebug=['source'=>'stripe_api_replay','delivery_id'=>bin2hex(random_bytes(8)),'signature'=>'not_applicable','event_id'=>$id,'payload_mode'=>$this->settings['mode'],'stage'=>'replay_fetch'];
+  $previous=ApiLog::context($this->webhookDebug);
+  try{
+   $event=$this->fetchEvent($id);
+   if(($event['id']??'')!==$id || ($event['object']??'')!=='event')throw new \RuntimeException('event_identity_mismatch');
+   if(($event['livemode']??null)!==($this->settings['mode']==='live'))throw new \RuntimeException('event_mode_mismatch');
+   $this->trace('validated',['event_type'=>$event['type']??'','api_version'=>$event['api_version']??'']);
+   if(!in_array($event['type']??'',self::WEBHOOK_TYPES,true))throw new \RuntimeException('unsupported_replay_event');
+   $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin,'stripe_event_replay',$this->settings['mode'].' / '.$id.' / '.$event['type'],time()]);
+   $this->process($event);
+   return $this->webhookDebug;
+  }catch(\Throwable $e){$http=503;$error=WebhookDiagnostics::error($e);$this->webhookDebug['outcome']='failed';throw new \DomainException($error['message']);}
+  finally{ApiLog::record('stripe','POST','/admin/stripe-event-replay',$http,$started,['direction'=>'in','mode'=>$this->settings['mode'],'context'=>$this->webhookDebug]+$error+['message'=>WebhookDiagnostics::result($this->webhookDebug)]);ApiLog::context($previous);}
  }
  protected function fetchSubscription(string $id): array { return $this->client->subscriptions->retrieve($id,['expand'=>['latest_invoice']])->toArray(); }
  protected function fetchInvoice(string $id): array {
@@ -101,36 +146,43 @@ class StripeService implements BillingService {
   $this->db->run('UPDATE invoices SET stripe_mode=? WHERE id=?',[$this->settings['mode'],$invoice['id']]);
  }
  public function process(array $event): void {
+  $previous=ApiLog::context($this->webhookDebug);
+  try{
+  $this->trace('processing',['event_id'=>$event['id']??'','event_type'=>$event['type']??'']);
   if(($event['livemode']??$event['data']['object']['livemode']??false)!==($this->settings['mode']==='live'))throw new \RuntimeException('event_mode_mismatch');
-  $types=['checkout.session.completed','invoice.paid','invoice.payment_failed','customer.subscription.created','customer.subscription.updated','customer.subscription.deleted'];
-  if(!in_array($event['type'],$types,true)) return;
+  if(!in_array($event['type'],self::WEBHOOK_TYPES,true)){$this->trace('complete',['outcome'=>'ignored']);return;}
   $lock=fopen(dirname(__DIR__).'/storage/billing.lock','c'); flock($lock,LOCK_EX);
   $userLock=null;
   try {
-   if($this->db->one("SELECT id FROM billing_events WHERE id=? AND status='complete'",[$event['id']])) return;
+   if($this->db->one("SELECT id FROM billing_events WHERE id=? AND status='complete'",[$event['id']])){$this->trace('complete',['outcome'=>'duplicate']);return;}
    $this->db->run("INSERT INTO billing_events(id,type,status,created_at) VALUES(?,?,'processing',?) ON CONFLICT(id) DO UPDATE SET status='processing'",[$event['id'],$event['type'],time()]);
    $this->db->run('UPDATE billing_events SET stripe_mode=? WHERE id=?',[$this->settings['mode'],$event['id']]);
    $o=$event['data']['object'];
+   $this->trace('fetch_invoice',['invoice_id'=>$event['type']==='invoice.paid'?($o['id']??''):'','checkout_session_id'=>$event['type']==='checkout.session.completed'?($o['id']??''):'']);
    // A delayed event must invoice its own paid cycle, never the latest subscription invoice.
    $paidInvoice=$event['type']==='invoice.paid'?$this->fetchInvoice($o['id']):null;
    if($paidInvoice && ($paidInvoice['status']??'')!=='paid') throw new \RuntimeException('invoice_not_paid');
    $source=$paidInvoice??$o;
    $upgradeId=$source['metadata']['upgrade_id']??null;
    if($upgradeId && in_array($event['type'],['checkout.session.completed','invoice.paid'],true)) {
+    $this->trace('upgrade');
     $change=$this->changes()->record($upgradeId);
     if($change['stripe_mode']!==$this->settings['mode'])throw new \RuntimeException('upgrade_mode_mismatch');
     $userLock=fopen(dirname(__DIR__).'/storage/provision-'.$change['user_id'].'.lock','c');flock($userLock,LOCK_EX);
     $this->changes()->fulfill($upgradeId);
-    $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);return;
+    $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);$this->trace('complete',['outcome'=>'processed','user_id'=>$change['user_id']]);return;
    }
    $id=str_starts_with($event['type'],'customer.subscription.')?$o['id']:($source['subscription']??$source['parent']['subscription_details']['subscription']??null);
    if(!$id) {
     $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);
+    $this->trace('complete',['outcome'=>'no_subscription']);
     return;
    }
    // Entitlements always use current authoritative subscription state.
+   $this->trace('fetch_subscription',['subscription_id'=>is_string($id)?$id:'']);
    $s=$this->fetchSubscription($id);
    $uid=$s['metadata']['user_id']??'';
+   $this->trace('identify_user',['user_id'=>$uid]);
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
    if(!$u) throw new \RuntimeException('unknown_billing_user');
    if($u['stripe_mode']!==$this->settings['mode'] || ($s['livemode']??false)!==($this->settings['mode']==='live'))throw new \RuntimeException('subscription_mode_mismatch');
@@ -139,6 +191,7 @@ class StripeService implements BillingService {
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
    $manual=(new AccountControl($this->db))->manual($uid);
    $price=$s['items']['data'][0]['price']['id']??'';
+   $this->trace('validate_plan');
    $p=$this->plans->byPrice($price);
    if(!$p || $p['stripe_mode']!==$this->settings['mode'] || $p['slug']==='free' || $p['slug']!==($s['metadata']['plan']??'') || (!$manual && $p['slug']!==$u['selected_plan_id']) || (isset($s['metadata']['billing_interval']) && $s['metadata']['billing_interval']!==$p['billing_interval']))throw new \RuntimeException('billing_plan_mismatch');
    if($paidInvoice && ($paidInvoice['id']!==$o['id'] || ($paidInvoice['customer']??null)!==$s['customer'])) throw new \RuntimeException('invoice_identity_mismatch');
@@ -147,6 +200,7 @@ class StripeService implements BillingService {
    if($invoice && ($invoice['livemode']??false)!==($this->settings['mode']==='live'))throw new \RuntimeException('invoice_mode_mismatch');
    if($paidInvoice && ($paidInvoice['livemode']??false)!==($this->settings['mode']==='live'))throw new \RuntimeException('invoice_mode_mismatch');
    $paid=$invoice && ($invoice['status']??'')==='paid' && $s['status']==='active';
+   $this->trace('persist',['paid_confirmed'=>(bool)$paid,'invoice_id'=>$paidInvoice['id']??$invoice['id']??'']);
    $existing=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$uid]);
    $oldSubscription=false;
    if($existing && $existing['stripe_subscription_id']!==$id) {
@@ -170,11 +224,13 @@ class StripeService implements BillingService {
    });
    // The durable fiscal job is processed by the CLI worker. Provider latency/outages
    // must never delay Stripe's webhook acknowledgement or change payment status.
+   $this->trace('storage');
    if(!$oldSubscription && !$manual && $u['storage_user_id'] && !(new AccountControl($this->db))->banned($uid)) {
     if($paid) $this->storage->enableUser($u['storage_user_id'],$p['storage_bytes']);
     else $this->storage->disableUser($u['storage_user_id']);
     $this->db->run('UPDATE users SET status=?,updated_at=? WHERE id=?',[$paid?'active':'restricted',time(),$uid]);
    }
+   $this->trace('notifications');
    $this->db->transaction(function() use($u,$paidInvoice,$paid,$s,$event,$oldSubscription) {
     if($paidInvoice) $this->mail->queue($u['email'],$u['locale'],'payment',[],'paid:'.$paidInvoice['id']);
     if($paid && !$oldSubscription) $this->mail->queue($u['email'],$u['locale'],'subscription',[],'subscription:'.$s['id']);
@@ -182,6 +238,8 @@ class StripeService implements BillingService {
     elseif($event['type']==='invoice.payment_failed') $this->mail->queue($u['email'],$u['locale'],'failed',[],'failed:'.$event['id']);
     $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);
    });
+   $this->trace('complete',['outcome'=>'processed']);
   } finally { if($userLock){flock($userLock,LOCK_UN);fclose($userLock);} flock($lock,LOCK_UN); fclose($lock); }
+  }finally{ApiLog::context($previous);}
  }
 }

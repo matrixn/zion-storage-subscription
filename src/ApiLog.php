@@ -4,6 +4,19 @@ namespace Zion;
 
 /** Independent of billing transactions: a rollback must not erase transport failures. */
 final class ApiLog {
+ private static array $correlation=[];
+ public static function context(array $context): array {$previous=self::$correlation;self::$correlation=self::safeContext($context);return $previous;}
+ public static function safeContext(array $context): array {
+  $safe=[];
+  foreach(['stage','signature','outcome','source','expected_mode','payload_mode','event_id','event_type','api_version','subscription_id','invoice_id','checkout_session_id','user_id','delivery_id'] as $key){
+   $value=$context[$key]??null;
+   $patterns=['event_id'=>'/^evt_[a-zA-Z0-9_]+$/D','event_type'=>'/^[a-z]+(?:\.[a-z_]+)+$/D','api_version'=>'/^\d{4}-\d{2}-\d{2}(?:\.[a-z]+)?$/D','subscription_id'=>'/^sub_[a-zA-Z0-9_]+$/D','invoice_id'=>'/^in_[a-zA-Z0-9_]+$/D','checkout_session_id'=>'/^cs_[a-zA-Z0-9_]+$/D','user_id'=>'/^[a-f0-9]{32}$/D','delivery_id'=>'/^[a-f0-9]{16}$/D'];
+   if(isset($patterns[$key]) && (!is_string($value) || !preg_match($patterns[$key],$value)))continue;
+   if(is_string($value) && strlen($value)<=150 && preg_match('/^[a-zA-Z0-9_.-]+$/D',$value) && !preg_match('/(?:sk|rk|pk)_(?:test|live)_|whsec_/i',$value))$safe[$key]=$value;
+  }
+  if(is_bool($context['paid_confirmed']??null))$safe['paid_confirmed']=$context['paid_confirmed'];
+  return $safe;
+ }
  private static function database(): \PDO {
   $appPath=env('DB_PATH','storage/app.sqlite');
   $path=env('API_LOG_PATH',dirname($appPath).'/api-communication.sqlite');
@@ -13,6 +26,10 @@ final class ApiLog {
   @chmod($path,0600);
   $db->exec('PRAGMA busy_timeout=1000; CREATE TABLE IF NOT EXISTS api_log(id INTEGER PRIMARY KEY AUTOINCREMENT,created_at INTEGER NOT NULL,provider TEXT NOT NULL,mode TEXT NOT NULL,direction TEXT NOT NULL,method TEXT NOT NULL,endpoint TEXT NOT NULL,status TEXT NOT NULL,http_status INTEGER NOT NULL,duration_ms INTEGER NOT NULL,error_code TEXT NOT NULL,message TEXT NOT NULL,request_id TEXT NOT NULL)');
   $db->exec('CREATE INDEX IF NOT EXISTS api_log_created ON api_log(created_at)');
+  if(!in_array('context',array_column($db->query('PRAGMA table_info(api_log)')->fetchAll(),'name'),true)){
+   try{$db->exec("ALTER TABLE api_log ADD COLUMN context TEXT NOT NULL DEFAULT '{}' ");}
+   catch(\PDOException $e){if(!in_array('context',array_column($db->query('PRAGMA table_info(api_log)')->fetchAll(),'name'),true))throw $e;}
+  }
   return $db;
  }
  public static function redact(string $message,array $sensitive=[]): string {
@@ -40,7 +57,8 @@ final class ApiLog {
    $requestId=preg_match('/^req_[a-zA-Z0-9]+$/D',(string)($details['request_id']??''))?$details['request_id']:'';
    $row=[time(),$provider,in_array($details['mode']??'',['test','live'],true)?$details['mode']:'',($details['direction']??'')==='in'?'in':'out',strtoupper($method),self::redact($endpoint,$sensitive),$status?'error':'ok',$httpStatus,max(0,(int)round((microtime(true)-$started)*1000)),$code,self::redact((string)($details['message']??''),$sensitive),self::redact($requestId,$sensitive)];
    $db=self::database();
-   $db->prepare('INSERT INTO api_log(created_at,provider,mode,direction,method,endpoint,status,http_status,duration_ms,error_code,message,request_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')->execute($row);
+   $row[]=json_encode(self::safeContext(($details['context']??[])+self::$correlation),JSON_THROW_ON_ERROR);
+   $db->prepare('INSERT INTO api_log(created_at,provider,mode,direction,method,endpoint,status,http_status,duration_ms,error_code,message,request_id,context) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute($row);
    $db->prepare('DELETE FROM api_log WHERE created_at < ? OR id <= (SELECT COALESCE(MAX(id),0)-10000 FROM api_log)')->execute([time()-30*86400]);
   }catch(\Throwable $e){error_log('API diagnostic log unavailable');}
  }
@@ -60,6 +78,7 @@ final class ApiLog {
  public static function page(array $filters,int $page=1): array {
   $where=[];$params=[];
   foreach(['provider'=>['stripe','oblio','immich','captcha'],'status'=>['ok','error'],'mode'=>['test','live'],'direction'=>['in','out']] as $key=>$allowed)if(in_array($filters[$key]??'',$allowed,true)){$where[]=$key.'=?';$params[]=$filters[$key];}
+  if(is_string($filters['event']??null) && preg_match('/^(?:evt_[a-zA-Z0-9_]+|[a-f0-9]{16})$/D',$filters['event']) && strlen($filters['event'])<=150){$where[]='instr(context,?)>0';$params[]='"'.$filters['event'].'"';}
   $condition=$where?' WHERE '.implode(' AND ',$where):'';
   try{
    $db=self::database();$count=$db->prepare('SELECT COUNT(*) FROM api_log'.$condition);$count->execute($params);$total=(int)$count->fetchColumn();

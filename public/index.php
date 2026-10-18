@@ -12,4 +12,7 @@ $admin=preg_match('~^/admin(?:/|$)~',parse_url($_SERVER['REQUEST_URI'],PHP_URL_P
 session_name($admin?'zion_admin_session':'zion_session');
 session_set_cookie_params(['lifetime'=>0,'path'=>$admin?'/admin':'/','secure'=>str_starts_with(base_url(),'https://'),'httponly'=>true,'samesite'=>'Lax']);
 session_start();
-try{($admin?new Zion\AdminApplication():new Zion\Application())->handle();}catch(Throwable $e){error_log('Application unavailable');http_response_code(503);echo 'Zion Storage';}
+try{($admin?new Zion\AdminApplication():new Zion\Application())->handle();}catch(Throwable $e){
+ if(parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH)==='/webhooks/stripe')Zion\ApiLog::record('stripe',$_SERVER['REQUEST_METHOD'],'/webhooks/stripe',503,microtime(true),['direction'=>'in','code'=>'webhook_bootstrap_failed','message'=>'Aplicația nu a putut inițializa baza de date sau configurația de plată.','context'=>['stage'=>'bootstrap','signature'=>'not_checked']]);
+ error_log('Application unavailable');http_response_code(503);echo 'Zion Storage';
+}
