@@ -1,6 +1,6 @@
 <section id="integrations"><h2>API-uri Stripe și Oblio</h2>
 <p>După salvarea unui serviciu, întreaga configurație a acestuia se citește din administrare, inclusiv valorile goale și opțiunile dezactivate. Setările acelui serviciu din .env sunt ignorate. Cheile sunt criptate în baza de date cu APP_KEY.</p>
-<p>La prima salvare, introdu cheile pe care vrei să le folosești. Ulterior, un câmp secret gol păstrează cheia salvată; bifează ștergerea pentru a o elimina. Salvarea Stripe testează conexiunea și sincronizează automat produsele și prețurile. Salvarea Oblio validează local configurația.</p>
+<p>La prima salvare, introdu cheile pe care vrei să le folosești. Cheile salvate afișează primele 7 și ultimele 6 caractere, cu mijlocul mascat. Pentru înlocuire, selectează întreaga valoare și introdu cheia nouă completă. Valoarea mascată neschimbată sau un câmp gol păstrează cheia salvată; bifează ștergerea pentru a o elimina. Salvarea Stripe testează conexiunea și sincronizează automat produsele și prețurile. Salvarea Oblio validează local configurația.</p>
 <nav class="filter-tabs" aria-label="Configurație Stripe"><?php foreach(['test'=>'TEST · Sandbox','live'=>'LIVE · Plăți reale'] as $mode=>$label): ?><a href="/admin?section=integrations&amp;stripe_mode=<?= $mode ?>" <?= $stripeMode===$mode?'aria-current="page"':'' ?>><?= e($label) ?><?= $stripeActiveMode===$mode?' · Activ':'' ?></a><?php endforeach ?></nav>
 <details open><summary>Stripe <?= strtoupper($stripeMode) ?> · <?= $stripeSaved?'Configurat din administrare':'.env (până la prima salvare)' ?></summary>
 <p>Modul activ pe site: <strong><?= strtoupper($stripeActiveMode) ?></strong>. Configurezi acum <strong><?= strtoupper($stripeMode) ?></strong>. Cheile, prețurile și verificările sunt separate între TEST și LIVE.</p>
@@ -10,7 +10,7 @@
 <form method="post" class="integration-form">
 <input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><input type="hidden" name="action" value="settings_save"><input type="hidden" name="provider" value="stripe"><input type="hidden" name="credential_mode" value="<?= $stripeMode ?>">
 <?php foreach(['secret_key'=>'Cheie API secretă Stripe (sk_'.$stripeMode.'_ / rk_'.$stripeMode.'_)','webhook_secret'=>'Secret semnare webhook (whsec_)'] as $key=>$label): ?>
-<label><?= e($label) ?><input type="password" name="<?= $key ?>" autocomplete="new-password" maxlength="2048" placeholder="<?= e($stripeSaved&&$stripeSettings[$key]?Zion\IntegrationSettings::maskedSecret($stripeSettings[$key]).' — salvată; lasă gol pentru păstrare':'Introdu cheia pentru administrare') ?>"></label>
+<label><?= e($label) ?><input type="text" name="<?= $key ?>" autocomplete="off" spellcheck="false" autocapitalize="none" maxlength="2048" value="<?= e($stripeSaved?Zion\IntegrationSettings::maskedSecret($stripeSettings[$key]):'') ?>" placeholder="Introdu cheia pentru administrare"></label>
 <?php if($key==='secret_key'): ?>
 <small>În <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer">Stripe → API keys</a>, selectează <?= $stripeMode==='test'?'sandboxul folosit la testare':'modul LIVE' ?> și copiază cheia secretă <code>sk_<?= $stripeMode ?>_…</code> sau o cheie restricționată <code>rk_<?= $stripeMode ?>_…</code> cu permisiunile necesare integrării. Cheia publică <code>pk_…</code> nu se folosește aici. <a href="https://docs.stripe.com/keys" target="_blank" rel="noopener noreferrer">Ghid oficial</a>.</small>
 <?php else: ?>
@@ -29,7 +29,7 @@
 <label class="check"><input type="checkbox" name="enabled" value="1" <?= $oblioSettings['enabled']?'checked':'' ?>> Activează emiterea reală în Oblio</label>
 <label>Email cont Oblio<input type="email" name="email" maxlength="254" value="<?= e($oblioSettings['email']) ?>" autocomplete="off"></label>
 <small>Adresa de email cu care te autentifici în Oblio; este identificatorul API <code>client_id</code>.</small>
-<label>Secret API Oblio<input type="password" name="secret" maxlength="2048" autocomplete="new-password" placeholder="<?= e($oblioSaved&&$oblioSettings['secret']?Zion\IntegrationSettings::maskedSecret($oblioSettings['secret']).' — salvat; lasă gol pentru păstrare':'Introdu secretul pentru administrare') ?>"></label>
+<label>Secret API Oblio<input type="text" name="secret" maxlength="2048" autocomplete="off" spellcheck="false" autocapitalize="none" value="<?= e($oblioSaved?Zion\IntegrationSettings::maskedSecret($oblioSettings['secret']):'') ?>" placeholder="Introdu secretul pentru administrare"></label>
 <small>În contul Oblio, deschide <strong>Setări → Date Cont</strong> și copiază tokenul <code>client_secret</code>. Nu introduce parola contului sau un <code>access_token</code> temporar. Secretul se regenerează când resetezi parola Oblio și trebuie actualizat aici. <a href="https://www.oblio.eu/api/" target="_blank" rel="noopener noreferrer">Documentație API Oblio</a>.</small>
 <label class="check"><input type="checkbox" name="clear_secret" value="1"> Șterge secretul API salvat</label>
 <div class="grid">

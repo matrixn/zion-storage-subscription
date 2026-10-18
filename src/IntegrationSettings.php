@@ -52,7 +52,10 @@ final class IntegrationSettings {
   }
   $secret=function(string $key)use($input,$old):string{
    if(!empty($input['clear_'.$key]))return '';
-   return trim((string)($input[$key]??''))?:($old[$key]??'');
+   $value=trim((string)($input[$key]??''));$previous=(string)($old[$key]??'');
+   if($value==='' || ($previous!=='' && $value===self::maskedSecret($previous)))return $previous;
+   if(str_contains($value,'•'))throw new \DomainException('Pentru înlocuire, introdu cheia completă, fără caracterele de mascare.');
+   return $value;
   };
   if($provider==='stripe'){
    $data=['secret_key'=>$secret('secret_key'),'webhook_secret'=>$secret('webhook_secret')];

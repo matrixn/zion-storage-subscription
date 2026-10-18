@@ -2,6 +2,7 @@
 
 ## 2026-10-18
 
+- Changed admin API fields to text inputs containing the saved masked preview, preserving complete credentials when unchanged previews are submitted.
 - Added partial previews of saved Stripe TEST/LIVE and Oblio API secrets in admin, with field-specific setup instructions and official links.
 - Added a localized two-scene home carousel combining the mobile backup animation with the illustrative Google Photos/shared-storage versus Zion dedicated-media comparison. Includes autoplay, pause, keyboard/swipe navigation, reduced-motion support and a fixed layout across scene changes.
 - Replaced the layer-stack icon with a generated lime photo-stack emblem across site branding, mobile touch/app icons, browser favicons and social sharing artwork. Preserved a high-resolution brand master and its generation brief.

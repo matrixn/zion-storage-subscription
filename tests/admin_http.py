@@ -99,6 +99,8 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','secret_key':'sk_test_httpSaved','webhook_secret':'whsec_httpSaved'})
             check(status==200 and 'Valorile din .env' in body and 'sk_test_httpSaved' not in body and 'whsec_httpSaved' not in body,'Stripe settings save without exposing secrets in HTML')
             check('sk_test••••••••pSaved' in body and 'whsec_h••••••••pSaved' in body,'saved TEST keys show partial previews')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','secret_key':'sk_test••••••••pSaved','webhook_secret':'whsec_h••••••••pSaved'})
+            check(status==200 and 'value="sk_test••••••••pSaved"' in body and 'value="whsec_h••••••••pSaved"' in body,'saving displayed input values preserves credentials and renders actual masked values')
             check('Verificare nereușită' in body and 'Nesincronizat' not in body,'automatic sync reports isolated transport failure instead of false success')
             check(request(admin,'/admin',{'action':'stripe_check'})[0]==419 and request(admin,'/admin',{'action':'stripe_sync'})[0]==419,'connection test and synchronization require CSRF')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'stripe_check','credential_mode':'test'})

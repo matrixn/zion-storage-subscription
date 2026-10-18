@@ -33,6 +33,14 @@ $db=new Zion\Database(':memory:');$db->migrate();$db->run('DELETE FROM billing_p
 $_ENV['ADMIN_EMAIL']='mode-fixture@example.com';$_ENV['ADMIN_PASSWORD']='mode-fixture-password';Zion\AccountControl::seedAdmin($db);$admin=$db->one('SELECT id FROM administrators')['id'];$_ENV['ADMIN_EMAIL']='';$_ENV['ADMIN_PASSWORD']='';
 $settings->save('stripe',['credential_mode'=>'test','secret_key'=>'sk_test_fake','webhook_secret'=>'whsec_testFixture'],$admin);
 $settings->save('stripe',['credential_mode'=>'live','secret_key'=>'sk_live_fake','webhook_secret'=>'whsec_liveFixture'],$admin);
+$settings->save('stripe',['credential_mode'=>'test','secret_key'=>Zion\IntegrationSettings::maskedSecret('sk_test_fake'),'webhook_secret'=>Zion\IntegrationSettings::maskedSecret('whsec_testFixture')],$admin);
+check($settings->stripe('test')['secret_key']==='sk_test_fake' && $settings->stripe('test')['webhook_secret']==='whsec_testFixture','resubmitting displayed Stripe masks retains complete encrypted credentials');
+$settings->save('oblio',['secret'=>'fixture-oblio-secret','language'=>'RO'],$admin);
+$settings->save('oblio',['secret'=>Zion\IntegrationSettings::maskedSecret('fixture-oblio-secret'),'language'=>'RO'],$admin);
+check($settings->oblio()['secret']==='fixture-oblio-secret','resubmitting displayed Oblio mask retains complete encrypted credential');
+try{$settings->save('oblio',['secret'=>'modified••••••••secret','language'=>'RO'],$admin);check(false,'edited mask accepted');}catch(DomainException $e){check($settings->oblio()['secret']==='fixture-oblio-secret','edited masks are rejected without overwriting stored secret');}
+$settings->save('oblio',['secret'=>Zion\IntegrationSettings::maskedSecret('fixture-oblio-secret'),'clear_secret'=>'1','language'=>'RO'],$admin);
+check($settings->oblio()['secret']==='','explicit clear overrides a submitted masked value');
 check($settings->stripe()['mode']==='test' && $settings->stripe('live')['secret_key']==='sk_live_fake','saving LIVE credentials does not activate LIVE or overwrite TEST');
 try{$settings->activateStripe('live',$admin);check(false,'unverified live activated');}catch(DomainException $e){check($settings->stripe()['mode']==='test','activation requires verified API and catalog');}
 $http=new ModeStripeHttp();Stripe\ApiRequestor::setHttpClient($http);
