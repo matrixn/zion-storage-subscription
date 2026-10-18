@@ -1,0 +1,5 @@
+<section><div class="panel-heading"><div><h2>Abonamente Stripe</h2><p>Starea salvată de webhook-uri. Maximum 100 de rezultate.</p></div><a class="button secondary" href="<?= $adminUrl('clients') ?>">Gestionează clienții ↗</a></div>
+<div class="table"><table><thead><tr><th>Client</th><th>Plan / interval</th><th>Stare</th><th>Reînnoire</th><th>Referință Stripe</th></tr></thead><tbody>
+<?php foreach($subscriptionRows as $r): ?><tr><td><?= e($r['email']) ?></td><td><?= e($r['plan']) ?><br><small><?= $r['billing_interval']==='year'?'Anual':'Lunar' ?> · <?= e(strtoupper($r['currency'])) ?></small></td><td><span class="badge"><?= e($r['status']) ?></span><br><small><?= $r['paid_confirmed']?'Ultima plată confirmată':'Plată neconfirmată' ?></small></td><td><?= e($formatDate($r['renewal_at'])) ?></td><td><code><?= e($r['stripe_subscription_id']) ?></code></td></tr><?php endforeach ?>
+<?php if(!$subscriptionRows): ?><tr><td colspan="5">Niciun abonament înregistrat. Planurile acordate manual se gestionează în Clienți.</td></tr><?php endif ?>
+</tbody></table></div></section>

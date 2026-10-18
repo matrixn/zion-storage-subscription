@@ -24,6 +24,8 @@ Run `php bin/console.php mail:work` to deliver queued email. Local `MAIL_TRANSPO
 
 ## Structure
 
+The admin dashboard summarizes clients, subscriptions, receipts by currency, upcoming renewals and operational queues. A vertical menu with at most two levels separates all management forms, billing catalog, API settings and audit views. See [dashboard metrics and navigation](docs/ADMIN-DASHBOARD.md).
+
 - `public/`: document root, front controller, local CSS/SVG and small progressive-enhancement script.
 - `src/`: routing, localization, controllers, database, account security and service adapters.
 - `templates/`: shared localized layouts; templates are not duplicated by locale.

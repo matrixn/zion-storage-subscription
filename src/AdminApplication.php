@@ -2,6 +2,7 @@
 namespace Zion;
 final class AdminApplication {
  private Database $db;private Plans $plans;private SubscriptionChanges $changes;private AdminService $service;private BillingCatalog $catalog;
+ private string $section='dashboard';
  public function __construct(){
   $this->db=new Database();$this->plans=new Plans($this->db);
  }
@@ -10,13 +11,20 @@ final class AdminApplication {
   $billing=new StripeService($this->db,$this->plans,$mail,$storage);$this->changes=$billing->changes();$this->catalog=$billing->catalog();
   $this->service=new AdminService($this->db,$this->plans,$mail,$storage,$this->changes);
  }
- private function redirect(): never {header('Location: /admin',true,303);exit;}
+ private function redirect(): never {header('Location: /admin?section='.$this->section,true,303);exit;}
  public function handle(): void {
   header('Cache-Control: private, no-store');header('X-Robots-Tag: noindex, nofollow');header('X-Content-Type-Options: nosniff');header('Referrer-Policy: no-referrer');
   header("Content-Security-Policy: default-src 'self'; style-src 'self'; script-src 'none'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   if(production())header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
   $path=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
+  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','audit'=>'Jurnal administrare'];
+  $action=(string)($_POST['action']??'');
+  $default=match(true){$action==='settings_save'=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $this->section=(string)($_GET['section']??$_POST['section']??$default);
+  if(!isset($sections[$this->section])){http_response_code(404);return;}
+  $section=$this->section;
+  $attentionOnly=($_GET['attention']??'')==='1';
   $admin=null;$error=null;$notice=$_SESSION['admin_notice']??null;unset($_SESSION['admin_notice']);
   if(($_SESSION['admin_until']??0)>time() && isset($_SESSION['admin_id']))$admin=$this->db->one('SELECT id,email FROM administrators WHERE id=?',[$_SESSION['admin_id']]);
   $method=$_SERVER['REQUEST_METHOD'];
@@ -36,7 +44,7 @@ final class AdminApplication {
      if($action!=='login' || !$allowed || !$row || !$valid)throw new \DomainException('Autentificare nereușită. Verifică datele sau încearcă mai târziu.');
      session_regenerate_id(true);$_SESSION=['admin_id'=>$row['id'],'admin_until'=>time()+3600,'csrf'=>bin2hex(random_bytes(32))];$this->redirect();
     }
-    if($action==='logout'){$_SESSION=[];session_regenerate_id(true);$this->redirect();}
+    if($action==='logout'){$_SESSION=[];session_regenerate_id(true);$this->section='dashboard';$this->redirect();}
     if($action==='settings_save'){
      (new IntegrationSettings($this->db))->save((string)($_POST['provider']??''),$_POST,$admin['id']);
      $_SESSION['admin_notice']='Configurația a fost salvată. Valorile din .env pentru acest serviciu sunt ignorate. Salvarea nu trimite cereri către furnizor.';$this->redirect();
@@ -72,10 +80,21 @@ final class AdminApplication {
    $integrations=new IntegrationSettings($this->db);$stripeSettings=$integrations->stripe();$oblioSettings=$integrations->oblio();
    $stripeSaved=$integrations->saved('stripe')!==null;$oblioSaved=$integrations->saved('oblio')!==null;
   }
-  if($admin){
-   $clients=$this->db->run("SELECT u.*,c.banned_at,c.reason,c.manual_plan,c.access_sync,c.quota_sync,s.status AS subscription_status,s.renewal_at FROM users u LEFT JOIN account_controls c ON c.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id WHERE (?='' OR instr(lower(u.email),lower(?))>0 OR instr(lower(u.name),lower(?))>0) ORDER BY u.created_at DESC LIMIT 100",[$search,$search,$search])->fetchAll();
-   $changes=$this->db->run('SELECT p.*,u.email FROM plan_changes p JOIN users u ON u.id=p.user_id ORDER BY p.created_at DESC LIMIT 100')->fetchAll();
+  if($admin && $section==='clients'){
+   $clients=$this->db->run("SELECT u.*,c.banned_at,c.reason,c.manual_plan,c.access_sync,c.quota_sync,s.status AS subscription_status,s.renewal_at FROM users u LEFT JOIN account_controls c ON c.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id WHERE (?='' OR instr(lower(u.email),lower(?))>0 OR instr(lower(u.name),lower(?))>0) AND (CAST(? AS INTEGER)=0 OR c.quota_sync<>'ready' OR c.access_sync<>'ready') ORDER BY u.created_at DESC LIMIT 100",[$search,$search,$search,(int)$attentionOnly])->fetchAll();
+  }
+  if($admin && $section==='changes'){
+   $changes=$this->db->run("SELECT p.*,u.email FROM plan_changes p JOIN users u ON u.id=p.user_id WHERE (CAST(? AS INTEGER)=0 OR p.status IN ('creating','paid','applying','retry','review')) ORDER BY p.created_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll();
+  }
+  if($admin && $section==='audit'){
    $audit=$this->db->run('SELECT a.*,ad.email AS admin_email,u.email AS customer_email FROM admin_audit a JOIN administrators ad ON ad.id=a.admin_id LEFT JOIN users u ON u.id=a.user_id ORDER BY a.id DESC LIMIT 100')->fetchAll();
+  }
+  if($admin){
+   $dashboard=in_array($section,['dashboard','operations'],true)?(new AdminDashboard($this->db))->snapshot():[];
+   $subscriptionRows=$section==='subscriptions'?$this->db->run("SELECT s.*,u.email FROM subscriptions s JOIN users u ON u.id=s.user_id WHERE (CAST(? AS INTEGER)=0 OR s.status IN ('past_due','unpaid','incomplete')) ORDER BY s.renewal_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll():[];
+   $fiscalRows=$section==='invoices'?$this->db->run("SELECT f.id,f.stripe_invoice_id,f.amount,f.currency,f.status,f.error_message,f.oblio_series,f.oblio_number,f.created_at,u.email FROM fiscal_invoices f JOIN users u ON u.id=f.user_id WHERE (CAST(? AS INTEGER)=0 OR f.status IN ('pending','processing','failed')) ORDER BY f.created_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll():[];
+   $mailRows=$section==='operations'?$this->db->run('SELECT recipient,kind,attempts,created_at FROM outbox WHERE sent_at IS NULL ORDER BY created_at LIMIT 30')->fetchAll():[];
+   $eventRows=$section==='operations'?$this->db->run("SELECT id,type,status,created_at FROM billing_events WHERE status<>'complete' ORDER BY created_at LIMIT 30")->fetchAll():[];
   }
   require dirname(__DIR__).'/templates/admin.php';
  }

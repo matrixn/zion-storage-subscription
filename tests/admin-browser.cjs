@@ -7,21 +7,53 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
  const browser=await playwright.chromium.launch({channel:process.env.BROWSER_CHANNEL||'chrome',headless:true});
  const context=await browser.newContext();const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(origin+'/admin');await page.locator('input[name=email]').fill('admin-fixture@example.com');await page.locator('input[name=password]').fill('fixture-admin-password');await page.getByRole('button',{name:'Intră în administrare'}).click();
- check(await page.getByRole('heading',{name:'Client nou'}).isVisible(),'browser administrator login');
+ check(await page.locator('h1').textContent()==='Dashboard','browser administrator lands on dashboard');
  const artifacts=path.join(__dirname,'artifacts');fs.mkdirSync(artifacts,{recursive:true});
+ const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','integrations','catalog','audit'];
  for(const width of [320,390,768,1440]){
-  await page.setViewportSize({width,height:900});
-  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'admin no page overflow '+width);
-  check(await page.getByRole('heading',{name:'Jurnal administrare'}).isVisible(),'admin audit visible '+width);
-  check(await page.getByRole('heading',{name:'Upgrade-uri și schimbări de plan'}).isVisible(),'admin upgrades visible '+width);
-  check(await page.locator('input[name=password]').getAttribute('type')==='password','new customer password masked');
-  check(await page.locator('input[name=secret_key]').getAttribute('type')==='password' && await page.locator('input[name=secret_key]').inputValue()==='','Stripe key masked and never prefilled');
-  await page.getByText('Oblio · Configurat din administrare',{exact:true}).click();
-  check(await page.locator('input[name=secret]').inputValue()==='' && await page.locator('input[name=secret]').getAttribute('type')==='password','Oblio secret masked and never prefilled');
-  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'expanded integration settings fit mobile');
-  await page.getByText('Oblio · Configurat din administrare',{exact:true}).click();
-  await page.screenshot({path:path.join(artifacts,'admin-'+width+'.png'),fullPage:true});
+  await page.setViewportSize({width,height:1000});
+  for(const section of sections){
+   const response=await page.goto(origin+'/admin?section='+section);
+   check(response.status()===200,'admin section renders '+section+width);
+   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'admin no page overflow '+section+width);
+   if(width<761)await page.locator('label[for=admin-menu]').click();
+   check(await page.locator('.sidebar a[aria-current=page]').count()===1,'one active navigation item '+section);
+   check(await page.locator('.sidebar nav ul ul ul').count()===0,'menu has at most two levels');
+   check(await page.locator('.sidebar nav a[aria-current=page]').isVisible(),'active item visible in vertical menu');
+   const rects=await page.locator('.sidebar nav a').evaluateAll(els=>els.map(el=>el.getBoundingClientRect().top));
+   check(rects.every((v,i)=>!i||v>=rects[i-1]),'navigation stays vertical');
+   if(width<761)await page.locator('label[for=admin-menu]').click();
+   if(section==='dashboard'){
+    check(await page.locator('[data-metric=clients]').textContent()==='2','dashboard reflects actual clients');
+    check((await page.locator('.revenue-values').innerText()).includes('1,99 EUR')&&(await page.locator('.revenue-values').innerText()).includes('9,99 RON'),'dashboard separates actual payment currencies');
+    check(await page.locator('input[name=secret_key],input[name=password]').count()===0,'dashboard excludes management forms');
+    await page.screenshot({path:path.join(artifacts,'admin-dashboard-'+width+'.png'),fullPage:true});
+   }
+   if(section==='new-client')check(await page.locator('input[name=password]').getAttribute('type')==='password','new customer password masked');
+   if(section==='subscriptions'){
+    check((await page.locator('table').innerText()).includes('upgrade-browser@example.com'),'subscription list includes active paid client');
+    await page.locator('.filter-tabs').getByRole('link',{name:'De verificat',exact:true}).click();
+    check(!(await page.locator('table').innerText()).includes('upgrade-browser@example.com'),'attention filter excludes healthy active subscription');
+    check(new URL(page.url()).searchParams.get('attention')==='1','attention filter is reflected in URL');
+   }
+   if(section==='integrations'){
+    check(await page.locator('input[name=secret_key]').inputValue()==='','Stripe key never prefilled');
+    await page.getByText('Oblio · Configurat din administrare',{exact:true}).click();
+    check(await page.locator('input[name=secret]').inputValue()===''&&await page.locator('input[name=secret]').getAttribute('type')==='password','Oblio secret masked and never prefilled');
+    check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'expanded integration settings fit');
+    await page.screenshot({path:path.join(artifacts,'admin-integrations-'+width+'.png'),fullPage:true});
+   }
+  }
  }
+ // Navigation and search also work without scripts.
+ const plain=await browser.newContext({javaScriptEnabled:false,viewport:{width:390,height:900}});
+ const nojs=await plain.newPage();await nojs.goto(origin+'/admin');
+ await nojs.locator('input[name=email]').fill('admin-fixture@example.com');await nojs.locator('input[name=password]').fill('fixture-admin-password');await nojs.getByRole('button',{name:'Intră în administrare'}).click();
+ await nojs.locator('label[for=admin-menu]').click();await nojs.locator('.sidebar').getByRole('link',{name:'Clienți',exact:true}).click();
+ await nojs.locator('input[name=q]').fill('upgrade-browser');await nojs.getByRole('button',{name:'Caută',exact:true}).click();
+ check(new URL(nojs.url()).searchParams.get('section')==='clients','search preserves dedicated section without JavaScript');
+ check((await nojs.locator('table').innerText()).includes('upgrade-browser@example.com')&&!(await nojs.locator('table').innerText()).includes('admin-client@example.com'),'client search filters matching records');
+ await plain.close();
  const customer=await browser.newContext();const flow=await customer.newPage();flow.on('pageerror',e=>errors.push(e.message));
  await flow.goto(verify);await flow.locator('button[type=submit],form button').first().click();
  await flow.getByRole('link',{name:'Mai mult spațiu'}).click();

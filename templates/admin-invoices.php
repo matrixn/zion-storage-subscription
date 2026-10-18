@@ -1,0 +1,5 @@
+<section><div class="panel-heading"><div><h2>Facturi fiscale</h2><p>Maximum 100 documente. Simulările sunt afișate separat de documentele emise.</p></div><a class="text-link" href="<?= $adminUrl('integrations') ?>">Setări Oblio ↗</a></div>
+<div class="table"><table><thead><tr><th>Client / dată</th><th>Document</th><th>Sumă încasată</th><th>Stare</th><th>Referință plată</th></tr></thead><tbody>
+<?php foreach($fiscalRows as $r): ?><tr><td><?= e($r['email']) ?><br><small><?= e($formatDate($r['created_at'])) ?></small></td><td><?= $r['oblio_number']?e($r['oblio_series'].' / '.$r['oblio_number']):'Fără număr fiscal' ?></td><td><?= e($money($r['amount'],$r['currency'])) ?></td><td><span class="badge"><?= e($r['status']) ?></span><?php if($r['error_message']): ?><br><small><?= e($r['error_message']) ?></small><?php endif ?></td><td><code><?= e($r['stripe_invoice_id']) ?></code></td></tr><?php endforeach ?>
+<?php if(!$fiscalRows): ?><tr><td colspan="5">Nu există documente fiscale înregistrate.</td></tr><?php endif ?>
+</tbody></table></div><p class="micro">Reîncercările documentelor sunt procesate de worker-ul fiscal configurat pe server.</p></section>

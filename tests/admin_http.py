@@ -51,7 +51,10 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             status,body,_=request(admin,'/admin',{'_csrf':token,'action':'login','email':'admin-fixture@example.com','password':'wrong-password'})
             check(status==422 and 'Client nou' not in body,'invalid admin password denied')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'login','email':'admin-fixture@example.com','password':'fixture-admin-password'})
-            check(status==200 and 'Client nou' in body,'administrator logs in with installed env credentials')
+            check(status==200 and 'Totul, dintr-o privire.' in body,'administrator logs in to dashboard with installed env credentials')
+            check('name="secret_key"' not in body and 'name="password"' not in body,'dashboard separates configuration and customer forms')
+            check(request(admin,'/admin?section=unknown')[0]==404,'unknown admin section is rejected')
+            body=request(admin,'/admin?section=catalog')[1]
             check('Catalog Stripe' in body and '21,89' in body and 'Titan' in body,'admin exposes six-option EUR catalog')
             check(request(admin,'/admin',{'action':'catalog_disable','plan':'120gb','billing_interval':'year'})[0]==419,'catalog writes require admin CSRF')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'catalog_save','plan':'120gb','billing_interval':'year','price_id':'invalid'})
@@ -89,7 +92,8 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             request(admin,'/admin',{'_csrf':csrf(body),'action':'plan','user_id':u['id'],'plan':'120gb','reason':'Manual downgrade'})
             check(Backend.records[0]['quotaSizeInBytes']==120_000_000_000,'admin manual downgrade synchronizes storage')
             body=request(admin,'/admin')[1]
-            check('API-uri Stripe' in body and 'Secret API Oblio' in body,'admin exposes API settings section')
+            body=request(admin,'/admin?section=integrations')[1]
+            check('API-uri Stripe' in body and 'Secret API Oblio' in body,'admin exposes dedicated API settings section')
             check(request(admin,'/admin',{'action':'settings_save','provider':'stripe','secret_key':'sk_test_httpSaved'})[0]==419,'API settings writes require admin CSRF')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','secret_key':'sk_test_httpSaved','webhook_secret':'whsec_httpSaved'})
             check(status==200 and 'Valorile din .env' in body and 'sk_test_httpSaved' not in body and 'whsec_httpSaved' not in body,'Stripe settings save without exposing secrets in HTML')
@@ -104,7 +108,9 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             if '--browser' in sys.argv:
                 db=sqlite3.connect(temp+'/app.sqlite');now=int(time.time());browser_id='b'*32;verify_token='c'*64
                 db.execute('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,email_verified_at,storage_user_id,status,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',(browser_id,'Upgrade Browser','upgrade-browser@example.com',u['password_hash'],'ro','120gb',now,'browser-storage','active',now,now,now,now))
-                db.execute("INSERT INTO subscriptions(user_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,plan,renewal_at,paid_confirmed,currency) VALUES(?,?,?,?,?,?,?,1,'eur')",(browser_id,'cus_browser','sub_browser','price_browser','active','120gb',now+29*86400))
+                db.execute("INSERT INTO subscriptions(user_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,plan,renewal_at,paid_confirmed,currency) VALUES(?,?,?,?,?,?,?,1,'eur')",(browser_id,'cus_browser','sub_browser','price_browser','active','120gb',now+2*86400))
+                db.execute("INSERT INTO invoices(id,user_id,amount,currency,created_at) VALUES(?,?,?,?,?)",('in_dashboard_eur',browser_id,199,'eur',now))
+                db.execute("INSERT INTO invoices(id,user_id,amount,currency,created_at) VALUES(?,?,?,?,?)",('in_dashboard_ron',browser_id,999,'ron',now))
                 for slug,price,amount in [('120gb','price_browser',199),('250gb','price_browser_plus',359),('500gb','price_browser_titan',599)]:
                     db.execute("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,status,created_at,updated_at) VALUES(?,?,'month','eur',?,'active',?,?)",(price,slug,amount,now,now))
                 db.execute('INSERT INTO subscription_origins VALUES(?,?,?,?,?)',('sub_browser',browser_id,now-86400,now+29*86400,'in_browser'))

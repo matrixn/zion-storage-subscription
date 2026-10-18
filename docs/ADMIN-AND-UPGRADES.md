@@ -1,5 +1,7 @@
 # Administration and paid upgrades
 
+The default /admin page is the [management dashboard](ADMIN-DASHBOARD.md). Use the vertical menu to open the dedicated client, subscription, upgrade, invoice, operations, API, catalog and audit sections.
+
 ## Install
 
 Set private `.env` values `ADMIN_EMAIL` and `ADMIN_PASSWORD` (12–200 bytes, at least 12 characters), then run:

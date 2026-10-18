@@ -1,0 +1,25 @@
+<?php
+$db=new Zion\Database(':memory:');$db->migrate();$metrics=new Zion\AdminDashboard($db);$now=time();
+$empty=$metrics->snapshot($now);
+check($empty['clients']['total']===0 && $empty['revenue']===[] && $empty['renewals']===[],'empty dashboard has no invented metrics');
+foreach(['banned','pending','active'] as $i=>$id)$db->run("INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,email_verified_at,status,storage_quota_bytes,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,'fixture','ro','120gb',?,?,120000000000,1,1,?,?)",[$id,$id,$id.'@example.com',$i===1?null:$now,$i===1?'pending':'active',$i===2?$now-40*86400:$now,$now]);
+$db->run("INSERT INTO account_controls(user_id,banned_at,updated_at) VALUES('banned',?,?)",[$now,$now]);
+$db->run("INSERT INTO account_controls(user_id,manual_plan,quota_sync,updated_at) VALUES('pending','120gb','pending',?)",[$now]);
+$db->run("INSERT INTO subscriptions(user_id,status,paid_confirmed,plan,renewal_at,billing_interval,currency) VALUES('banned','active',1,'120gb',?,'year','eur')",[$now+86400]);
+$db->run("INSERT INTO subscriptions(user_id,status,paid_confirmed,plan,renewal_at) VALUES('pending','past_due',0,'120gb',?)",[$now+86400]);
+foreach([['eur',199,$now],['EUR',359,$now],['ron',999,$now],['eur',999,$now-31*86400],['eur',999,$now+86400]] as $i=>[$currency,$amount,$created])$db->run("INSERT INTO invoices(id,user_id,amount,currency,created_at) VALUES(?,'banned',?,?,?)",['metric-'.$i,$amount,$currency,$created]);
+$db->run("INSERT INTO billing_events VALUES('evt_attention','invoice.paid','processing',?)",[$now]);
+$data=$metrics->snapshot($now);
+check($data['clients']['total']===3 && $data['clients']['new30']===2,'dashboard counts all clients and actual thirty-day registrations');
+check($data['clients']['active']===1 && $data['clients']['banned']===1 && $data['clients']['unverified']===1,'suspended accounts are excluded from active access metric');
+check($data['subscriptions']['active']===1 && $data['subscriptions']['yearly']===1 && $data['subscriptions']['attention']===1,'billing remains distinct from suspension and manual access');
+check(array_column($data['revenue'],'amount','currency')===['EUR'=>558,'RON'=>999],'revenue keeps currencies separate and excludes old/future payments');
+check(count($data['renewals'])===1 && $data['renewals'][0]['email']==='banned@example.com','renewals include only active paid subscriptions within seven days');
+check($data['queues']['webhooks']===1 && $data['queues']['quota']===1,'dashboard reports pending webhook and account synchronization');
+check($data['clients']['allocated']===360000000000,'allocated quota reports configured bytes independently of disk usage');
+$db->run("INSERT INTO plan_changes(id,user_id,kind,from_plan,to_plan,amount,currency,invoice_id,paid_at,status,created_at,updated_at) VALUES('metric_upgrade','banned','customer','120gb','250gb',160,'eur','in_metric_upgrade',?,'completed',?,?)",[$now,$now,$now]);
+$revenue=$metrics->snapshot($now)['revenue'];
+check(array_column($revenue,'amount','currency')===['EUR'=>718,'RON'=>999],'receipt metrics include confirmed one-time upgrades');
+$db->run("INSERT INTO invoices(id,user_id,amount,currency,created_at) VALUES('in_metric_upgrade','banned',160,'eur',?)",[$now]);
+check($metrics->snapshot($now)['revenue']===$revenue,'same payment invoice is never counted twice across sources');
+echo "\n$count total assertions passed, including admin dashboard metrics.\n";
