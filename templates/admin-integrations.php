@@ -1,16 +1,21 @@
 <section id="integrations"><h2>API-uri Stripe și Oblio</h2>
 <p>După salvarea unui serviciu, întreaga configurație a acestuia se citește din administrare, inclusiv valorile goale și opțiunile dezactivate. Setările acelui serviciu din .env sunt ignorate. Cheile sunt criptate în baza de date cu APP_KEY.</p>
-<p>La prima salvare, introdu din nou cheile pe care vrei să le folosești. După salvare, un câmp secret gol păstrează cheia salvată; bifează ștergerea pentru a o elimina. Salvarea validează formatul, fără a contacta furnizorii.</p>
-<details open><summary>Stripe · <?= $stripeSaved?'Configurat din administrare':'.env (până la prima salvare)' ?></summary>
-<p>Această versiune funcționează în Stripe TEST MODE. Creează separat prețurile din catalogul de mai jos.</p>
-<p>Endpoint webhook: <code><?= e(base_url().'/webhooks/stripe') ?></code>. Evenimente: checkout.session.completed, invoice.paid, invoice.payment_failed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted.</p>
+<p>La prima salvare, introdu cheile pe care vrei să le folosești. Ulterior, un câmp secret gol păstrează cheia salvată; bifează ștergerea pentru a o elimina. Salvarea Stripe testează conexiunea și sincronizează automat produsele și prețurile. Salvarea Oblio validează local configurația.</p>
+<nav class="filter-tabs" aria-label="Configurație Stripe"><?php foreach(['test'=>'TEST · Sandbox','live'=>'LIVE · Plăți reale'] as $mode=>$label): ?><a href="/admin?section=integrations&amp;stripe_mode=<?= $mode ?>" <?= $stripeMode===$mode?'aria-current="page"':'' ?>><?= e($label) ?><?= $stripeActiveMode===$mode?' · Activ':'' ?></a><?php endforeach ?></nav>
+<details open><summary>Stripe <?= strtoupper($stripeMode) ?> · <?= $stripeSaved?'Configurat din administrare':'.env (până la prima salvare)' ?></summary>
+<p>Modul activ pe site: <strong><?= strtoupper($stripeActiveMode) ?></strong>. Configurezi acum <strong><?= strtoupper($stripeMode) ?></strong>. Cheile, prețurile și verificările sunt separate între TEST și LIVE.</p>
+<p>3 produse și 6 prețuri recurente sunt create sau reutilizate automat în modul selectat: Personal, Plus și Titan, lunar și anual. Nu trebuie să completezi Product ID sau Price ID. Salvarea cheilor nu schimbă modul activ.</p>
+<?php require __DIR__.'/admin-stripe-status.php'; ?>
+<p>Endpoint webhook <?= strtoupper($stripeMode) ?>: <code><?= e(base_url().'/webhooks/stripe?mode='.$stripeMode) ?></code>. Evenimente: checkout.session.completed, invoice.paid, invoice.payment_failed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted.</p>
 <form method="post" class="integration-form">
-<input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><input type="hidden" name="action" value="settings_save"><input type="hidden" name="provider" value="stripe">
-<?php foreach(['secret_key'=>'Cheie API secretă Stripe (sk_test_ / rk_test_)','webhook_secret'=>'Secret semnare webhook (whsec_)'] as $key=>$label): ?>
+<input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><input type="hidden" name="action" value="settings_save"><input type="hidden" name="provider" value="stripe"><input type="hidden" name="credential_mode" value="<?= $stripeMode ?>">
+<?php foreach(['secret_key'=>'Cheie API secretă Stripe (sk_'.$stripeMode.'_ / rk_'.$stripeMode.'_)','webhook_secret'=>'Secret semnare webhook (whsec_)'] as $key=>$label): ?>
 <label><?= e($label) ?><input type="password" name="<?= $key ?>" autocomplete="new-password" maxlength="2048" placeholder="<?= $stripeSaved&&$stripeSettings[$key]?'Salvată — lasă gol pentru păstrare':'Introdu cheia pentru administrare' ?>"></label>
 <label class="check"><input type="checkbox" name="clear_<?= $key ?>" value="1"> Șterge cheia salvată pentru <?= e($label) ?></label>
 <?php endforeach ?>
-<button>Salvează configurația Stripe</button></form></details>
+<button>Salvează, testează și sincronizează <?= strtoupper($stripeMode) ?></button></form>
+<?php if($stripeActiveMode!==$stripeMode): ?><form method="post" class="integration-form"><input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><input type="hidden" name="credential_mode" value="<?= $stripeMode ?>"><p><?= $stripeMode==='live'?'Activarea LIVE permite plăți reale pentru înregistrările noi. Abonamentele de test rămân în TEST.':'Activarea TEST pornește plățile sandbox pentru înregistrările noi. Abonamentele LIVE existente continuă în LIVE.' ?></p><button name="action" value="stripe_activate">Activează <?= strtoupper($stripeMode) ?> pe site</button></form><?php endif ?>
+</details>
 <details><summary>Oblio · <?= $oblioSaved?'Configurat din administrare':'.env (până la prima salvare)' ?></summary>
 <p>Activarea emite documente fiscale reale. Pentru plăți Stripe de test, permisiunea separată de mai jos trebuie activată explicit. Fără emitere activată, documentele rămân simulări locale.</p>
 <form method="post" class="integration-form">

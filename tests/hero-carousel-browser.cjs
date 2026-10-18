@@ -6,6 +6,8 @@ let checks=0;function check(v,label){if(!v)throw Error(label);checks++;}
  for(const width of [320,360,390,430,768,1024,1440,1920])for(const locale of ['ro','en','fr','de']){
   await page.setViewportSize({width,height:1000});const res=await page.goto(origin+'/'+locale+'/');check(res.status()===200,'home '+locale+width);
   check(await page.locator('#hero-backup').isVisible(),'backup initially visible');
+  check(await page.locator('.sandbox-notice').count()===1&&(await page.locator('.sandbox-notice').innerText()).includes('Sandbox'),'sandbox notice rendered '+locale);
+  check(await page.locator('.sandbox-notice').evaluate(el=>{const a=el.getBoundingClientRect(),b=el.parentElement.querySelector('.brand').getBoundingClientRect();return a.top>=b.bottom-1&&a.right<=innerWidth;}),'sandbox notice fits header without covering logo '+locale+width);
   check(await page.locator('[data-hero-carousel]').getAttribute('data-running')==='false','reduced motion starts paused');
   check(await page.locator('[data-carousel-controls]').isVisible(),'controls progressively enabled');
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'backup no horizontal overflow '+locale+width);

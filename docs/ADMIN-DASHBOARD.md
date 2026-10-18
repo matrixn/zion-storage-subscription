@@ -10,11 +10,11 @@ Each dedicated view uses an allowlisted section query parameter, for example /ad
 - Active access: locally active users excluding suspended accounts. Unverified and suspended totals are separate.
 - Active subscriptions: active Stripe subscriptions with a confirmed latest payment, split monthly/yearly. Suspension does not cancel a subscription, so this metric remains independent of active access.
 - Attention: the sum of incomplete/reviewable upgrade operations, fiscal jobs, failed email attempts, unfinished webhook events, account synchronization problems and subscription payment problems. This is a count of conditions, not unique clients.
-- Recorded receipts: actual positive local Stripe invoice amounts and confirmed one-time upgrades from the last thirty days through the current time, grouped by original currency and deduplicated by invoice ID. These are gross TEST payments; refunds are not subtracted, and EUR/RON are never combined or converted.
+- Recorded receipts: actual positive local Stripe invoice amounts and confirmed one-time upgrades from the last thirty days through the current time, grouped by original currency and deduplicated by invoice ID. These are gross payments in the active TEST or LIVE mode; refunds are not subtracted, and EUR/RON are never combined or converted.
 - Plan distribution and configured allocated quota: local plan assignments and stored quota bytes. Quota is not used disk space or the server's physical free capacity.
 - Upcoming renewals: active paid subscriptions renewing within seven days; recent registrations and local integration configuration status.
 
-The dashboard makes no provider API calls. Configured integration status does not verify credentials or network connectivity. All dates display Europe/Bucharest. Refresh the page to update the snapshot. Metrics cover all local records, independently of the result limits in management tables.
+Financial/subscription metrics are filtered by the active Stripe mode; client/access/quota totals cover all accounts. The dashboard makes no provider API calls. Configured integration status does not verify credentials or network connectivity. All dates display Europe/Bucharest. Refresh the page to update the snapshot. Metrics cover all local records, independently of the result limits in management tables.
 
 ## Dedicated management views
 

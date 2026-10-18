@@ -35,6 +35,7 @@ final class OblioInvoiceService
              $amount,strtoupper($invoice['currency'] ?? ''),$plan['slug'],'zion-storage:'.$invoice['id'],EncryptedPayload::encode($source),
              'pending',time(),time()]
         );
+        $this->db->run('UPDATE fiscal_invoices SET stripe_mode=? WHERE id=?',[($invoice['livemode']??false)?'live':'test',$id]);
         return $id;
     }
 

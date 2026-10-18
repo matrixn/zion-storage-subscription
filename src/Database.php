@@ -19,6 +19,10 @@ final class Database {
    $existing=array_column($this->run('PRAGMA table_info('.$table.')')->fetchAll(),'name');
    foreach($columns as $name=>$type)if(!in_array($name,$existing,true))$this->pdo->exec('ALTER TABLE '.$table.' ADD COLUMN '.$name.' '.$type);
   }
+  foreach(['users','subscriptions','checkout_sessions','plan_changes','billing_prices','invoices','fiscal_invoices','billing_events'] as $table){
+   if(!in_array('stripe_mode',array_column($this->run('PRAGMA table_info('.$table.')')->fetchAll(),'name'),true))$this->pdo->exec("ALTER TABLE ".$table." ADD COLUMN stripe_mode TEXT NOT NULL DEFAULT 'test' CHECK(stripe_mode IN ('test','live'))");
+  }
+  $this->pdo->exec("DROP INDEX IF EXISTS active_billing_price; CREATE UNIQUE INDEX IF NOT EXISTS active_billing_price_mode ON billing_prices(plan,interval,stripe_mode) WHERE status='active'");
   // One-time read of former environment mappings. New purchases never use these RON IDs.
   if(!$this->one("SELECT key FROM integration_settings WHERE key='catalog_env_import_v1'"))$this->transaction(function(){
    foreach(['120gb','250gb','500gb'] as $plan)foreach(array_filter(array_map('trim',explode(',',env('STRIPE_PRICE_'.strtoupper($plan)).','.env('STRIPE_LEGACY_PRICE_'.strtoupper($plan))))) as $id)$this->run("INSERT OR IGNORE INTO billing_prices(price_id,plan,interval,currency,status,created_at,updated_at) VALUES(?,?,'month','ron','legacy',?,?)",[$id,$plan,time(),time()]);

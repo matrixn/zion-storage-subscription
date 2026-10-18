@@ -45,13 +45,13 @@ Verification tokens contain 32 random bytes, are hashed with SHA-256, expire aft
 
 Verified users can resume signup through a new one-use email link. The secure session expires after four hours. Email links never contain passwords. Existing-email registration and resend use generic responses. Verification resend is limited per IP and email. Storage creation is serialized per user and reconciled using a safe opaque label after timeouts.
 
-## Billing (TEST MODE)
+## Billing (TEST / LIVE)
 
-Only Stripe test keys and non-live webhook events are accepted in this release. No live billing was enabled.
+Separate Stripe TEST and LIVE profiles are configured in /admin. TEST remains the initial active mode. Saving credentials automatically verifies API/catalog access and synchronizes products/prices; switching the public mode is a separate, validated administrator action. No real LIVE billing was enabled during development.
 
-1. Install/migrate the database and sign into /admin. Configure the Stripe API key and webhook signing secret in **API-uri Stripe și Oblio** (TEST MODE). After saving a service, all its .env settings are ignored; see [API settings](docs/API-SETTINGS.md).
-2. In the billing catalog, create or validate the six EUR recurring Prices: Personal 199/month or 2189/year, Plus 359/month or 3949/year, Titan 599/month or 6589/year, in minor units. Annual billing gives one month free. Product/Price mappings live in the database, not .env. See [pricing configuration and transition](docs/PRICING.md).
-3. Register `/webhooks/stripe`, configure STRIPE_WEBHOOK_SECRET and subscribe to:
+1. Install/migrate the database and sign into /admin. Configure the Stripe API key and webhook signing secret in **API-uri Stripe și Oblio**, selecting TEST or LIVE. After saving a service, all its .env settings are ignored; see [API settings](docs/API-SETTINGS.md).
+2. Saving the profile automatically creates/reuses the six EUR recurring Prices: Personal 199/month or 2189/year, Plus 359/month or 3949/year, Titan 599/month or 6589/year, in minor units. Annual billing gives one month free. Product/Price mappings live in the database, not .env. See [pricing configuration and transition](docs/PRICING.md).
+3. Register separate `/webhooks/stripe?mode=test` and `?mode=live` endpoints, save each signing secret in the corresponding admin profile and subscribe to:
    - checkout.session.completed
    - invoice.paid
    - invoice.payment_failed

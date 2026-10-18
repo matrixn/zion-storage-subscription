@@ -27,7 +27,7 @@ final class Application {
    if($method!=='POST') {http_response_code(405);return;}
    if((int)($_SERVER['CONTENT_LENGTH']??0)>1048576){http_response_code(413);return;}
    try{$this->billing->receive(file_get_contents('php://input',false,null,0,1048577),$_SERVER['HTTP_STRIPE_SIGNATURE']??'');http_response_code(204);}
-   catch(\Stripe\Exception\SignatureVerificationException|\UnexpectedValueException $e){http_response_code(400);}
+   catch(\Stripe\Exception\SignatureVerificationException|\UnexpectedValueException|\JsonException $e){http_response_code(400);}
    catch(\Throwable $e){error_log('Billing event requires retry');http_response_code(503);}
    return;
   }
@@ -151,6 +151,7 @@ final class Application {
   $locale=$this->locale; $page=$this->page; $t=fn(string $k,array $v=[])=>$this->tr->get($k,$v); $url=fn(string $p,string $l='')=>Router::path($l?:$locale,$p);
   $billingInterval=(string)($_POST['billing_interval']??$_GET['billing_interval']??'month');if(!in_array($billingInterval,['month','year'],true))$billingInterval='month';
   $plans=$this->plans->all($billingInterval);$user=$this->user();$eligible=$user?$this->accounts->eligible($user):false;
+  $stripeMode=(new IntegrationSettings($this->db))->stripe()['mode'];
   $banned=$user?(new AccountControl($this->db))->banned($user['id']):false;
   $upgradeOffers=$user && $this->billing instanceof StripeService?$this->billing->changes()->offers($user):[];
   $latestChange=$user?$this->db->one('SELECT * FROM plan_changes WHERE user_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',[$user['id']]):null;

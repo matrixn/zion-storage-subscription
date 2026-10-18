@@ -99,3 +99,4 @@ require __DIR__.'/changes.php';
 require __DIR__.'/catalog.php';
 require __DIR__.'/integration-settings.php';
 require __DIR__.'/admin-dashboard.php';
+require __DIR__.'/stripe-modes.php';

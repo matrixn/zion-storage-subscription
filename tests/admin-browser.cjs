@@ -37,12 +37,20 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
     check(new URL(page.url()).searchParams.get('attention')==='1','attention filter is reflected in URL');
    }
    if(section==='integrations'){
+    check(await page.getByRole('button',{name:'Testează conexiunea Stripe',exact:true}).isVisible()&&await page.getByRole('button',{name:'Sincronizează automat catalogul',exact:true}).isVisible(),'Stripe connection and full catalog controls are available');
     check(await page.locator('input[name=secret_key]').inputValue()==='','Stripe key never prefilled');
     await page.getByText('Oblio · Configurat din administrare',{exact:true}).click();
     check(await page.locator('input[name=secret]').inputValue()===''&&await page.locator('input[name=secret]').getAttribute('type')==='password','Oblio secret masked and never prefilled');
     check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'expanded integration settings fit');
     await page.screenshot({path:path.join(artifacts,'admin-integrations-'+width+'.png'),fullPage:true});
+    await page.locator('nav[aria-label="Configurație Stripe"]').getByRole('link',{name:'LIVE · Plăți reale',exact:true}).click();
+    check(await page.locator('input[name=credential_mode]').first().inputValue()==='live','LIVE profile selected independently');
+    check(await page.getByRole('button',{name:'Activează LIVE pe site',exact:true}).isVisible(),'LIVE activation remains an explicit action');
+    check(await page.locator('input[name=secret_key]').inputValue()===''&&await page.locator('input[name=webhook_secret]').inputValue()==='','neither LIVE secret is rendered back into HTML');
+    check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'LIVE profile fits mobile');
+    await page.screenshot({path:path.join(artifacts,'admin-stripe-live-'+width+'.png'),fullPage:true});
    }
+   if(section==='catalog')check(await page.locator('.table').first().locator('input[name=price_id]').count()===0,'main catalog no longer asks for manual Price IDs');
   }
  }
  // Navigation and search also work without scripts.

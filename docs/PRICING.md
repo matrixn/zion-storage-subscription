@@ -12,11 +12,11 @@ Annual billing charges the displayed total once per year: twelve months of stora
 
 ## Configure through /admin
 
-Run php bin/console.php install, then sign into /admin with the administrator seeded from ADMIN_EMAIL and ADMIN_PASSWORD. Save Stripe secret/webhook credentials in its API settings section; this disables environment fallback for Stripe. In the catalog, either validate/save an existing Price ID or create the matching TEST Product/Price for each of the six paid options. Creation uses one Product per plan and separate monthly/yearly Prices. Stable product IDs, lookup keys and idempotency keys allow retries to reuse created objects. See [API configuration](API-SETTINGS.md).
+Run php bin/console.php install, then sign into /admin with the administrator seeded from ADMIN_EMAIL and ADMIN_PASSWORD. Save Stripe secret/webhook credentials in its API settings section; this disables environment fallback for Stripe. Saving the selected TEST/LIVE API profile automatically creates/reuses all six Product/Price options; no manual IDs are required. The catalog also offers one full synchronization button. Creation uses one Product per plan and separate monthly/yearly Prices. Stable product IDs, lookup keys and idempotency keys allow retries to reuse created objects. See [API configuration](API-SETTINGS.md).
 
-Validation requires TEST MODE, active Price, exact EUR minor-unit amount and recurring interval/count. Checkout validates again before issuing a session. Replacing/disabling a mapping affects new purchases only; historical IDs remain recognizable. Catalog actions require admin authentication and CSRF and are audited. Keep billing_prices and billing_products in database backups.
+Validation requires the selected Stripe mode, active Price, exact EUR minor-unit amount and recurring interval/count. Checkout validates again before issuing a session. Replacing/disabling a mapping affects new purchases only; historical IDs remain recognizable. Catalog actions require admin authentication and CSRF and are audited. Keep billing_prices and stripe_catalog_products in database backups.
 
-This release accepts TEST MODE only. No real Stripe account or hosted payment was contacted during local automated validation; SDK fixtures validate requests and responses. Credentials and actual hosted Checkout totals require operator acceptance.
+TEST and LIVE use independent keys, catalogs and webhook verification. TEST is the initial active mode, with a localized sandbox notice in the site header. No real Stripe account or hosted payment was contacted during local automated validation; SDK fixtures validate requests and responses. Credentials and actual hosted Checkout totals require operator acceptance.
 
 ## Existing subscriptions
 

@@ -5,7 +5,13 @@ namespace Zion;
 /** Durable, serialized operations. Browser redirects never grant an entitlement. */
 class SubscriptionChanges {
  public static function displayDate(int $timestamp): string { return (new \DateTimeImmutable('@'.$timestamp))->setTimezone(new \DateTimeZone('Europe/Bucharest'))->format('d.m.Y H:i').' (Europe/Bucharest)'; }
- public function __construct(private Database $db,private Plans $plans,private MailerService $mail,private StorageProvisioningService $storage,private \Stripe\StripeClient $stripe,private OblioInvoiceService $fiscal) {}
+ public function __construct(private Database $db,private Plans $plans,private MailerService $mail,private StorageProvisioningService $storage,private \Stripe\StripeClient $stripe,private OblioInvoiceService $fiscal,private string $mode='test') {}
+ private function useMode(string $mode): void {
+  $settings=(new IntegrationSettings($this->db))->stripe($mode);
+  if(!$settings['secret_key'] || !preg_match('/^(sk|rk)_'.$mode.'_/',$settings['secret_key']))throw new \DomainException('upgrade.unconfigured');
+  if($mode!==$this->mode || $this->stripe->getApiKey()!==$settings['secret_key'])$this->stripe=new \Stripe\StripeClient($settings['secret_key']);
+  $this->mode=$mode;
+ }
  public function serialized(string $uid,callable $fn): mixed {
   $global=fopen(dirname(__DIR__).'/storage/billing.lock','c');flock($global,LOCK_EX);
   $user=fopen(dirname(__DIR__).'/storage/provision-'.$uid.'.lock','c');flock($user,LOCK_EX);
@@ -17,11 +23,11 @@ class SubscriptionChanges {
   $s=$this->db->one("SELECT * FROM subscriptions WHERE user_id=? AND status='active' AND paid_confirmed=1",[$u['id']]);
   if(!$s) return [];
   $origin=$this->db->one('SELECT * FROM subscription_origins WHERE stripe_subscription_id=?',[$s['stripe_subscription_id']]);
-  $interval=$s['billing_interval']??'month';$from=$this->plans->get($s['plan'],$interval);
+  $interval=$s['billing_interval']??'month';$from=$this->plans->get($s['plan'],$interval,$s['stripe_mode']);
   if(!$from || $s['currency']!==$from['currency'] || $s['stripe_price_id']!==$from['stripe_price_id'])return [];
   if(!$origin || !$from || $from['slug']==='free' || $now>$origin['purchased_at']+5*86400 || $now>=$origin['original_period_end'])return [];
   $offers=[];
-  foreach($this->plans->all($interval) as $p) if($p['storage_bytes']>$from['storage_bytes'] && $p['price_amount']>$from['price_amount']) {
+  foreach($this->plans->all($interval,$s['stripe_mode']) as $p) if($p['storage_bytes']>$from['storage_bytes'] && $p['price_amount']>$from['price_amount']) {
    $offers[]=['plan'=>$p,'amount'=>$p['price_amount']-$from['price_amount'],'deadline'=>$origin['purchased_at']+5*86400,'renewal_at'=>$s['renewal_at']];
   }
   return $offers;
@@ -49,25 +55,27 @@ class SubscriptionChanges {
    // Checkout requires at least 30 minutes. Existing sessions remain valid up to the exact five-day cutoff.
    if($offer['deadline']-time()<1830)throw new \DomainException('upgrade.closing');
    $local=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
+   $this->useMode($local['stripe_mode']);
    $s=$this->stripe->subscriptions->retrieve($local['stripe_subscription_id'])->toArray();
-   $from=$this->plans->get($u['selected_plan_id'],$local['billing_interval']);$p=$offer['plan'];$item=$s['items']['data'][0]??[];
+   $from=$this->plans->get($u['selected_plan_id'],$local['billing_interval'],$local['stripe_mode']);$p=$offer['plan'];$item=$s['items']['data'][0]??[];
    $this->validateSubscription($s,$u,$from,$local['renewal_at']);
-   if(!$p['stripe_price_id'] || !(new IntegrationSettings($this->db))->stripe()['secret_key'])throw new \DomainException('upgrade.unconfigured');
+   if(!$p['stripe_price_id'] || !(new IntegrationSettings($this->db))->stripe($this->mode)['secret_key'])throw new \DomainException('upgrade.unconfigured');
    $price=$this->stripe->prices->retrieve($p['stripe_price_id'])->toArray();
    if(($price['currency']??'')!==$p['currency'] || ($price['unit_amount']??null)!==$p['price_amount'] || ($price['recurring']['interval']??'')!==$p['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || !($price['active']??false))throw new \DomainException('upgrade.unconfigured');
    if(!(new BillingProfileService($this->db))->get($u['id']))throw new \DomainException('billing.required');
    $id=bin2hex(random_bytes(16));$expires=min(time()+86400,$offer['deadline']);
    $this->db->transaction(function()use($id,$u,$s,$item,$from,$p,$offer,$local,$expires){
    $this->db->run("INSERT INTO plan_changes(id,user_id,kind,stripe_subscription_id,customer_id,item_id,from_plan,to_plan,from_price,to_price,amount,period_end,deadline,expires_at,status,created_at,updated_at) VALUES(?,?,'customer',?,?,?,?,?,?,?,?,?,?,?,'creating',?,?)",[$id,$u['id'],$s['id'],$s['customer'],$item['id'],$from['slug'],$p['slug'],$from['stripe_price_id'],$p['stripe_price_id'],$offer['amount'],$local['renewal_at'],$offer['deadline'],$expires,time(),time()]);
-   $this->db->run('UPDATE plan_changes SET currency=?,billing_interval=? WHERE id=?',[$p['currency'],$p['billing_interval'],$id]);
+   $this->db->run('UPDATE plan_changes SET currency=?,billing_interval=?,stripe_mode=? WHERE id=?',[$p['currency'],$p['billing_interval'],$this->mode,$id]);
    });
    return $this->createSession($this->record($id),$u);
   });
  }
  private function createSession(array $r,array $u): string {
+  $this->useMode($r['stripe_mode']);
   if($r['checkout_url'])return $r['checkout_url'];
   if($r['expires_at']-time()<1800)throw new \DomainException('upgrade.closing');
-  $p=$this->plans->get($r['to_plan'],$r['billing_interval']);$meta=['upgrade_id'=>$r['id'],'user_id'=>$u['id']];
+  $p=$this->plans->get($r['to_plan'],$r['billing_interval'],$r['stripe_mode']);$meta=['upgrade_id'=>$r['id'],'user_id'=>$u['id']];
   $session=$this->stripe->checkout->sessions->create([
    'mode'=>'payment','customer'=>$r['customer_id'],'client_reference_id'=>$u['id'],'payment_method_types'=>['card'],
    'locale'=>$u['locale'],'expires_at'=>$r['expires_at'],'metadata'=>$meta,'payment_intent_data'=>['metadata'=>$meta],
@@ -81,7 +89,7 @@ class SubscriptionChanges {
  public function record(string $id): array { return $this->db->one('SELECT * FROM plan_changes WHERE id=?',[$id])??throw new \DomainException('upgrade.unavailable'); }
  private function validateSubscription(array $s,array $u,array $from,?int $end): void {
   $items=$s['items']['data']??[];$item=$items[0]??[];$price=$item['price']??[];
-  if(count($items)!==1 || ($item['quantity']??1)!==1 || ($s['metadata']['user_id']??'')!==$u['id'] || ($s['status']??'')!=='active' || ($s['cancel_at_period_end']??false) || !empty($s['schedule']) || !empty($s['pending_update']) || ($price['id']??'')!==$from['stripe_price_id'] || ($price['currency']??'')!==$from['currency'] || ($price['unit_amount']??null)!==$from['price_amount'] || ($price['recurring']['interval']??'')!==$from['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || ($item['current_period_end']??$s['current_period_end']??null)!==$end)throw new \DomainException('upgrade.unavailable');
+  if(($s['livemode']??false)!==($this->mode==='live') || count($items)!==1 || ($item['quantity']??1)!==1 || ($s['metadata']['user_id']??'')!==$u['id'] || ($s['status']??'')!=='active' || ($s['cancel_at_period_end']??false) || !empty($s['schedule']) || !empty($s['pending_update']) || ($price['id']??'')!==$from['stripe_price_id'] || ($price['currency']??'')!==$from['currency'] || ($price['unit_amount']??null)!==$from['price_amount'] || ($price['recurring']['interval']??'')!==$from['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || ($item['current_period_end']??$s['current_period_end']??null)!==$end)throw new \DomainException('upgrade.unavailable');
  }
  /** Called under the billing + user locks by webhooks or retry worker. */
  public function fulfill(string $id): void {
@@ -94,6 +102,7 @@ class SubscriptionChanges {
  private function performFulfillment(string $id): void {
   $r=$this->record($id);
   if($r['status']==='completed')return;
+  $this->useMode($r['stripe_mode']);
   if($r['kind']==='admin'){ $this->apply($r);return; }
   if(!$r['checkout_session_id']){
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$r['user_id']]);
@@ -106,14 +115,14 @@ class SubscriptionChanges {
   }
   if(($session['payment_status']??'')!=='paid')return;
   $pi=$session['payment_intent']??[];$charge=$pi['latest_charge']??[];$paidAt=$charge['created']??null;
-  if(($session['livemode']??true) || ($pi['status']??'')!=='succeeded' || ($pi['amount_received']??null)!==$r['amount'] || ($session['amount_total']??null)!==$r['amount'] || ($session['currency']??'')!==$r['currency'] || ($session['customer']??'')!==$r['customer_id'] || ($session['metadata']['upgrade_id']??'')!==$id || ($pi['metadata']['upgrade_id']??'')!==$id || !is_int($paidAt) || $paidAt<$r['created_at'] || !($charge['paid']??false))throw new \RuntimeException('upgrade_payment_mismatch');
+  if(($session['livemode']??null)!==($r['stripe_mode']==='live') || ($pi['status']??'')!=='succeeded' || ($pi['amount_received']??null)!==$r['amount'] || ($session['amount_total']??null)!==$r['amount'] || ($session['currency']??'')!==$r['currency'] || ($session['customer']??'')!==$r['customer_id'] || ($session['metadata']['upgrade_id']??'')!==$id || ($pi['metadata']['upgrade_id']??'')!==$id || !is_int($paidAt) || $paidAt<$r['created_at'] || !($charge['paid']??false))throw new \RuntimeException('upgrade_payment_mismatch');
   $invoice=$session['invoice']??null;
-  if(!is_array($invoice) || ($invoice['status']??'')!=='paid' || ($invoice['amount_paid']??null)!==$r['amount'] || ($invoice['currency']??'')!==$r['currency'] || ($invoice['customer']??'')!==$r['customer_id'] || ($invoice['metadata']['upgrade_id']??'')!==$id)throw new \RuntimeException('upgrade_invoice_pending');
+  if(!is_array($invoice) || ($invoice['livemode']??null)!==($r['stripe_mode']==='live') || ($invoice['status']??'')!=='paid' || ($invoice['amount_paid']??null)!==$r['amount'] || ($invoice['currency']??'')!==$r['currency'] || ($invoice['customer']??'')!==$r['customer_id'] || ($invoice['metadata']['upgrade_id']??'')!==$id)throw new \RuntimeException('upgrade_invoice_pending');
   $paidAt=$invoice['status_transitions']['paid_at']??null;
   if(!is_int($paidAt) || $paidAt<$r['created_at'])throw new \RuntimeException('upgrade_payment_mismatch');
   $this->db->run("UPDATE plan_changes SET status='paid',paid_at=?,payment_intent_id=?,invoice_id=?,updated_at=? WHERE id=?",[$paidAt,$pi['id'],$invoice['id'],time(),$id]);
   $r=$this->record($id);$u=$this->db->one('SELECT * FROM users WHERE id=?',[$r['user_id']]);
-  $this->fiscal->captureUpgrade($invoice,$u,$r,$this->plans->get($r['to_plan'],$r['billing_interval']));
+  $this->fiscal->captureUpgrade($invoice,$u,$r,$this->plans->get($r['to_plan'],$r['billing_interval'],$r['stripe_mode']));
   if($paidAt>$r['deadline']){
    $this->db->run("UPDATE plan_changes SET status='review',error_code='upgrade_payment_outside_window',updated_at=? WHERE id=?",[time(),$id]);
    throw new \RuntimeException('upgrade_payment_outside_window');
@@ -121,7 +130,7 @@ class SubscriptionChanges {
   $this->apply($r);
  }
  private function apply(array $r): void {
-  $p=$this->plans->get($r['to_plan'],$r['billing_interval']);$uid=$r['user_id'];
+  $p=$this->plans->get($r['to_plan'],$r['billing_interval'],$r['stripe_mode']);$uid=$r['user_id'];
   $this->db->run("UPDATE plan_changes SET status='applying',updated_at=? WHERE id=?",[time(),$r['id']]);
   try {
    $s=$this->stripe->subscriptions->retrieve($r['stripe_subscription_id'])->toArray();
@@ -140,8 +149,9 @@ class SubscriptionChanges {
   if(($s['status']??'')!=='active')return;
   $r=$this->db->one("SELECT * FROM plan_changes WHERE stripe_subscription_id=? AND status IN ('paid','applying','retry') AND to_price=?",[$s['id'],$s['items']['data'][0]['price']['id']??'']);
   if(!$r || ($r['kind']==='customer' && !$r['paid_at']))return;
+  if(($s['livemode']??false)!==($r['stripe_mode']==='live'))throw new \RuntimeException('change_mode_mismatch');
   if(($s['metadata']['user_id']??'')!==$r['user_id'] || ($s['metadata']['plan']??'')!==$r['to_plan'] || ($s['items']['data'][0]['current_period_end']??$s['current_period_end']??0)!==$r['period_end'])throw new \RuntimeException('change_reconciliation_mismatch');
-  $p=$this->plans->get($r['to_plan'],$r['billing_interval']);$u=$this->db->one('SELECT * FROM users WHERE id=?',[$r['user_id']]);
+  $p=$this->plans->get($r['to_plan'],$r['billing_interval'],$r['stripe_mode']);$u=$this->db->one('SELECT * FROM users WHERE id=?',[$r['user_id']]);
   // Persist billing identity before provisioning. A failed quota update remains retryable.
   $this->db->transaction(function()use($r,$p){
    $this->db->run('UPDATE users SET selected_plan_id=?,updated_at=? WHERE id=?',[$p['slug'],time(),$r['user_id']]);
@@ -156,7 +166,7 @@ class SubscriptionChanges {
  }
  public function cancel(string $id): void {
   $r=$this->record($id);$this->serialized($r['user_id'],function()use($id){
-   $r=$this->record($id);if(!in_array($r['status'],['creating','pending'],true))throw new \DomainException('Plata confirmată nu poate fi anulată aici.');
+   $r=$this->record($id);$this->useMode($r['stripe_mode']);if(!in_array($r['status'],['creating','pending'],true))throw new \DomainException('Plata confirmată nu poate fi anulată aici.');
    if($r['checkout_session_id']){
     $s=$this->stripe->checkout->sessions->retrieve($r['checkout_session_id']);
     if($s->status==='complete')throw new \DomainException('Plata este în procesare. Folosește Reîncearcă.');
@@ -173,8 +183,9 @@ class SubscriptionChanges {
    if($u['storage_user_id'] && $this->storage->getUsage($u['storage_user_id'])['used']>$p['storage_bytes'])throw new \DomainException('Fișierele existente depășesc cota planului ales.');
    $local=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$uid]);
    if($local && !in_array($local['status'],['canceled','incomplete_expired'],true)){
+    $this->useMode($local['stripe_mode']);
     if($target==='free')throw new \DomainException('Anulează mai întâi abonamentul Stripe; trecerea la gratuit nu anulează plățile implicit.');
-    $s=$this->stripe->subscriptions->retrieve($local['stripe_subscription_id'])->toArray();$from=$this->plans->get($u['selected_plan_id'],$local['billing_interval']);$p=$this->plans->get($target,$local['billing_interval']);
+    $s=$this->stripe->subscriptions->retrieve($local['stripe_subscription_id'])->toArray();$from=$this->plans->get($u['selected_plan_id'],$local['billing_interval'],$local['stripe_mode']);$p=$this->plans->get($target,$local['billing_interval'],$local['stripe_mode']);
     $this->validateSubscription($s,$u,$from,$local['renewal_at']);
     $price=$this->stripe->prices->retrieve($p['stripe_price_id'])->toArray();
     if(($price['unit_amount']??null)!==$p['price_amount'] || ($price['currency']??'')!==$p['currency'] || ($price['recurring']['interval']??'')!==$p['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || !($price['active']??false))throw new \DomainException('Preț Stripe neconfigurat.');
@@ -182,7 +193,7 @@ class SubscriptionChanges {
     $this->db->transaction(function()use($id,$uid,$s,$from,$p,$local,$admin,$reason){
      $this->db->run("INSERT INTO plan_changes(id,user_id,kind,stripe_subscription_id,customer_id,item_id,from_plan,to_plan,from_price,to_price,amount,period_end,status,created_at,updated_at) VALUES(?,?,'admin',?,?,?,?,?,?,?,0,?,'applying',?,?)",[$id,$uid,$s['id'],$s['customer'],$s['items']['data'][0]['id'],$from['slug'],$p['slug'],$from['stripe_price_id'],$p['stripe_price_id'],$local['renewal_at'],time(),time()]);
      $this->audit($admin,$uid,'plan_change',$from['slug'].' → '.$p['slug'].'; fără încasare/refund în perioada curentă; '.$reason);
-     $this->db->run('UPDATE plan_changes SET currency=?,billing_interval=? WHERE id=?',[$p['currency'],$p['billing_interval'],$id]);
+     $this->db->run('UPDATE plan_changes SET currency=?,billing_interval=?,stripe_mode=? WHERE id=?',[$p['currency'],$p['billing_interval'],$this->mode,$id]);
     });
     $this->apply($this->record($id));
    }else{

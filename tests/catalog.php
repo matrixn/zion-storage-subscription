@@ -2,19 +2,29 @@
 // SDK fixtures exercise catalog writes without contacting Stripe.
 final class CatalogHttp implements Stripe\HttpClient\ClientInterface {
  public array $prices=[];public array $products=[];public int $created=0;public int $productCreates=0;
+ public string $mode='test';public ?int $failAfterPrices=null;public bool $losePriceResponse=false;
  public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null){
   $path=parse_url($url,PHP_URL_PATH);$post=strtolower($method)==='post';
-  if(preg_match('~/prices/([^/]+)$~',$path,$m))$r=$this->prices[$m[1]];
+  if(preg_match('~/prices/([^/]+)$~',$path,$m)){
+   if(!isset($this->prices[$m[1]]))return [json_encode(['error'=>['type'=>'invalid_request_error','code'=>'resource_missing','message'=>'Fixture missing Price']]),404,[]];
+   if($post)$this->prices[$m[1]]=array_replace($this->prices[$m[1]],$params);
+   $r=$this->prices[$m[1]];
+  }
   elseif(preg_match('~/products/([^/]+)$~',$path,$m)){
    if(!isset($this->products[$m[1]]))return [json_encode(['error'=>['type'=>'invalid_request_error','code'=>'resource_missing','message'=>'Fixture missing product']]),404,[]];
+   if($post)$this->products[$m[1]]=array_replace($this->products[$m[1]],$params);
    $r=$this->products[$m[1]];
   }elseif(str_ends_with($path,'/products')&&$post){
-   $this->productCreates++;$r=$params+['object'=>'product','active'=>true,'livemode'=>false];$this->products[$r['id']]=$r;
+   $this->productCreates++;$r=$params+['object'=>'product','active'=>true,'livemode'=>$this->mode==='live'];$this->products[$r['id']]=$r;
+  }elseif(str_ends_with($path,'/products')){
+   $r=['object'=>'list','data'=>array_values($this->products)];
   }elseif(str_ends_with($path,'/prices')&&$post){
-   $r=$params+['id'=>'price_generated_'.++$this->created,'object'=>'price','active'=>true,'livemode'=>false];
+   if($this->failAfterPrices!==null && $this->created>=$this->failAfterPrices)throw new RuntimeException('fixture-provider-secret');
+   $r=$params+['id'=>'price_'.$this->mode.'_generated_'.++$this->created,'object'=>'price','active'=>true,'livemode'=>$this->mode==='live'];
    $r['unit_amount']=(int)$r['unit_amount'];$r['recurring']['interval_count']=1;$this->prices[$r['id']]=$r;
+   if($this->losePriceResponse){$this->losePriceResponse=false;throw new RuntimeException('fixture-provider-secret');}
   }elseif(str_ends_with($path,'/prices')){
-   $r=['object'=>'list','data'=>array_values(array_filter($this->prices,fn($p)=>in_array($p['lookup_key']??'', $params['lookup_keys'],true)))];
+   $r=['object'=>'list','data'=>isset($params['lookup_keys'])?array_values(array_filter($this->prices,fn($p)=>in_array($p['lookup_key']??'', $params['lookup_keys'],true))):array_values($this->prices)];
   }else throw new RuntimeException('Unexpected catalog request: '.$path);
   return [json_encode($r),200,[]];
  }

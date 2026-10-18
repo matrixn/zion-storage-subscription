@@ -22,7 +22,7 @@ $settings->save('stripe',[],$admin);
 check($settings->stripe()['secret_key']==='sk_test_adminSaved','empty edit retains stored secret');
 try{$settings->save('stripe',['secret_key'=>'sk_live_rejected'],$admin);check(false,'LIVE key saved');}catch(DomainException $e){check($settings->stripe()['secret_key']==='sk_test_adminSaved','invalid key cannot overwrite working settings');}
 $settings->save('stripe',['clear_secret_key'=>'1','clear_webhook_secret'=>'1'],$admin);
-check($settings->stripe()===['secret_key'=>'','webhook_secret'=>''],'clearing keys never reactivates environment credentials');
+check($settings->stripe()===['secret_key'=>'','webhook_secret'=>'','mode'=>'test'],'clearing keys never reactivates environment credentials');
 $disabled=new Zion\StripeService($db,$plans,$mail,$store);
 $db->run('DELETE FROM checkout_sessions');
 try{$disabled->checkout($db->one('SELECT * FROM users WHERE id=?',[$id]));check(false,'empty admin API key accepted');}catch(RuntimeException $e){check($e->getMessage()==='billing_unconfigured','empty saved key blocks new Checkout before HTTP');}

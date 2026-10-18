@@ -11,6 +11,7 @@ final class AccountService {
      $id,$data['name'],strtolower($data['email']),password_hash($data['password'],PASSWORD_ARGON2ID),$data['locale'],$data['plan'],time(),time(),time(),time()]);
     $interval=$data['billing_interval']??'month';if(!in_array($interval,['month','year'],true))throw new \InvalidArgumentException('invalid_billing_interval');
     $this->db->run('UPDATE users SET billing_interval=? WHERE id=?',[$interval,$id]);
+    $this->db->run('UPDATE users SET stripe_mode=? WHERE id=?',[(new IntegrationSettings($this->db))->stripe()['mode'],$id]);
     if($data['plan']!=='free' && isset($data['billing'])) (new BillingProfileService($this->db))->save($id,$data['billing']);
    });
   } catch(\PDOException $e) { if($this->db->one('SELECT id FROM users WHERE email=?',[$data['email']])) return null; throw $e; }

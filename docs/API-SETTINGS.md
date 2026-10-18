@@ -1,26 +1,41 @@
 # Stripe and Oblio configuration in administration
 
-Open /admin and expand **API-uri Stripe și Oblio**. Each service has an independent save form:
+Open /admin → Configuration → API-uri Stripe și Oblio. Credentials remain authenticated-encrypted with APP_KEY. Once a provider has been saved, its environment values are ignored, including when a saved value is empty or disabled.
 
-- Stripe: secret API key and webhook signing secret. This release supports TEST MODE keys only. Product/Price IDs remain in the adjacent billing catalog. The form shows the webhook URL and required events.
-- Oblio: account email, API secret, issuer CIF, invoice series, optional workstation, document language, VAT rate/name, real issuance toggle and explicit permission to issue real documents for Stripe test payments.
+## Stripe TEST and LIVE
 
-Saving validates formats and required fields locally. It does not contact Stripe/Oblio, create a payment, issue an invoice or confirm that the credentials have provider access. Use the existing TEST Checkout workflow and controlled fiscal acceptance procedure to verify the external accounts.
+Two independent profiles store the secret API key and webhook signing secret. Old single-profile installations migrate logically to TEST, and existing local billing records migrate to TEST without changing their financial history. LIVE starts empty. On the first save, enter the keys explicitly; on later saves, blank fields retain that profile's saved secrets, and the clear checkbox removes them. Secrets are never returned to HTML.
 
-## Source precedence
+1. Select TEST or LIVE and enter the matching secret API key and webhook signing secret.
+2. Save. The application authenticates against Stripe and checks Products/Prices read access, then automatically synchronizes the six paid options. No Product/Price IDs are required.
+3. Check the three separate panels: API connection, catalog synchronization and signed webhook receipt. They show timestamps and are tied to that profile's credentials.
+4. Use Activate TEST/LIVE to change the public mode. Activation rechecks the API and all six prices, requires both secrets, and records the change in the audit log. Saving a profile alone never activates it.
 
-Before a service is first saved, its existing .env settings remain the fallback. After the first save, its whole configuration comes exclusively from the database. Empty values and disabled toggles are authoritative: they never reactivate an environment value. Saving Stripe does not change the source for Oblio, and vice versa. There is no automatic reset to environment settings.
+Automatic synchronization is triggered by saving a nonempty Stripe API key. The single Sync catalog button reruns the whole catalog when desired; it is not a scheduled background poll. It creates one Product per paid plan and monthly/yearly recurring EUR Prices, or reuses existing compatible mappings/lookup keys. Stable Product IDs, Price lookup keys, mode-specific idempotency keys and a lock make interrupted work resumable without duplicates. Confirmed partial results remain available for retry, and disabled options remain disabled. Historical mappings and existing subscriptions are not repriced.
 
-On the first save, enter the credentials you want to keep using; secrets from .env are never copied into form inputs. On later saves, a blank secret field retains the previously saved database value. Use the explicit clear checkbox to remove a secret. An enabled Oblio configuration cannot be saved without the required authentication, issuer, series and VAT fields.
+If the API key or canonical catalog changes, previous diagnostic results no longer count for activation. Raw provider exceptions are never shown or logged. APP_ENV=test forbids external diagnostics unless a fixture client is explicitly injected by the test suite.
 
-Web requests, catalog actions, Checkout, upgrades, webhook signature verification, portal configuration and CLI workers all resolve this shared configuration. Each request/worker invocation takes its configuration when its services are instantiated; a running batch finishes with that configuration, and the next invocation uses the saved update. New fiscal snapshots obtain VAT from the same source. Historical invoice/payment snapshots remain immutable.
+## Webhooks and payment validation
 
-## Storage and access
+Register separate Stripe webhook endpoints shown by the form:
 
-Provider records are authenticated-encrypted with APP_KEY in integration_settings. Back up both the database and APP_KEY; preserve the key when deploying or restoring. APP_KEY, bootstrap admin credentials, application URL, database and SMTP settings remain server environment configuration.
+- /webhooks/stripe?mode=test
+- /webhooks/stripe?mode=live
 
-Only an authenticated administrator with valid CSRF can save settings. Successful changes are atomic with a credential-free audit entry. Secrets are never rendered back into HTML, copied into errors or included in audit details. API URLs are fixed by the application; the settings do not accept arbitrary endpoints.
+Subscribe to checkout.session.completed, invoice.paid, invoice.payment_failed, customer.subscription.created, customer.subscription.updated and customer.subscription.deleted. On localhost, use Stripe CLI forwarding for TEST and save its signing secret in the TEST profile. LIVE requires a reachable public HTTPS endpoint.
 
-Changes in Stripe account or issuer should be coordinated with the existing subscriptions, Prices and fiscal snapshots. Saving credentials does not migrate those records or create new financial operations.
+A successful API read does not verify a signing secret or Checkout permissions. The webhook panel turns verified only after the server actually receives an event with a valid signature for the corresponding mode and credentials. Receipt alone does not prove payment processing/activation; complete a TEST Checkout and inspect the existing payment/event records. The API test makes no payment and issues no fiscal invoice.
 
-Validation: composer test; composer lint; python3 tests/http_flow.py; python3 tests/admin_http.py --browser (Playwright/Chrome required). Fixtures exercise conflicting environment values, API authentication, webhook signatures, secret retention/removal, fiscal VAT/simulation, invalid updates, encrypted persistence, CSRF and responsive forms without external service calls.
+Each registration, Checkout, subscription, plan change, fiscal invoice and recorded receipt retains its mode. Existing TEST accounts stay TEST after public activation of LIVE. Existing LIVE subscription webhooks, upgrades, portal operations and retries continue using LIVE when the public site switches to TEST. Changing the public mode never migrates a customer between payment environments.
+
+Prices, Product associations, diagnostics and manual pauses are isolated by mode. Dashboard financial/subscription metrics use the active mode; local user/access/quota totals remain shared. The site header shows a compact sandbox payment notice in RO/EN/FR/DE whenever TEST is active, and hides it in LIVE.
+
+## Oblio and deployment
+
+Oblio still has its own independent configuration: account email/API secret, issuer CIF, invoice series, optional workstation, document language, VAT rate/name, real issuance toggle and permission to issue real documents for Stripe TEST payments. Saving Oblio validates locally and does not contact it. LIVE Stripe payments use the same issuer settings; simulation remains the default until real issuance is explicitly enabled.
+
+Run installation/migration before serving this version. Back up the database and APP_KEY, including stripe_catalog_products and mode-scoped billing_prices. APP_KEY, bootstrap admin credentials, URL, storage and SMTP configuration remain server settings. No private key belongs in source control.
+
+Validation covers both mode profiles, automatic synchronization, lost-response/partial-failure recovery, no duplicates, pauses, wrong-mode signatures, LIVE payment/upgrade recovery under public TEST, portal/admin plan changes, financial isolation, HTTP activation guards, masked secrets, localized sandbox notices and responsive forms. Automated checks use isolated transports and never contact Stripe or Oblio.
+
+References: [Stripe keys and environments](https://docs.stripe.com/keys), [Product creation](https://docs.stripe.com/api/products/create), [Price creation and lookup keys](https://docs.stripe.com/api/prices/create), [Webhook signature troubleshooting](https://docs.stripe.com/events/manage-webhook-endpoints).

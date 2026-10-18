@@ -8,7 +8,7 @@ $db->run("INSERT INTO account_controls(user_id,manual_plan,quota_sync,updated_at
 $db->run("INSERT INTO subscriptions(user_id,status,paid_confirmed,plan,renewal_at,billing_interval,currency) VALUES('banned','active',1,'120gb',?,'year','eur')",[$now+86400]);
 $db->run("INSERT INTO subscriptions(user_id,status,paid_confirmed,plan,renewal_at) VALUES('pending','past_due',0,'120gb',?)",[$now+86400]);
 foreach([['eur',199,$now],['EUR',359,$now],['ron',999,$now],['eur',999,$now-31*86400],['eur',999,$now+86400]] as $i=>[$currency,$amount,$created])$db->run("INSERT INTO invoices(id,user_id,amount,currency,created_at) VALUES(?,'banned',?,?,?)",['metric-'.$i,$amount,$currency,$created]);
-$db->run("INSERT INTO billing_events VALUES('evt_attention','invoice.paid','processing',?)",[$now]);
+$db->run("INSERT INTO billing_events(id,type,status,created_at) VALUES('evt_attention','invoice.paid','processing',?)",[$now]);
 $data=$metrics->snapshot($now);
 check($data['clients']['total']===3 && $data['clients']['new30']===2,'dashboard counts all clients and actual thirty-day registrations');
 check($data['clients']['active']===1 && $data['clients']['banned']===1 && $data['clients']['unverified']===1,'suspended accounts are excluded from active access metric');

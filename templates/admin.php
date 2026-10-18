@@ -16,7 +16,7 @@ $money=static fn(int $minor,string $currency):string=>number_format($minor/100,2
  <?php endforeach ?>
  <li><a href="<?= $adminUrl('audit') ?>" <?= $section==='audit'?'aria-current="page"':'' ?>><span class="nav-icon">≡</span> Jurnal administrare</a></li>
  </ul></nav>
- <div class="sidebar-footer"><span class="status-dot"></span> Stripe TEST MODE<a href="/ro/">Deschide site-ul ↗</a></div>
+ <div class="sidebar-footer"><span class="status-dot"></span> Stripe <?= strtoupper($stripeActiveMode) ?><a href="/ro/">Deschide site-ul ↗</a></div>
 </aside>
 <?php endif ?>
 <main id="admin-content" class="<?= $admin?'admin-content':'login-content' ?>">

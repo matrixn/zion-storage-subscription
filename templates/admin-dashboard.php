@@ -7,7 +7,7 @@
 <a class="metric <?= $attention?'needs-attention':'' ?>" href="<?= $adminUrl('operations') ?>"><span class="metric-label">De verificat <i>↗</i></span><strong data-metric="attention"><?= $attention ?></strong><small>Operațiuni și stări care cer atenție</small></a>
 </div>
 <div class="dashboard-grid">
-<section class="panel revenue-panel"><div class="panel-heading"><div><p class="eyebrow">ULTIMELE 30 DE ZILE</p><h2>Încasări înregistrate</h2></div><span class="badge">Stripe TEST</span></div>
+<section class="panel revenue-panel"><div class="panel-heading"><div><p class="eyebrow">ULTIMELE 30 DE ZILE</p><h2>Încasări înregistrate</h2></div><span class="badge">Stripe <?= strtoupper($stripeActiveMode) ?></span></div>
 <?php if(!$d['revenue']): ?><div class="empty-state"><span>↗</span><h3>Nicio încasare în acest interval</h3><p>Plățile confirmate vor apărea aici, separat pe monedă.</p></div><?php else: ?><div class="revenue-values"><?php foreach($d['revenue'] as $r): ?><div><strong><?= e($money($r['amount'],$r['currency'])) ?></strong><span><?= $r['payments'] ?> plăți înregistrate</span></div><?php endforeach ?></div><?php endif ?>
 <p class="micro">Sume brute din evidența Stripe locală, fără scăderea rambursărilor. Monedele nu sunt convertite sau însumate între ele.</p></section>
 <section class="panel"><div class="panel-heading"><div><p class="eyebrow">PORTOFOLIU</p><h2>Distribuția planurilor</h2></div><a class="text-link" href="<?= $adminUrl('clients') ?>">Vezi clienții ↗</a></div>

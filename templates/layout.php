@@ -21,6 +21,7 @@
 <body>
 <a class="skip" href="#main"><?= e($t('skip')) ?></a>
 <header class="header wrap">
+<?php if($stripeMode==='test'): ?><p class="sandbox-notice" role="note"><span aria-hidden="true">◈</span><?= e($t('billing.sandbox_notice')) ?></p><?php endif ?>
 <a class="brand" href="<?= $url('home') ?>" aria-label="Zion Storage"><img src="/assets/icon.png" width="36" height="36" alt="">zion<span>storage</span><i></i></a>
 <button class="menu-toggle" aria-expanded="false" aria-controls="navigation" aria-label="<?= e($t('menu')) ?>"><span></span><span></span></button>
 <nav id="navigation" aria-label="<?= e($t('nav.home')) ?>">

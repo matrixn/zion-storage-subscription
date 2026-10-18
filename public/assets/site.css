@@ -28,3 +28,5 @@
 .billing-shortcut{margin-top:-70px;margin-bottom:70px;text-align:center}
 @media(max-width:740px){.billing-layout{grid-template-columns:1fr;gap:20px}.billing-page{padding-bottom:50px}.billing-shortcut{margin-top:-35px;margin-bottom:45px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.sandbox-notice{position:absolute;bottom:3px;left:0;margin:0;font-size:10px;line-height:1.5;color:#9ebd87;letter-spacing:.02em;max-width:100%;pointer-events:none}.sandbox-notice span{margin-right:6px;color:#bedf99}@media(max-width:380px){.sandbox-notice{font-size:9px}}
+.flow-card .payment-mode-label{font-size:11px;color:#c5dfa6;border:1px solid #3e5136;border-radius:5px;padding:5px 9px;width:fit-content;margin:10px 0 18px}

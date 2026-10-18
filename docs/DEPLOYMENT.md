@@ -4,7 +4,7 @@
 
 ```sh
 cp .env.example .env
-# Generate APP_KEY, configure ADMIN_EMAIL/ADMIN_PASSWORD, SMTP, Stripe test prices and storage API.
+# Generate APP_KEY, configure ADMIN_EMAIL/ADMIN_PASSWORD, SMTP and storage API; configure Stripe TEST/LIVE profiles and automatic catalog sync in /admin.
 # Set APP_URL=https://storage.zion3d.ro and APP_ENV=production.
 docker compose build
 docker compose run --rm --user www-data web php bin/console.php install

@@ -1,5 +1,5 @@
 """Isolated admin/session/ban integration test. No external services or real credentials."""
-import http.server, threading, subprocess, tempfile, os, time, json, urllib.request, urllib.parse, http.cookiejar, re, sqlite3, sys
+import http.server, threading, subprocess, tempfile, os, time, json, urllib.request, urllib.parse, http.cookiejar, re, sqlite3, sys, hashlib, hmac
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 checks=0
@@ -97,8 +97,30 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(request(admin,'/admin',{'action':'settings_save','provider':'stripe','secret_key':'sk_test_httpSaved'})[0]==419,'API settings writes require admin CSRF')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','secret_key':'sk_test_httpSaved','webhook_secret':'whsec_httpSaved'})
             check(status==200 and 'Valorile din .env' in body and 'sk_test_httpSaved' not in body and 'whsec_httpSaved' not in body,'Stripe settings save without exposing secrets in HTML')
+            check('Verificare nereușită' in body and 'Nesincronizat' not in body,'automatic sync reports isolated transport failure instead of false success')
+            check(request(admin,'/admin',{'action':'stripe_check'})[0]==419 and request(admin,'/admin',{'action':'stripe_sync'})[0]==419,'connection test and synchronization require CSRF')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'stripe_check','credential_mode':'test'})
+            check(status==200 and 'Verificare nereușită' in body,'connection diagnostic fails safely without contacting external services in test environment')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','secret_key':'sk_live_httpRejected'})
             check(status==422 and 'sk_live_httpRejected' not in body,'unsupported Stripe mode is rejected without echoing key')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','credential_mode':'live','secret_key':'sk_live_fake','webhook_secret':'whsec_liveFixture'})
+            check(status==200 and 'Activează LIVE pe site' in body and 'sk_live_fake' not in body,'LIVE credentials are saved separately with explicit activation control')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'stripe_activate','credential_mode':'live'})
+            check(status==422 and 'Modul nu a fost activat' in body,'activation is refused when API/catalog verification is incomplete')
+            for mode,secret in [('test','whsec_httpSaved'),('live','whsec_liveFixture')]:
+                payload=json.dumps({'id':'evt_http_'+mode,'object':'event','livemode':mode=='live','type':'integration.fixture','data':{'object':{}}}).encode()
+                timestamp=str(int(time.time()));signature='t='+timestamp+',v1='+hmac.new(secret.encode(),timestamp.encode()+b'.'+payload,hashlib.sha256).hexdigest()
+                event=urllib.request.Request('http://127.0.0.1:8093/webhooks/stripe?mode='+mode,data=payload,headers={'Content-Type':'application/json','Stripe-Signature':signature})
+                check(urllib.request.urlopen(event).status==204,'signed webhook reaches correct mode '+mode)
+                health=request(admin,'/admin?section=integrations&stripe_mode='+mode)[1]
+                check('Eveniment semnat primit' in health,'webhook health reflects verified HTTP receipt '+mode)
+            sandbox={'ro':'Sandbox: conturile noi folosesc plăți de test.','en':'Sandbox: new accounts use test payments.','fr':'Sandbox : paiements de test pour les nouveaux comptes.','de':'Sandbox: Neue Konten verwenden Testzahlungen.'}
+            for locale,text in sandbox.items():check(text in request(customer,'/'+locale+'/')[1],'localized public sandbox notice '+locale)
+            # Fixture-only mode change exercises rendering without remote API operations.
+            switch='require "src/bootstrap.php";$db=new Zion\\Database();$profiles=(new Zion\\IntegrationSettings($db))->stripeProfiles();$profiles["active_mode"]=$argv[1];$db->run("UPDATE integration_settings SET value=? WHERE key=?", [Zion\\EncryptedPayload::encode($profiles),"provider:stripe"]);'
+            subprocess.run(['php','-r',switch,'live'],cwd=ROOT,env=env,check=True,capture_output=True)
+            for locale in sandbox:check('sandbox-notice' not in request(customer,'/'+locale+'/')[1],'sandbox notice hidden in LIVE '+locale)
+            subprocess.run(['php','-r',switch,'test'],cwd=ROOT,env=env,check=True,capture_output=True)
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'oblio','email':'oblio@example.com','secret':'httpOblioSecret','cif':'RO12345678','series':'ZS','language':'RO','vat_rate':'0','vat_name':'Scutit'})
             check(status==200 and 'httpOblioSecret' not in body and 'Configurat din administrare' in body,'Oblio disabled configuration saves without exposing API secret')
             db=sqlite3.connect(temp+'/app.sqlite')

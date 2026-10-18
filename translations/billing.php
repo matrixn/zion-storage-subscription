@@ -1,6 +1,8 @@
 <?php
 return [
  'ro'=>[
+  'billing.sandbox_notice'=>'Sandbox: conturile noi folosesc plăți de test.',
+  'billing.payment_mode_test'=>'Plată de test · Sandbox','billing.payment_mode_live'=>'Plată reală · LIVE',
   'benefits.limits.desc'=>'Limite clare. Prețuri lunare și anuale transparente. Fără surprize.','pricing.paid'=>'Abonament lunar sau anual','checkout.desc'=>'Adresa de email este verificată. Continuă către partenerul de plăți pentru a începe abonamentul cu perioada aleasă.',
   'billing.period'=>'Perioada de facturare','billing.month'=>'Lunar','billing.year'=>'Anual','billing.year.interval'=>'/ an','billing.discount'=>'O lună gratuită','billing.annual.caption'=>'12 luni de stocare, plătești 11',
   'pricing.amount'=>'{amount} EUR','pricing.interval'=>'/ lună','pricing.personal'=>'{capacity} · {amount} EUR {interval}',
@@ -11,6 +13,8 @@ return [
   'email.subscription.body'=>'Abonamentul tău este activ. Poți gestiona reînnoirile și metoda de plată din setările de facturare.',
  ],
  'en'=>[
+  'billing.sandbox_notice'=>'Sandbox: new accounts use test payments.',
+  'billing.payment_mode_test'=>'Test payment · Sandbox','billing.payment_mode_live'=>'Real payment · LIVE',
   'benefits.limits.desc'=>'Clear quotas and transparent monthly or yearly prices.','pricing.paid'=>'Monthly or yearly subscription','checkout.desc'=>'Your email is verified. Continue to our secure payment partner to start your subscription with your selected billing period.',
   'billing.period'=>'Billing period','billing.month'=>'Monthly','billing.year'=>'Yearly','billing.year.interval'=>'/ year','billing.discount'=>'One month free','billing.annual.caption'=>'12 months of storage, pay for 11',
   'pricing.amount'=>'EUR {amount}','pricing.interval'=>'/ month','pricing.personal'=>'{capacity} · EUR {amount} {interval}',
@@ -21,6 +25,8 @@ return [
   'email.subscription.body'=>'Your subscription is active. Manage renewals and payment methods in your billing settings.',
  ],
  'fr'=>[
+  'billing.sandbox_notice'=>'Sandbox : paiements de test pour les nouveaux comptes.',
+  'billing.payment_mode_test'=>'Paiement de test · Sandbox','billing.payment_mode_live'=>'Paiement réel · LIVE',
   'benefits.limits.desc'=>'Des quotas clairs et des tarifs mensuels ou annuels transparents.','pricing.paid'=>'Abonnement mensuel ou annuel','checkout.desc'=>'Votre adresse e-mail est vérifiée. Continuez vers notre partenaire de paiement pour démarrer votre abonnement selon la période choisie.',
   'billing.period'=>'Période de facturation','billing.month'=>'Mensuelle','billing.year'=>'Annuelle','billing.year.interval'=>'/ an','billing.discount'=>'Un mois offert','billing.annual.caption'=>'12 mois de stockage, payez-en 11',
   'pricing.amount'=>'{amount} EUR','pricing.interval'=>'/ mois','pricing.personal'=>'{capacity} · {amount} EUR {interval}',
@@ -31,6 +37,8 @@ return [
   'email.subscription.body'=>'Votre abonnement est actif. Gérez les renouvellements et le moyen de paiement dans vos paramètres de facturation.',
  ],
  'de'=>[
+  'billing.sandbox_notice'=>'Sandbox: Neue Konten verwenden Testzahlungen.',
+  'billing.payment_mode_test'=>'Testzahlung · Sandbox','billing.payment_mode_live'=>'Echte Zahlung · LIVE',
   'benefits.limits.desc'=>'Klare Grenzen und transparente Monats- oder Jahrespreise.','pricing.paid'=>'Monatliches oder jährliches Abonnement','checkout.desc'=>'Deine E-Mail-Adresse ist bestätigt. Fahre zu unserem Zahlungspartner fort, um dein Abonnement mit dem gewählten Abrechnungszeitraum zu starten.',
   'billing.period'=>'Abrechnungszeitraum','billing.month'=>'Monatlich','billing.year'=>'Jährlich','billing.year.interval'=>'/ Jahr','billing.discount'=>'Ein Monat gratis','billing.annual.caption'=>'12 Monate Speicher, nur 11 bezahlen',
   'pricing.amount'=>'{amount} EUR','pricing.interval'=>'/ Monat','pricing.personal'=>'{capacity} · {amount} EUR {interval}',
