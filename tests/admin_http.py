@@ -162,6 +162,17 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             raw=' '.join(r[0] for r in db.execute('SELECT value FROM integration_settings'))+' '.join(r[0] for r in db.execute('SELECT detail FROM admin_audit'))
             check(all(secret not in raw for secret in ['sk_test_httpSaved','whsec_httpSaved','httpOblioSecret']),'stored API settings and admin audit do not expose plaintext secrets')
             db.close()
+            for reset_attempt in range(2):
+                status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'create','name':'Disposable Reset','email':'reset-http@example.com','password':'fixture-reset-http-password','plan':'free','locale':'ro'})
+                check(status==200,'same reset email can create a new customer')
+                db=sqlite3.connect(temp+'/app.sqlite');reset_uid=db.execute('SELECT id FROM users WHERE email=?',('reset-http@example.com',)).fetchone()[0];db.close()
+                check(request(admin,'/admin',{'action':'test_account_reset','user_id':reset_uid})[0]==419,'test account deletion requires CSRF')
+                status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'test_account_reset','user_id':reset_uid,'confirm_email':'wrong@example.com','confirm_reset':'1'})
+                check(status==422 and 'exact emailul' in body,'test deletion requires matching email confirmation')
+                status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'test_account_reset','user_id':reset_uid,'confirm_email':'reset-http@example.com','confirm_reset':'1'})
+                db=sqlite3.connect(temp+'/app.sqlite')
+                check(status==200 and 'au fost șterse' in body and not db.execute('SELECT id FROM users WHERE id=?',(reset_uid,)).fetchone(),'confirmed TEST deletion removes customer and frees signup email')
+                check(db.execute('SELECT status,snapshot FROM test_account_resets WHERE user_id=?',(reset_uid,)).fetchone()==('complete','{}'),'completed reset keeps only opaque recovery marker');db.close()
             if '--browser' in sys.argv:
                 db=sqlite3.connect(temp+'/app.sqlite');now=int(time.time());browser_id='b'*32;verify_token='c'*64
                 db.execute('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,0,0,?,?)',('d'*32,'Pending Browser','pending-browser@example.com',u['password_hash'],'ro','free',now,now))

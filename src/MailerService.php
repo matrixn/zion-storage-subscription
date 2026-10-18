@@ -19,7 +19,9 @@ final class MailerService {
   foreach($this->db->run('SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT 50')->fetchAll() as $row) {
    $lock=fopen(dirname(__DIR__).'/storage/mail.lock','c'); flock($lock,LOCK_EX);
    try {
-    if($this->db->one('SELECT sent_at FROM outbox WHERE id=?',[$row['id']])['sent_at']) continue;
+    $current=$this->db->one('SELECT * FROM outbox WHERE id=?',[$row['id']]);
+    if(!$current || $current['sent_at'])continue;
+    $row=$current;
     $this->db->run('UPDATE outbox SET attempts=attempts+1 WHERE id=?',[$row['id']]);
     $tr=new TranslationService($row['locale']); $data=self::decode($row['payload']);
     $subject=$tr->get('email.'.$row['kind'].'.subject');

@@ -105,3 +105,4 @@ require __DIR__.'/stripe-modes.php';
 require __DIR__.'/api-log.php';
 require __DIR__.'/admin-activation-links.php';
 require __DIR__.'/webhook-diagnostics.php';
+require __DIR__.'/test-account-reset.php';

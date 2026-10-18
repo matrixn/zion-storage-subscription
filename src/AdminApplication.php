@@ -21,7 +21,7 @@ final class AdminApplication {
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
   $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
-  $default=match(true){$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $default=match(true){$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
@@ -77,6 +77,10 @@ final class AdminApplication {
      $_SESSION['admin_notice']=$result['message'];$this->redirect();
     }
     $this->initializeBilling();
+    if($action==='test_account_reset'){
+     (new TestAccountReset($this->db,$this->changes,new StorageProvisioningService()))->reset((string)($_POST['user_id']??''),(string)($_POST['confirm_email']??''),($_POST['confirm_reset']??'')==='1',($_POST['delete_storage']??'')==='1',$admin['id']);
+     unset($_SESSION['admin_activation_link']);$_SESSION['admin_notice']='Contul TEST și tranzacțiile locale au fost șterse. Te poți înregistra din nou cu același email. Istoricul plăților de test rămâne în Stripe.';$this->section='clients';$this->redirect();
+    }
     if($action==='activation_link'){
      $link=$this->service->activationLink((string)($_POST['user_id']??''),$admin['id']);
      $_SESSION['admin_activation_link']=EncryptedPayload::encode($link);$this->section='clients';$this->redirect();
@@ -124,7 +128,7 @@ final class AdminApplication {
    $stripeState=(new StripeIntegration($this->db,$this->plans,null,$stripeMode))->state();
   }
   if($admin && $section==='clients'){
-   $clients=$this->db->run("SELECT u.*,c.banned_at,c.reason,c.manual_plan,c.access_sync,c.quota_sync,s.status AS subscription_status,s.renewal_at FROM users u LEFT JOIN account_controls c ON c.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id WHERE (?='' OR instr(lower(u.email),lower(?))>0 OR instr(lower(u.name),lower(?))>0) AND (CAST(? AS INTEGER)=0 OR c.quota_sync<>'ready' OR c.access_sync<>'ready') ORDER BY u.created_at DESC LIMIT 100",[$search,$search,$search,(int)$attentionOnly])->fetchAll();
+   $clients=$this->db->run("SELECT u.*,c.banned_at,c.reason,c.manual_plan,c.access_sync,c.quota_sync,s.status AS subscription_status,s.renewal_at,r.status AS reset_status,r.step AS reset_step FROM users u LEFT JOIN account_controls c ON c.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id LEFT JOIN test_account_resets r ON r.user_id=u.id WHERE (?='' OR instr(lower(u.email),lower(?))>0 OR instr(lower(u.name),lower(?))>0) AND (CAST(? AS INTEGER)=0 OR c.quota_sync<>'ready' OR c.access_sync<>'ready') ORDER BY u.created_at DESC LIMIT 100",[$search,$search,$search,(int)$attentionOnly])->fetchAll();
   }
   if($admin && $section==='changes'){
    $changes=$this->db->run("SELECT p.*,u.email FROM plan_changes p JOIN users u ON u.id=p.user_id WHERE (CAST(? AS INTEGER)=0 OR p.status IN ('creating','paid','applying','retry','review')) ORDER BY p.created_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll();

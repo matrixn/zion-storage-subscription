@@ -154,6 +154,10 @@ class StripeService implements BillingService {
   $lock=fopen(dirname(__DIR__).'/storage/billing.lock','c'); flock($lock,LOCK_EX);
   $userLock=null;
   try {
+   if($this->settings['mode']==='test' && ($reset=TestAccountReset::eventState($this->db,$event['data']['object']??[])??TestAccountReset::eventState($this->db,['id'=>$event['id']??'']))){
+    if($reset==='pending')throw new \RuntimeException('test_reset_in_progress');
+    $this->trace('complete',['outcome'=>'deleted_account']);return;
+   }
    if($this->db->one("SELECT id FROM billing_events WHERE id=? AND status='complete'",[$event['id']])){$this->trace('complete',['outcome'=>'duplicate']);return;}
    $this->db->run("INSERT INTO billing_events(id,type,status,created_at) VALUES(?,?,'processing',?) ON CONFLICT(id) DO UPDATE SET status='processing'",[$event['id'],$event['type'],time()]);
    $this->db->run('UPDATE billing_events SET stripe_mode=? WHERE id=?',[$this->settings['mode'],$event['id']]);
@@ -167,6 +171,7 @@ class StripeService implements BillingService {
    if($upgradeId && in_array($event['type'],['checkout.session.completed','invoice.paid'],true)) {
     $this->trace('upgrade');
     $change=$this->changes()->record($upgradeId);
+    $this->db->run('UPDATE billing_events SET user_id=? WHERE id=?',[$change['user_id'],$event['id']]);
     if($change['stripe_mode']!==$this->settings['mode'])throw new \RuntimeException('upgrade_mode_mismatch');
     $userLock=fopen(dirname(__DIR__).'/storage/provision-'.$change['user_id'].'.lock','c');flock($userLock,LOCK_EX);
     $this->changes()->fulfill($upgradeId);
@@ -185,6 +190,7 @@ class StripeService implements BillingService {
    $this->trace('identify_user',['user_id'=>$uid]);
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
    if(!$u) throw new \RuntimeException('unknown_billing_user');
+   $this->db->run('UPDATE billing_events SET user_id=? WHERE id=?',[$uid,$event['id']]);
    if($u['stripe_mode']!==$this->settings['mode'] || ($s['livemode']??false)!==($this->settings['mode']==='live'))throw new \RuntimeException('subscription_mode_mismatch');
    $userLock=fopen(dirname(__DIR__).'/storage/provision-'.$uid.'.lock','c');flock($userLock,LOCK_EX);
    $this->changes()->reconcile($s);

@@ -9,6 +9,7 @@ class StorageGateway {
   if(in_array($path,['/api/server/ping','/api/server/config','/api/server/features','/api/server/version','/api/auth/login','/api/oauth/authorize','/api/oauth/callback'],true))return true;
   $id=$this->identity($headers);
   if(!$id)return false;
+  if(TestAccountReset::eventState($this->db,['id'=>$id]))return false;
   $u=$this->db->one('SELECT id FROM users WHERE storage_user_id=?',[$id]);
   if(!$u){
    // A provisioning response may have been lost before storage_user_id was saved.

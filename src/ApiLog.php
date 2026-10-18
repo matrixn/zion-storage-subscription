@@ -87,4 +87,15 @@ final class ApiLog {
    return ['rows'=>$query->fetchAll(),'total'=>$total,'page'=>$page,'available'=>true];
   }catch(\Throwable $e){return ['rows'=>[],'total'=>0,'page'=>1,'available'=>false];}
  }
+ public static function eventsForResources(array $resources): array {
+  $known=array_fill_keys($resources,true);$events=[];
+  try{
+   foreach(self::database()->query("SELECT context FROM api_log WHERE provider='stripe' AND mode='test' AND context<>'{}'") as $row){
+    $context=self::safeContext(json_decode($row['context'],true)?:[]);
+    if(!isset($context['event_id']))continue;
+    foreach(['user_id','subscription_id','invoice_id','checkout_session_id'] as $key)if(isset($context[$key]) && isset($known[$context[$key]])){$events[$context['event_id']]=true;break;}
+   }
+  }catch(\Throwable $e){}
+  return array_keys($events);
+ }
 }

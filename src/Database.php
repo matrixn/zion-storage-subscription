@@ -14,6 +14,7 @@ final class Database {
   $this->pdo->exec(file_get_contents(dirname(__DIR__).'/database/schema.sql'));
   foreach(glob(dirname(__DIR__).'/database/migrations/*.sql') as $file) $this->pdo->exec(file_get_contents($file));
   // Preserve installations made before quota synchronization was introduced.
+  if(!in_array('user_id',array_column($this->run('PRAGMA table_info(billing_events)')->fetchAll(),'name'),true))$this->pdo->exec('ALTER TABLE billing_events ADD COLUMN user_id TEXT');
   if(!in_array('quota_sync',array_column($this->run('PRAGMA table_info(account_controls)')->fetchAll(),'name'),true))$this->pdo->exec("ALTER TABLE account_controls ADD COLUMN quota_sync TEXT NOT NULL DEFAULT 'ready'");
   foreach(['users'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'subscriptions'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'",'currency'=>"TEXT NOT NULL DEFAULT 'ron'"], 'checkout_sessions'=>['price_id'=>'TEXT','billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'plan_changes'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"]] as $table=>$columns){
    $existing=array_column($this->run('PRAGMA table_info('.$table.')')->fetchAll(),'name');

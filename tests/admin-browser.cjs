@@ -32,6 +32,10 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
    if(section==='new-client')check(await page.locator('input[name=password]').getAttribute('type')==='password','new customer password masked');
    if(section==='clients'){
     const pending=page.locator('tr').filter({hasText:'pending-browser@example.com'});
+    await pending.getByText('Șterge contul TEST și tranzacțiile',{exact:true}).click();
+    check(await pending.locator('input[name=confirm_email]').inputValue()==='' && await pending.locator('input[name=confirm_reset]').isChecked()===false,'TEST reset requires unfilled email and explicit checkbox');
+    check(await pending.getByRole('button',{name:'Șterge definitiv contul TEST',exact:true}).isVisible(),'TEST reset is available in customer management');
+    await pending.getByText('Șterge contul TEST și tranzacțiile',{exact:true}).click();
     await pending.getByRole('button',{name:'Vezi linkul de activare',exact:true}).click();
     const link=page.getByRole('textbox',{name:'Link de activare',exact:true});
     check((await link.inputValue()).startsWith(origin+'/ro/verificare-email?token=') && await link.getAttribute('readonly')!==null,'admin reveals copyable activation link through browser form');

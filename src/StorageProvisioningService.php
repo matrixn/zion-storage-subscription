@@ -11,7 +11,7 @@ class StorageProvisioningService {
   if($body!==null) curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($body,JSON_THROW_ON_ERROR));
   $started=microtime(true);$raw=curl_exec($ch); $code=curl_getinfo($ch,CURLINFO_HTTP_CODE);
   ApiLog::curlResult('immich',$method,$base.$path,$ch,$raw,$started,[$body??[],env('STORAGE_API_KEY')]);curl_close($ch);
-  if($raw===false || $code<200 || $code>=300) throw new \RuntimeException('storage_request_failed');
+  if($raw===false || $code<200 || $code>=300) throw new StorageApiException((int)$code);
   return json_decode($raw,true,512,JSON_THROW_ON_ERROR)?:[];
  }
  public function createUser(array $user,string $password,int $quota): string {
@@ -32,4 +32,18 @@ class StorageProvisioningService {
  public function enableUser(string $id,int $quota): void { $this->updateQuota($id,$quota); }
  /** Explicit operator-only destructive API; never called by billing. */
  public function deleteUser(string $id): void { $this->request('DELETE','/admin/users/'.rawurlencode($id),['force'=>false]); }
+ private function resetIdentity(string $id,string $uid,string $email): ?array {
+  try{$remote=$this->request('GET','/admin/users/'.rawurlencode($id));}
+  catch(StorageApiException $e){if(in_array($e->httpStatus,[404,410],true))return null;throw $e;}
+  if(($remote['storageLabel']??'')!=='zs-'.$uid || ($remote['isAdmin']??null)!==false || !in_array(strtolower($remote['email']??''),[strtolower($email),'reset-'.$uid.'@deleted.invalid'],true))throw new \DomainException('Identitatea Immich nu corespunde contului TEST sau este administrator. Resetarea a fost oprită.');
+  return $remote;
+ }
+ public function assertTestResetIdentity(string $id,string $uid,string $email): void {$this->resetIdentity($id,$uid,$email);}
+ public function purgeTestUser(string $id,string $uid,string $email): void {
+  $remote=$this->resetIdentity($id,$uid,$email);if(!$remote)return;
+  // Release the email immediately; Immich's removal job completes asynchronously.
+  $replacement='reset-'.$uid.'@deleted.invalid';
+  if(($remote['email']??'')!==$replacement)$this->request('PUT','/admin/users/'.rawurlencode($id),['email'=>$replacement]);
+  if(!in_array($remote['status']??'',['removing','deleted'],true))$this->request('DELETE','/admin/users/'.rawurlencode($id),['force'=>true]);
+ }
 }

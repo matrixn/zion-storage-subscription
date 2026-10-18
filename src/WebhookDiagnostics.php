@@ -25,6 +25,7 @@ final class WebhookDiagnostics {
    'event_identity_mismatch'=>'Evenimentul returnat de Stripe nu corespunde ID-ului cerut.',
    'unsupported_replay_event'=>'Tipul acestui eveniment nu poate fi reprocesat de integrarea de abonamente.',
    'test_network_forbidden'=>'Reprocesarea externă este dezactivată în testele izolate.',
+   'test_reset_in_progress'=>'Contul TEST este în curs de resetare. Evenimentul poate fi retrimis după finalizare.',
   ];
   $code=$e->getMessage();
   if(isset($messages[$code]))return ['code'=>$code,'message'=>$messages[$code]];
@@ -37,6 +38,7 @@ final class WebhookDiagnostics {
    'duplicate'=>'Eveniment deja finalizat; nu a fost aplicat din nou.',
    'ignored'=>'Tip de eveniment nefolosit de integrare; nicio activare efectuată.',
    'no_subscription'=>'Eveniment fără referință la un abonament; nicio activare efectuată.',
+   'deleted_account'=>'Contul TEST a fost șters. Evenimentul întârziat a fost ignorat fără recrearea tranzacțiilor.',
    default=>($context['paid_confirmed']??null)===false?'Eveniment procesat; abonamentul/factura nu confirmă încă o plată activă.':'Eveniment procesat. Verifică starea abonamentului și continuă activarea contului.',
   };
  }

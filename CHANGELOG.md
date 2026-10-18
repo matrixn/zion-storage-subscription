@@ -2,6 +2,7 @@
 
 ## 2026-10-18
 
+- Added confirmed TEST-account resets that remove local billing records, expire open Checkout sessions, delete the owned Stripe test customer and optionally purge its verified Immich account. Remote cleanup is resumable, LIVE/real-fiscal histories are protected, and delayed callbacks cannot recreate deleted records.
 - Added webhook receipt/processing stages, signature diagnostics, event/delivery correlation and authenticated Stripe event recovery to the admin API journal, preserving payment and fiscal idempotency.
 - Added audited activation-link disclosure for new unconfirmed customers in admin, reusing valid links or issuing a fresh one-hour link when needed so onboarding works before SMTP is configured.
 - Added an admin API communication journal with filtered/paginated Stripe, Oblio, Immich, CAPTCHA and webhook records, redacted diagnostics, connection errors, HTTP status, timing and Stripe request IDs. Logs survive billing rollbacks and retain up to 30 days/10,000 entries.

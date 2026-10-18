@@ -58,6 +58,7 @@ final class AdminService {
      $this->db->run('UPDATE account_controls SET access_sync=?,updated_at=? WHERE user_id=?',[$sync,time(),$uid]);
     }catch(\Throwable $e){$this->db->run("UPDATE account_controls SET access_sync='retry',updated_at=? WHERE user_id=?",[time(),$uid]);throw new \DomainException('Ban local activ. Immich nu a confirmat limitarea cotei; reîncearcă suspendarea.');}
    }else{
+    if($this->db->one("SELECT 1 FROM test_account_resets WHERE user_id=? AND status='pending'",[$uid]))throw new \DomainException('Contul are o resetare TEST în curs. Reîncearcă resetarea înainte de a modifica accesul.');
     if(empty($old['banned_at']))throw new \DomainException('Contul nu este suspendat.');
     $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$uid]);
     $entitled=$u['email_verified_at'] && ($u['selected_plan_id']==='free' || $control->manual($uid)===$u['selected_plan_id'] || ($s && $s['status']==='active' && $s['paid_confirmed']));
