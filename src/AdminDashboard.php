@@ -18,6 +18,7 @@ final class AdminDashboard {
    'quota'=>$this->count("SELECT COUNT(*) n FROM account_controls WHERE quota_sync<>'ready' OR access_sync<>'ready'"),
   ];
   return [
+   'storage'=>(new ImmichStatistics($this->db))->overview(),
    'clients'=>$clients,'subscriptions'=>$subscriptions,'queues'=>$queues,
    'revenue'=>$this->db->run("SELECT UPPER(currency) currency,SUM(amount) amount,COUNT(*) payments FROM (SELECT id,amount,currency,created_at,stripe_mode FROM invoices UNION ALL SELECT p.invoice_id,p.amount,p.currency,p.paid_at,p.stripe_mode FROM plan_changes p WHERE p.paid_at IS NOT NULL AND p.invoice_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM invoices i WHERE i.id=p.invoice_id)) WHERE created_at>=CAST(? AS INTEGER) AND created_at<=CAST(? AS INTEGER) AND amount>0 AND stripe_mode=? GROUP BY UPPER(currency) ORDER BY currency",[$since,$now,$mode])->fetchAll(),
    'plans'=>$this->db->run('SELECT selected_plan_id plan,COUNT(*) clients FROM users GROUP BY selected_plan_id')->fetchAll(),

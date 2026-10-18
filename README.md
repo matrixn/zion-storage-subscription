@@ -73,7 +73,7 @@ Stripe invoices are recorded as payment/billing references. The customer portal 
 `StorageProvisioningService` integrates the Immich admin API, based on its official OpenAPI schema:
 https://github.com/immich-app/immich/blob/main/open-api/immich-openapi-specs.json
 
-Set STORAGE_API_URL to the API root **including /api** and STORAGE_API_KEY to an administrator API key with user read/create/update privileges. Use a dedicated key and restrict network access. Test against the installed backend version before deployment; the exact deployed version and credentials were not supplied.
+Configure the API root and administrator key in `/admin?section=immich`, test the connection and sync statistics. Saved configuration overrides STORAGE_API_URL / STORAGE_API_KEY; those environment values are used only before the first save. The API root includes **/api** and the key needs user read/create/update privileges plus server.statistics for dashboard counts. See [Immich settings and five-minute collection](docs/IMMICH.md). Use a dedicated key and restrict network access. Test against the installed backend version before deployment; the exact deployed version and credentials were not supplied.
 
 Implemented calls:
 - GET /admin/users?withDeleted=true — safe-label reconciliation.

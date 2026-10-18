@@ -3,6 +3,9 @@
 require dirname(__DIR__).'/src/bootstrap.php';
 $db=new Zion\Database();
 $cmd=$argv[1]??'help';
+if($cmd==='immich:sync'){
+ $result=(new Zion\ImmichStatistics($db))->synchronize(in_array('--due',$argv,true));echo json_encode($result,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;exit($result['status']==='error'?1:0);
+}
 if($cmd==='key'){echo bin2hex(random_bytes(32)).PHP_EOL;exit;}
 if(in_array($cmd,['migrate','install'],true)){$db->migrate();$seeded=Zion\AccountControl::seedAdmin($db);echo "Database ready\n".($seeded?"Admin configured (existing passwords preserved)\n":"Set ADMIN_EMAIL and ADMIN_PASSWORD, then run install to create the administrator\n");exit;}
 $mail=new Zion\MailerService($db);
@@ -61,4 +64,4 @@ $queries=[
  ,'fiscal-invoices'=>'SELECT id,user_id,stripe_invoice_id,stripe_subscription_id,oblio_invoice_id,oblio_series,oblio_number,amount,currency,status,error_message,attempts,issued_at,notification_sent_at,completed_at FROM fiscal_invoices ORDER BY created_at DESC LIMIT 100'
 ];
 if(isset($queries[$cmd])){echo json_encode($db->run($queries[$cmd])->fetchAll(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE).PHP_EOL;exit;}
-echo "Commands: key, install, migrate, activation:retry, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";
+echo "Commands: immich:sync [--due], key, install, migrate, activation:retry, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";

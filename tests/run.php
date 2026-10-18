@@ -111,3 +111,5 @@ require __DIR__.'/test-account-reset.php';
 require __DIR__.'/automatic-activation.php';
 
 require __DIR__.'/billing-tax.php';
+
+require __DIR__.'/immich-statistics.php';

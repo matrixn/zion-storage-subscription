@@ -11,7 +11,7 @@ $money=static fn(int $minor,string $currency):string=>number_format($minor/100,2
  <a class="brand" href="<?= $adminUrl('dashboard') ?>"><img src="/assets/icon.png" width="38" height="38" alt=""><span>ZION <small>STORAGE / ADMIN</small></span></a>
  <nav aria-label="Meniu principal"><ul>
  <li><a href="<?= $adminUrl('dashboard') ?>" <?= $section==='dashboard'?'aria-current="page"':'' ?>><span class="nav-icon">◫</span> Dashboard</a></li>
- <?php foreach(['Management'=>['clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni'],'Configurare'=>['integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse'],'Jurnal administrare'=>['audit'=>'Acțiuni administrare','api-log'=>'Comunicare API']] as $group=>$items): ?>
+ <?php foreach(['Management'=>['clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni'],'Configurare'=>['integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich'],'Jurnal administrare'=>['audit'=>'Acțiuni administrare','api-log'=>'Comunicare API']] as $group=>$items): ?>
  <li class="nav-group"><span><?= e($group) ?></span><ul><?php foreach($items as $target=>$label): ?><li><a href="<?= $adminUrl($target) ?>" <?= $section===$target?'aria-current="page"':'' ?>><span class="nav-dot" aria-hidden="true"></span><?= e($label) ?></a></li><?php endforeach ?></ul></li>
  <?php endforeach ?>
  </ul></nav>

@@ -19,9 +19,9 @@ final class AdminApplication {
   if(production())header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
   $path=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
-  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
+  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
-  $default=match(true){$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $default=match(true){$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
@@ -51,6 +51,17 @@ final class AdminApplication {
      session_regenerate_id(true);$_SESSION=['admin_id'=>$row['id'],'admin_until'=>time()+3600,'csrf'=>bin2hex(random_bytes(32))];$this->redirect();
     }
     if($action==='logout'){$_SESSION=[];session_regenerate_id(true);$this->section='dashboard';$this->redirect();}
+    if(in_array($action,['immich_save','immich_check','immich_sync'],true)){
+     if($action==='immich_save'){
+      (new IntegrationSettings($this->db))->save('immich',$_POST,$admin['id']);
+      $result=['message'=>'Configurația Immich a fost salvată. Valorile STORAGE_API_URL și STORAGE_API_KEY din .env sunt ignorate.'];
+     }else{
+      if(!Security::limit($this->db,'immich-actions:'.$admin['id'],12,900))throw new \DomainException('Prea multe verificări Immich. Reîncearcă mai târziu.');
+      $statistics=new ImmichStatistics($this->db);$result=$action==='immich_check'?$statistics->check():$statistics->synchronize();
+      $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin['id'],$action,$result['status'],time()]);
+     }
+     $_SESSION['admin_notice']=$result['message'];$this->redirect();
+    }
     if($action==='tax_save'){
      (new BillingTax($this->db))->save((string)($_POST['vat_rate']??''),$admin['id']);
      $_SESSION['admin_notice']='Cota TVA a fost salvată. Se adaugă peste prețul de bază pentru achizițiile și upgrade-urile noi; abonamentele și sesiunile de plată existente își păstrează cota.';$this->redirect();
@@ -128,11 +139,13 @@ final class AdminApplication {
     $apiEntries=ApiLog::page($apiFilters,max(1,(int)($_GET['page']??1)));
    }
    $integrations=new IntegrationSettings($this->db);$stripeSettings=$integrations->stripe($section==='integrations'?$stripeMode:$stripeActiveMode);$oblioSettings=$integrations->oblio();$stripeProfiles=$integrations->stripeProfiles();
+   $immichSettings=$integrations->immich();$immichSaved=$integrations->saved('immich')!==null;
+   $immichOverview=(new ImmichStatistics($this->db))->overview();
    $stripeSaved=$integrations->saved('stripe')!==null;$oblioSaved=$integrations->saved('oblio')!==null;
    $stripeState=(new StripeIntegration($this->db,$this->plans,null,$stripeMode))->state();
   }
   if($admin && $section==='clients'){
-   $clients=$this->db->run("SELECT u.*,c.banned_at,c.reason,c.manual_plan,c.access_sync,c.quota_sync,s.status AS subscription_status,s.renewal_at,r.status AS reset_status,r.step AS reset_step FROM users u LEFT JOIN account_controls c ON c.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id LEFT JOIN test_account_resets r ON r.user_id=u.id WHERE (?='' OR instr(lower(u.email),lower(?))>0 OR instr(lower(u.name),lower(?))>0) AND (CAST(? AS INTEGER)=0 OR c.quota_sync<>'ready' OR c.access_sync<>'ready') ORDER BY u.created_at DESC LIMIT 100",[$search,$search,$search,(int)$attentionOnly])->fetchAll();
+   $clients=$this->db->run("SELECT u.*,c.banned_at,c.reason,c.manual_plan,c.access_sync,c.quota_sync,s.status AS subscription_status,s.renewal_at,ist.used_bytes AS immich_used_bytes,ist.photos AS immich_photos,ist.videos AS immich_videos,ist.synced_at AS immich_synced_at,ist.available AS immich_available,r.status AS reset_status,r.step AS reset_step FROM users u LEFT JOIN account_controls c ON c.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id LEFT JOIN test_account_resets r ON r.user_id=u.id LEFT JOIN immich_statistics ist ON ist.user_id=u.id AND ist.storage_user_id=u.storage_user_id AND ist.config_hash=? WHERE (?='' OR instr(lower(u.email),lower(?))>0 OR instr(lower(u.name),lower(?))>0) AND (CAST(? AS INTEGER)=0 OR c.quota_sync<>'ready' OR c.access_sync<>'ready') ORDER BY u.created_at DESC LIMIT 100",[(new ImmichStatistics($this->db))->fingerprint(),$search,$search,$search,(int)$attentionOnly])->fetchAll();
   }
   if($admin && $section==='changes'){
    $changes=$this->db->run("SELECT p.*,u.email FROM plan_changes p JOIN users u ON u.id=p.user_id WHERE (CAST(? AS INTEGER)=0 OR p.status IN ('creating','paid','applying','retry','review')) ORDER BY p.created_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll();

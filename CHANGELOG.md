@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-19
+
+- Added encrypted Immich configuration, authenticated connection testing, manual read-only statistics sync, a five-minute Docker worker and CLI cron command, per-client photo/video and usage snapshots, dashboard totals and top-ten usage-versus-plan ranking. Saved configuration overrides Immich environment settings across provisioning and the access gateway; failures retain and label prior snapshots.
+
 ## 2026-10-18
 
 - Added global exclusive VAT configuration in admin (Romania standard 21% by default), automatically managed Stripe TEST/LIVE Tax Rates, separate Checkout tax lines for monthly/annual subscriptions and one-time upgrades, localized gross totals and immutable fiscal VAT snapshots. Existing subscriptions and open quotes retain their original tax policy.

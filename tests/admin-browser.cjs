@@ -9,7 +9,7 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
  await page.goto(origin+'/admin');await page.locator('input[name=email]').fill('admin-fixture@example.com');await page.locator('input[name=password]').fill('fixture-admin-password');await page.getByRole('button',{name:'Intră în administrare'}).click();
  check(await page.locator('h1').textContent()==='Dashboard','browser administrator lands on dashboard');
  const artifacts=path.join(__dirname,'artifacts');fs.mkdirSync(artifacts,{recursive:true});
- const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','integrations','catalog','tax','audit','api-log'];
+ const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','integrations','catalog','tax','immich','audit','api-log'];
  for(const width of [320,390,768,1440]){
   await page.setViewportSize({width,height:1000});
   for(const section of sections){
@@ -23,7 +23,10 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
    const rects=await page.locator('.sidebar nav a').evaluateAll(els=>els.map(el=>el.getBoundingClientRect().top));
    check(rects.every((v,i)=>!i||v>=rects[i-1]),'navigation stays vertical');
    if(width<761)await page.locator('label[for=admin-menu]').click();
+   if(section==='immich'){check(await page.locator('input[name=api_key]').inputValue()==='fixture••••••••123456','Immich saved key is masked in its field');check(await page.getByRole('button',{name:'Testează conexiunea Immich',exact:true}).isVisible(),'Immich connection test is available');await page.screenshot({path:path.join(artifacts,'admin-immich-'+width+'.png'),fullPage:true});}
    if(section==='dashboard'){
+    check((await page.locator('.storage-ranking').innerText()).includes('3,00 GB / 120,00 GB'),'top user shows measured usage and quota');
+    check((await page.locator('.storage-ranking').innerText()).includes('123'),'top user shows photo count');
     check(await page.locator('[data-metric=clients]').textContent()==='3','dashboard reflects actual clients');
     check((await page.locator('.revenue-values').innerText()).includes('1,99 EUR')&&(await page.locator('.revenue-values').innerText()).includes('9,99 RON'),'dashboard separates actual payment currencies');
     check(await page.locator('input[name=secret_key],input[name=password]').count()===0,'dashboard excludes management forms');

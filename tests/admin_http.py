@@ -9,21 +9,25 @@ def check(value,label):
     checks+=1;print('PASS',label,flush=True)
 class Backend(http.server.BaseHTTPRequestHandler):
     records=[]
+    last_api_key=None
     def log_message(self,*args): pass
     def respond(self,obj,code=200):
         self.send_response(code);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(json.dumps(obj).encode())
     def do_GET(self):
+        Backend.last_api_key=self.headers.get('x-api-key')
         if self.path=='/api/users/me':
             return self.respond({'id':'immich-admin-test'} if self.headers.get('Authorization')=='Bearer fixture-user' else {},200 if self.headers.get('Authorization')=='Bearer fixture-user' else 401)
-        if self.headers.get('x-api-key')!='fixture-key': return self.respond({},403)
+        if self.headers.get('x-api-key') not in ['fixture-key','fixture-immich-api-key-123456']: return self.respond({},403)
+        if self.path=='/api/server/statistics':
+            return self.respond(dict(usage=3_000_000_000,photos=120,videos=7,usageByUser=[dict(userId=u['id'],usage=3_000_000_000,photos=120,videos=7,quotaSizeInBytes=u.get('quotaSizeInBytes')) for u in self.records]))
         return self.respond(self.records if '?' in self.path else self.records[0])
     def do_POST(self):
         body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-        if self.headers.get('x-api-key')!='fixture-key':return self.respond({},403)
+        if self.headers.get('x-api-key') not in ['fixture-key','fixture-immich-api-key-123456']:return self.respond({},403)
         body.pop('password');body.update(id='immich-admin-test',quotaUsageInBytes=0);self.records.append(body);self.respond(body)
     def do_PUT(self):
         body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-        if self.headers.get('x-api-key')!='fixture-key':return self.respond({},403)
+        if self.headers.get('x-api-key') not in ['fixture-key','fixture-immich-api-key-123456']:return self.respond({},403)
         self.records[0].update(body);self.respond(self.records[0])
 def client():return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 def request(opener,path,data=None,headers=None):
@@ -66,6 +70,13 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             for loc in ['ro','en','fr','de']:
                 html=request(customer,'/'+loc+'/')[1]
                 check('2,41' in html or '2.41' in html,'localized public pricing discloses VAT and gross total '+loc)
+            immich_body=request(admin,'/admin?section=immich')[1]
+            check('Testează conexiunea Immich' in immich_body and 'Sincronizează acum statisticile' in immich_body,'Immich has dedicated configuration and diagnostic page')
+            check(request(admin,'/admin',{'action':'immich_save','url':'https://invalid.example/api','api_key':'invalid'})[0]==419,'Immich settings require administrative CSRF')
+            status,immich_body,_=request(admin,'/admin',{'_csrf':csrf(immich_body),'action':'immich_save','url':env['STORAGE_API_URL'],'api_key':'fixture-immich-api-key-123456'})
+            check(status==200 and 'fixture••••••••123456' in immich_body and 'fixture-immich-api-key-123456' not in immich_body,'saved Immich key displays seven and six character preview only')
+            status,immich_body,_=request(admin,'/admin',{'_csrf':csrf(immich_body),'action':'immich_check'})
+            check(status==200 and 'Conexiunea Immich funcționează' in immich_body and Backend.last_api_key=='fixture-immich-api-key-123456','Immich connection test reads authenticated statistics using stored settings')
             body=request(admin,'/admin?section=catalog')[1]
             check('Catalog Stripe' in body and '21,89' in body and 'Titan' in body,'admin exposes six-option EUR catalog')
             check(request(admin,'/admin',{'action':'catalog_disable','plan':'120gb','billing_interval':'year'})[0]==419,'catalog writes require admin CSRF')
@@ -97,6 +108,16 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(request(customer,'/ro/finalizare',data)[0]==422,'admin cannot accept legal terms on behalf of customer')
             data['accept']='1';status,html,_=request(customer,'/ro/finalizare',data)
             check(status==200 and len(Backend.records)==1 and Backend.records[0]['quotaSizeInBytes']==250_000_000_000,'manual customer activates selected Immich quota')
+            immich_body=request(admin,'/admin?section=immich')[1]
+            check(request(admin,'/admin',{'action':'immich_sync'})[0]==419,'Immich manual sync requires administrator CSRF')
+            status,immich_body,_=request(admin,'/admin',{'_csrf':csrf(immich_body),'action':'immich_sync'})
+            check(status==200 and 'sincronizate pentru 1 clienți' in immich_body,'manual Immich sync persists statistics through actual HTTP adapter')
+            dashboard_html=request(admin,'/admin')[1]
+            check('3,00 GB' in dashboard_html and 'Top 10 clienți' in dashboard_html and '250,00 GB' in dashboard_html,'dashboard shows measured usage and package capacity')
+            check('120 poze' in request(admin,'/admin?section=clients')[1],'per-client management shows photo and video statistics')
+            run=subprocess.run(['php','bin/console.php','immich:sync','--due'],cwd=ROOT,env=env,capture_output=True,text=True,check=True)
+            check(json.loads(run.stdout)['status']=='skipped','CLI five-minute sync respects most recent manual collection')
+
             check('Autentificare administrator' in request(customer,'/admin')[1],'customer session cannot access administration')
             admin_html=request(admin,'/admin')[1]
             check(request(admin,'/admin',{'_csrf':csrf(html),'action':'ban','user_id':u['id'],'reason':'Wrong session'})[0]==419,'customer CSRF cannot authorize admin changes')
@@ -171,7 +192,7 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check('curl_60' in body and 'issuer certificate' in body and 'certificatele CA' in body and '&lt;script&gt;' in body and '<script>' not in body,'API journal renders detailed TLS error and escapes provider text')
             db=sqlite3.connect(temp+'/app.sqlite')
             raw=' '.join(r[0] for r in db.execute('SELECT value FROM integration_settings'))+' '.join(r[0] for r in db.execute('SELECT detail FROM admin_audit'))
-            check(all(secret not in raw for secret in ['sk_test_httpSaved','whsec_httpSaved','httpOblioSecret']),'stored API settings and admin audit do not expose plaintext secrets')
+            check(all(secret not in raw for secret in ['sk_test_httpSaved','whsec_httpSaved','httpOblioSecret','fixture-immich-api-key-123456']),'stored API settings and admin audit do not expose plaintext secrets')
             db.close()
             for reset_attempt in range(2):
                 status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'create','name':'Disposable Reset','email':'reset-http@example.com','password':'fixture-reset-http-password','plan':'free','locale':'ro'})
@@ -195,11 +216,13 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
                     db.execute("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,status,created_at,updated_at) VALUES(?,?,'month','eur',?,'active',?,?)",(price,slug,amount,now,now))
                 db.execute('INSERT INTO subscription_origins VALUES(?,?,?,?,?)',('sub_browser',browser_id,now-86400,now+29*86400,'in_browser'))
                 import hashlib
+                stats_state=json.loads(db.execute("SELECT value FROM integration_settings WHERE key='immich:statistics:state'").fetchone()[0])
+                db.execute('INSERT INTO immich_statistics(user_id,storage_user_id,used_bytes,photos,videos,remote_quota_bytes,synced_at,config_hash,available) VALUES(?,?,?,?,?,?,?,?,1)',(browser_id,'browser-storage',3_000_000_000,123,4,120_000_000_000,now,stats_state['config_hash']))
                 db.execute('INSERT INTO email_verifications(token_hash,user_id,expires_at) VALUES(?,?,?)',(hashlib.sha256(verify_token.encode()).hexdigest(),browser_id,now+3600));db.commit();db.close()
                 node=os.environ['ZION_NODE'];script=os.environ.get('ZION_BROWSER_SCRIPT',str(ROOT/'tests/admin-browser.cjs'))
                 subprocess.run([node,script,'http://localhost:8093/ro/verificare-email?token='+verify_token],cwd=ROOT,env=env,check=True)
             body=request(admin,'/admin')[1];status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'logout'})
             check(status==200 and 'Autentificare administrator' in body,'logout removes administrative access')
-            log.flush();log.seek(0);text=log.read();check(all(secret not in text for secret in ['secure-admin-client-password','fixture-admin-password','sk_test_httpSaved','whsec_httpSaved','httpOblioSecret']),'server logs contain no plaintext credentials')
+            log.flush();log.seek(0);text=log.read();check(all(secret not in text for secret in ['secure-admin-client-password','fixture-admin-password','sk_test_httpSaved','whsec_httpSaved','httpOblioSecret','fixture-immich-api-key-123456']),'server logs contain no plaintext credentials')
             print(f'{checks} admin HTTP assertions passed. No external services contacted.')
         finally:server.terminate();server.wait(timeout=10);backend.shutdown()

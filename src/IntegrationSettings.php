@@ -11,7 +11,7 @@ final class IntegrationSettings {
  }
  public function __construct(private Database $db) {}
  public function saved(string $provider): ?array {
-  if(!in_array($provider,['stripe','oblio'],true))throw new \DomainException('Serviciu invalid.');
+  if(!in_array($provider,['stripe','oblio','immich'],true))throw new \DomainException('Serviciu invalid.');
   $row=$this->db->one('SELECT value FROM integration_settings WHERE key=?',['provider:'.$provider]);
   return $row?EncryptedPayload::decode($row['value']):null;
  }
@@ -35,6 +35,9 @@ final class IntegrationSettings {
   if(($state['connection']['status']??'')!=='ok' || ($state['sync']['status']??'')!=='ok')throw new \DomainException('Verifică conexiunea și sincronizează catalogul înainte de activare.');
   $data=$this->stripeProfiles();$data['active_mode']=$mode;$this->persist('stripe',$data,$admin,'; activated '.$mode);
  }
+ public function immich(): array {
+  return $this->saved('immich')??['url'=>rtrim(env('STORAGE_API_URL'),'/'),'api_key'=>env('STORAGE_API_KEY')];
+ }
  public function oblio(): array {
   $saved=$this->saved('oblio');
   return $saved===null?require dirname(__DIR__).'/config/oblio.php':$saved+['currencies'=>['EUR','RON']];
@@ -43,7 +46,7 @@ final class IntegrationSettings {
   $this->db->transaction(fn()=>$this->saveValues($provider,$input,$admin));
  }
  private function saveValues(string $provider,array $input,string $admin): void {
-  $old=$this->saved($provider)??[];
+  $old=$this->saved($provider)??($provider==='immich'?$this->immich():[]);
   if($provider==='stripe'){
    $mode=(string)($input['credential_mode']??'test');
    if(!in_array($mode,['test','live'],true))throw new \DomainException('Mod Stripe invalid.');
@@ -63,6 +66,14 @@ final class IntegrationSettings {
    if($data['secret_key']!=='' && !preg_match('/^(sk|rk)_'.$mode.'_[a-zA-Z0-9]+$/D',$data['secret_key']))throw new \DomainException('Cheia API trebuie să corespundă modului Stripe selectat.');
    if($data['webhook_secret']!=='' && !preg_match('/^whsec_[a-zA-Z0-9]+$/D',$data['webhook_secret']))throw new \DomainException('Secret webhook Stripe invalid.');
    $profiles[$mode]=$data;$data=$profiles;
+  }elseif($provider==='immich'){
+   $url=rtrim(trim((string)($input['url']??'')),'/');$parsed=parse_url($url);
+   if($url!=='' && (!$parsed || !in_array($parsed['scheme']??'',['https','http'],true) || empty($parsed['host']) || isset($parsed['user']) || isset($parsed['pass']) || isset($parsed['query']) || isset($parsed['fragment']) || preg_match('/[\x00-\x20\x7f]/',$url) || strlen($url)>1000))throw new \DomainException('Introdu un URL Immich HTTP/HTTPS valid, fără autentificare, parametri sau fragment.');
+   if($url!=='' && production() && !str_starts_with($url,'https://'))throw new \DomainException('În producție, conexiunea Immich trebuie să folosească HTTPS.');
+   if($url!=='' && !str_ends_with($url,'/api'))$url.='/api';
+   $key=$secret('api_key');
+   if(strlen($key)>2048 || preg_match('/[\x00-\x20\x7f]/',$key))throw new \DomainException('Cheie API Immich invalidă.');
+   $data=['url'=>$url,'api_key'=>$key];
   }else{
    $data=['enabled'=>($input['enabled']??'')==='1','allow_test_payments'=>($input['allow_test_payments']??'')==='1','secret'=>$secret('secret')];
    foreach(['email','cif','series','workstation','language','vat_rate','vat_name'] as $key){

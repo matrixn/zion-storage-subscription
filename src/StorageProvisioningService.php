@@ -2,18 +2,20 @@
 namespace Zion;
 /** Private server-side adapter. Never return upstream responses to the browser. */
 class StorageProvisioningService {
+ public function __construct(private ?Database $db=null) {}
  protected function request(string $method,string $path,?array $body=null): array {
-  $base=rtrim(env('STORAGE_API_URL'),'/');
-  if(!$base || !env('STORAGE_API_KEY')) throw new \RuntimeException('storage_unconfigured');
+  $settings=(new IntegrationSettings($this->db??new Database()))->immich();$base=rtrim($settings['url'],'/');
+  if(!$base || !$settings['api_key']) throw new \RuntimeException('storage_unconfigured');
   if(production() && !str_starts_with($base,'https://')) throw new \RuntimeException('storage_requires_tls');
   $ch=curl_init($base.$path);
-  curl_setopt_array($ch,[CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_HTTPHEADER=>['x-api-key: '.env('STORAGE_API_KEY'),'Content-Type: application/json'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>20,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_FOLLOWLOCATION=>false]);
+  curl_setopt_array($ch,[CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_HTTPHEADER=>['x-api-key: '.$settings['api_key'],'Content-Type: application/json'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>20,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS]);
   if($body!==null) curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($body,JSON_THROW_ON_ERROR));
   $started=microtime(true);$raw=curl_exec($ch); $code=curl_getinfo($ch,CURLINFO_HTTP_CODE);
-  ApiLog::curlResult('immich',$method,$base.$path,$ch,$raw,$started,[$body??[],env('STORAGE_API_KEY')]);curl_close($ch);
+  ApiLog::curlResult('immich',$method,$base.$path,$ch,$raw,$started,[$body??[],$settings['api_key']]);curl_close($ch);
   if($raw===false || $code<200 || $code>=300) throw new StorageApiException((int)$code);
   return json_decode($raw,true,512,JSON_THROW_ON_ERROR)?:[];
  }
+ public function statistics(): array {return $this->request('GET','/server/statistics');}
  public function createUser(array $user,string $password,int $quota): string {
   $label='zs-'.$user['id'];
   // Reconcile timeouts after remote creation without adopting unrelated accounts.

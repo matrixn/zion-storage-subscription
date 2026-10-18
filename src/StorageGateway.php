@@ -22,7 +22,7 @@ class StorageGateway {
   $forward=[];
   foreach(['Authorization','Cookie','x-api-key'] as $key)if(!empty($headers[$key]) && !preg_match('/[\r\n]/',$headers[$key]))$forward[]=$key.': '.$headers[$key];
   if(!$forward)return null;
-  $base=rtrim(env('STORAGE_API_URL'),'/');
+  $base=rtrim((new IntegrationSettings($this->db))->immich()['url'],'/');
   if(!$base || (production() && !str_starts_with($base,'https://')))return null;
   $ch=curl_init($base.'/users/me');
   curl_setopt_array($ch,[CURLOPT_HTTPHEADER=>$forward,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_TIMEOUT=>8,CURLOPT_FOLLOWLOCATION=>false]);
