@@ -15,7 +15,7 @@
 <link rel="alternate" hreflang="x-default" href="<?= e(base_url().$url($canonicalPage,'en')) ?>">
 <?php if(!in_array($page,['home','how','register','contact'])): ?><meta name="robots" content="noindex,nofollow"><?php endif ?>
 <link rel="stylesheet" href="/assets/site.css"><script src="/assets/site.js" defer></script>
-<?php if($page==='home'): ?><link rel="stylesheet" href="/assets/pricing.css"><?php endif ?>
+<?php if($page==='home'): ?><link rel="stylesheet" href="/assets/pricing.css"><link rel="stylesheet" href="/assets/hero-carousel.css"><script src="/assets/hero-carousel.js" defer></script><?php endif ?>
 <?php if(env('CAPTCHA_ENABLED')==='true'): ?><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script><?php endif ?>
 </head>
 <body>

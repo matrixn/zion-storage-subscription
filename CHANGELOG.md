@@ -2,6 +2,7 @@
 
 ## 2026-10-18
 
+- Added a localized two-scene home carousel combining the mobile backup animation with the illustrative Google Photos/shared-storage versus Zion dedicated-media comparison. Includes autoplay, pause, keyboard/swipe navigation, reduced-motion support and a fixed layout across scene changes.
 - Replaced the layer-stack icon with a generated lime photo-stack emblem across site branding, mobile touch/app icons, browser favicons and social sharing artwork. Preserved a high-resolution brand master and its generation brief.
 - Redesigned the existing home pricing section with localized inline prices, specific plan benefits, a prominent Personal ribbon and an accessible illustrative storage comparison. Added single-column mobile, two-column tablet and four-column desktop layouts with reduced-motion support.
 - Changed the Plus catalog price to 17.99 RON/month. Its Stripe Price ID must be configured manually for 1799 RON minor units; no existing subscriptions or live Stripe prices are modified.

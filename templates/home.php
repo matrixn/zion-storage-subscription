@@ -1,14 +1,6 @@
 <section class="hero wrap">
 <div class="hero-copy"><p class="eyebrow"><span class="status-dot"></span><?= e($t('hero.eyebrow')) ?></p><h1><?= e($t('hero.title')) ?><br><em><?= e($t('hero.accent')) ?></em></h1><p class="lead"><?= e($t('hero.description')) ?></p><div class="actions"><a class="button" href="<?= $url('register') ?>?plan=free"><?= e($t('start')) ?><span>↗</span></a><a class="text-link" href="<?= $url('how') ?>"><?= e($t('hero.secondary')) ?> <span>→</span></a></div><p class="micro"><?= e($t('hero.note')) ?></p></div>
-<div class="hero-art" role="img" aria-label="<?= e($t('visual.backup')) ?>">
-<div class="orbital orbit-one"></div><div class="orbital orbit-two"></div><div class="orbital orbit-three"></div><div class="star star-one"></div><div class="star star-two"></div>
-<div class="core"><img src="/assets/icon.png" width="94" height="94" alt=""><span>ZION STORAGE</span></div>
-<div class="connection"><i></i><i></i><i></i></div>
-<div class="phone"><div class="phone-top"><i></i></div><div class="phone-heading"><img src="/assets/icon.png" width="22" height="22" alt=""><span><?= e($t('visual.memories')) ?></span></div><div class="photo-grid" aria-hidden="true"><div class="photo mountain"></div><div class="photo sunset"></div><div class="photo sea"></div><div class="photo dunes"></div><div class="photo forest"></div><div class="photo flower"></div></div><div class="phone-progress"><span class="status-dot"></span><?= e($t('visual.complete')) ?><div><i></i></div></div></div>
-<div class="floating-label backup-label"><span class="check">✓</span><div><strong><?= e($t('visual.backup')) ?></strong><small><?= e($t('visual.complete')) ?></small></div></div>
-<div class="floating-label privacy-label"><span>◇</span><?= e($t('visual.private')) ?></div>
-<span class="coordinate">01 / ∞</span>
-</div>
+<?php require __DIR__.'/hero-carousel.php'; ?>
 <div class="hero-bottom"><span>01 — ZION STORAGE</span><span><?= e($t('benefits.original')) ?> <i>✳</i> <?= e($t('benefits.private')) ?></span><a href="#benefits" aria-label="<?= e($t('continue')) ?>">↓</a></div>
 </section>
 <section class="section wrap" id="benefits"><p class="eyebrow">ZION / 01</p><h2><?= e($t('benefits.title')) ?></h2><div class="benefit-grid"><?php foreach(['auto'=>'↗','private'=>'◇','original'=>'✳','restore'=>'↶','devices'=>'▣','limits'=>'◴'] as $key=>$icon): ?><article class="benefit"><span class="feature-icon"><?= $icon ?></span><h3><?= e($t('benefits.'.$key)) ?></h3><p><?= e($t('benefits.'.$key.'.desc')) ?></p></article><?php endforeach ?></div></section>
