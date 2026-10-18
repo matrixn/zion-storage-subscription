@@ -24,12 +24,22 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
    check(rects.every((v,i)=>!i||v>=rects[i-1]),'navigation stays vertical');
    if(width<761)await page.locator('label[for=admin-menu]').click();
    if(section==='dashboard'){
-    check(await page.locator('[data-metric=clients]').textContent()==='2','dashboard reflects actual clients');
+    check(await page.locator('[data-metric=clients]').textContent()==='3','dashboard reflects actual clients');
     check((await page.locator('.revenue-values').innerText()).includes('1,99 EUR')&&(await page.locator('.revenue-values').innerText()).includes('9,99 RON'),'dashboard separates actual payment currencies');
     check(await page.locator('input[name=secret_key],input[name=password]').count()===0,'dashboard excludes management forms');
     await page.screenshot({path:path.join(artifacts,'admin-dashboard-'+width+'.png'),fullPage:true});
    }
    if(section==='new-client')check(await page.locator('input[name=password]').getAttribute('type')==='password','new customer password masked');
+   if(section==='clients'){
+    const pending=page.locator('tr').filter({hasText:'pending-browser@example.com'});
+    await pending.getByRole('button',{name:'Vezi linkul de activare',exact:true}).click();
+    const link=page.getByRole('textbox',{name:'Link de activare',exact:true});
+    check((await link.inputValue()).startsWith(origin+'/ro/verificare-email?token=') && await link.getAttribute('readonly')!==null,'admin reveals copyable activation link through browser form');
+    check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'activation link panel fits viewport');
+    await page.screenshot({path:path.join(artifacts,'admin-activation-link-'+width+'.png'),fullPage:false});
+    await page.reload();
+    check(await page.getByRole('textbox',{name:'Link de activare',exact:true}).count()===0,'activation link disclosure is consumed once');
+   }
    if(section==='subscriptions'){
     check((await page.locator('table').innerText()).includes('upgrade-browser@example.com'),'subscription list includes active paid client');
     await page.locator('.filter-tabs').getByRole('link',{name:'De verificat',exact:true}).click();

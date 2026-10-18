@@ -68,10 +68,20 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             db.close()
             php='require "src/bootstrap.php"; $db=new Zion\\Database(); $r=$db->one("SELECT payload FROM outbox ORDER BY id DESC LIMIT 1"); echo json_encode(Zion\\MailerService::decode($r["payload"]));'
             payload=json.loads(subprocess.run(['php','-r',php],cwd=ROOT,env=env,check=True,capture_output=True,text=True).stdout)
+            status,body,_=request(admin,'/admin?section=clients')
+            check('Vezi linkul de activare' in body and payload['url'] not in body,'client list offers explicit link disclosure without exposing tokens by default')
+            check(request(admin,'/admin',{'action':'activation_link','user_id':u['id']})[0]==419,'activation link disclosure requires administrator CSRF')
+            status,body,headers=request(admin,'/admin',{'_csrf':csrf(body),'action':'activation_link','user_id':u['id']})
+            check(status==200 and payload['url'] in body and 'readonly' in body and 'no-store' in headers['Cache-Control'],'admin reveals original activation link without email delivery')
+            check(payload['url'] not in request(admin,'/admin?section=clients')[1],'activation link is not persistently exposed after reload')
+            db=sqlite3.connect(temp+'/app.sqlite')
+            check(payload['url'] not in ' '.join(str(row) for row in db.execute('SELECT detail FROM admin_audit')),'activation URLs are excluded from audit records');db.close()
             parsed=urllib.parse.urlparse(payload['url']);path=parsed.path+'?'+parsed.query
             status,html,_=request(customer,path)
             status,html,_=request(customer,parsed.path,{'_csrf':csrf(html),'token':urllib.parse.parse_qs(parsed.query)['token'][0]})
             check(status==200 and 'name="accept"' in html,'verified manual customer reaches terms and activation, not checkout')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'activation_link','user_id':u['id']})
+            check(status==422 and 'confirmat deja' in body and payload['url'] not in body,'verified clients cannot receive another new-client activation link')
             data={'_csrf':csrf(html),'password':'secure-admin-client-password'}
             check(request(customer,'/ro/finalizare',data)[0]==422,'admin cannot accept legal terms on behalf of customer')
             data['accept']='1';status,html,_=request(customer,'/ro/finalizare',data)
@@ -145,6 +155,7 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             db.close()
             if '--browser' in sys.argv:
                 db=sqlite3.connect(temp+'/app.sqlite');now=int(time.time());browser_id='b'*32;verify_token='c'*64
+                db.execute('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,0,0,?,?)',('d'*32,'Pending Browser','pending-browser@example.com',u['password_hash'],'ro','free',now,now))
                 db.execute('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,email_verified_at,storage_user_id,status,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',(browser_id,'Upgrade Browser','upgrade-browser@example.com',u['password_hash'],'ro','120gb',now,'browser-storage','active',now,now,now,now))
                 db.execute("INSERT INTO subscriptions(user_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,plan,renewal_at,paid_confirmed,currency) VALUES(?,?,?,?,?,?,?,1,'eur')",(browser_id,'cus_browser','sub_browser','price_browser','active','120gb',now+2*86400))
                 db.execute("INSERT INTO invoices(id,user_id,amount,currency,created_at) VALUES(?,?,?,?,?)",('in_dashboard_eur',browser_id,199,'eur',now))

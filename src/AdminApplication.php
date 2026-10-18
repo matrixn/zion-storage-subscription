@@ -30,7 +30,7 @@ final class AdminApplication {
   $this->stripeMode=(string)($_POST['credential_mode']??$_GET['stripe_mode']??$stripeActiveMode);
   if(!in_array($this->stripeMode,['test','live'],true)){http_response_code(404);return;}
   $stripeMode=$this->stripeMode;
-  $apiFilters=[];$apiEntries=null;
+  $apiFilters=[];$apiEntries=null;$activationLink=null;
   $admin=null;$error=null;$notice=$_SESSION['admin_notice']??null;unset($_SESSION['admin_notice']);
   if(($_SESSION['admin_until']??0)>time() && isset($_SESSION['admin_id']))$admin=$this->db->one('SELECT id,email FROM administrators WHERE id=?',[$_SESSION['admin_id']]);
   $method=$_SERVER['REQUEST_METHOD'];
@@ -71,6 +71,10 @@ final class AdminApplication {
      $_SESSION['admin_notice']=$result['message'];$this->redirect();
     }
     $this->initializeBilling();
+    if($action==='activation_link'){
+     $link=$this->service->activationLink((string)($_POST['user_id']??''),$admin['id']);
+     $_SESSION['admin_activation_link']=EncryptedPayload::encode($link);$this->section='clients';$this->redirect();
+    }
     if(str_starts_with($action,'catalog_'))$this->catalog=new BillingCatalog($this->db,$this->plans,new \Stripe\StripeClient((new IntegrationSettings($this->db))->stripe($stripeMode)['secret_key']?:'sk_'.$stripeMode.'_unconfigured'),$stripeMode);
     $uid=(string)($_POST['user_id']??'');$reason=trim((string)($_POST['reason']??''));
     if(!in_array($action,['create','retry','cancel','sync','catalog_save','catalog_create','catalog_disable','catalog_legacy'],true) && (mb_strlen($reason)<3 || mb_strlen($reason)>500))throw new \DomainException('Introdu un motiv de 3–500 caractere pentru jurnal.');
@@ -100,6 +104,11 @@ final class AdminApplication {
   $catalogMode=$section==='catalog'?$stripeMode:$stripeActiveMode;
   $plans=$this->plans->all('month',$catalogMode);$yearPlans=$this->plans->all('year',$catalogMode);$catalogRows=$admin?$this->db->run('SELECT * FROM billing_prices WHERE stripe_mode=? ORDER BY plan,interval,created_at DESC',[$catalogMode])->fetchAll():[];$clients=[];$changes=[];$audit=[];$search=trim((string)($_GET['q']??''));
   if($admin){
+   $linkFlash=$_SESSION['admin_activation_link']??null;unset($_SESSION['admin_activation_link']);
+   if($section==='clients' && is_string($linkFlash)){
+    $candidate=EncryptedPayload::decode($linkFlash);
+    if($this->db->one('SELECT v.token_hash FROM email_verifications v JOIN users u ON u.id=v.user_id LEFT JOIN account_controls c ON c.user_id=u.id WHERE v.token_hash=? AND v.user_id=? AND v.used_at IS NULL AND v.expires_at>? AND u.email_verified_at IS NULL AND c.banned_at IS NULL',[$candidate['token_hash'],$candidate['user_id'],time()]))$activationLink=$candidate;
+   }
    if($section==='api-log'){
     foreach(['provider','status','mode','direction'] as $key)$apiFilters[$key]=is_string($_GET[$key]??null)?$_GET[$key]:'';
     $apiEntries=ApiLog::page($apiFilters,max(1,(int)($_GET['page']??1)));

@@ -2,6 +2,32 @@
 namespace Zion;
 final class AdminService {
  public function __construct(private Database $db,private Plans $plans,private MailerService $mail,private StorageProvisioningService $storage,private SubscriptionChanges $changes) {}
+ public function activationLink(string $uid,string $admin): array {
+  return $this->db->transaction(function()use($uid,$admin){
+   $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
+   if(!$u)throw new \DomainException('Client inexistent.');
+   if($u['email_verified_at'] || $u['storage_user_id'])throw new \DomainException('Clientul a confirmat deja contul. Linkul este disponibil doar pentru clienți noi, neconfirmați.');
+   if((new AccountControl($this->db))->banned($uid))throw new \DomainException('Nu se poate genera un link pentru un cont suspendat.');
+   $current=$this->db->one('SELECT * FROM email_verifications WHERE user_id=? AND used_at IS NULL AND expires_at>? ORDER BY expires_at DESC LIMIT 1',[$uid,time()]);
+   $token=null;
+   if($current){
+    $message=$this->db->one('SELECT payload FROM outbox WHERE dedupe_key=?',['verify:'.$current['token_hash']]);
+    if($message && $message['payload']!=='{}'){
+     $payload=MailerService::decode($message['payload']);parse_str(parse_url($payload['url']??'',PHP_URL_QUERY)?:'',$query);
+     if(is_string($query['token']??null) && preg_match('/^[a-f0-9]{64}$/D',$query['token']) && hash_equals($current['token_hash'],hash('sha256',$query['token'])))$token=$query['token'];
+    }
+   }
+   $reused=$token!==null;
+   if(!$reused){
+    $token=bin2hex(random_bytes(32));$current=['token_hash'=>hash('sha256',$token),'expires_at'=>time()+3600];
+    $this->db->run('DELETE FROM email_verifications WHERE user_id=?',[$uid]);
+    $this->db->run('INSERT INTO email_verifications(token_hash,user_id,expires_at) VALUES(?,?,?)',[$current['token_hash'],$uid,$current['expires_at']]);
+    $this->mail->queue($u['email'],$u['locale'],'verify',['url'=>base_url().Router::path($u['locale'],'verify').'?token='.$token],'verify:'.$current['token_hash']);
+   }
+   $this->changes->audit($admin,$uid,'activation_link_viewed',$reused?'Link de confirmare existent afișat în administrare':'Link de confirmare nou generat în administrare');
+   return ['user_id'=>$uid,'email'=>$u['email'],'url'=>base_url().Router::path($u['locale'],'verify').'?token='.$token,'token_hash'=>$current['token_hash'],'expires_at'=>(int)$current['expires_at']];
+  });
+ }
  public function create(array $d,string $admin): string {
   $name=trim((string)($d['name']??''));$email=strtolower(trim((string)($d['email']??'')));$password=(string)($d['password']??'');$plan=(string)($d['plan']??'');$locale=(string)($d['locale']??'ro');
   if(mb_strlen($name)<2 || mb_strlen($name)>150 || !filter_var($email,FILTER_VALIDATE_EMAIL) || strlen($email)>254 || !AccountService::passwordValid($password) || !$this->plans->get($plan) || !in_array($locale,TranslationService::LOCALES,true))throw new \DomainException('Verifică numele, emailul, planul și parola (minimum 12 caractere).');
