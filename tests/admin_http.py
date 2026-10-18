@@ -94,9 +94,11 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             body=request(admin,'/admin')[1]
             body=request(admin,'/admin?section=integrations')[1]
             check('API-uri Stripe' in body and 'Secret API Oblio' in body,'admin exposes dedicated API settings section')
+            check('https://dashboard.stripe.com/apikeys' in body and 'Reveal secret' in body and 'Setări → Date Cont' in body and 'stripe listen --forward-to' in body,'API fields include official credential and local webhook setup guidance')
             check(request(admin,'/admin',{'action':'settings_save','provider':'stripe','secret_key':'sk_test_httpSaved'})[0]==419,'API settings writes require admin CSRF')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','secret_key':'sk_test_httpSaved','webhook_secret':'whsec_httpSaved'})
             check(status==200 and 'Valorile din .env' in body and 'sk_test_httpSaved' not in body and 'whsec_httpSaved' not in body,'Stripe settings save without exposing secrets in HTML')
+            check('sk_test••••••••pSaved' in body and 'whsec_h••••••••pSaved' in body,'saved TEST keys show partial previews')
             check('Verificare nereușită' in body and 'Nesincronizat' not in body,'automatic sync reports isolated transport failure instead of false success')
             check(request(admin,'/admin',{'action':'stripe_check'})[0]==419 and request(admin,'/admin',{'action':'stripe_sync'})[0]==419,'connection test and synchronization require CSRF')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'stripe_check','credential_mode':'test'})
@@ -105,6 +107,7 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(status==422 and 'sk_live_httpRejected' not in body,'unsupported Stripe mode is rejected without echoing key')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','credential_mode':'live','secret_key':'sk_live_fake','webhook_secret':'whsec_liveFixture'})
             check(status==200 and 'Activează LIVE pe site' in body and 'sk_live_fake' not in body,'LIVE credentials are saved separately with explicit activation control')
+            check('whsec_l••••••••ixture' in body and 'sk_test••••••••pSaved' not in body,'LIVE previews stay separate from TEST and short keys remain masked')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'stripe_activate','credential_mode':'live'})
             check(status==422 and 'Modul nu a fost activat' in body,'activation is refused when API/catalog verification is incomplete')
             for mode,secret in [('test','whsec_httpSaved'),('live','whsec_liveFixture')]:
@@ -123,6 +126,7 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             subprocess.run(['php','-r',switch,'test'],cwd=ROOT,env=env,check=True,capture_output=True)
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'oblio','email':'oblio@example.com','secret':'httpOblioSecret','cif':'RO12345678','series':'ZS','language':'RO','vat_rate':'0','vat_name':'Scutit'})
             check(status==200 and 'httpOblioSecret' not in body and 'Configurat din administrare' in body,'Oblio disabled configuration saves without exposing API secret')
+            check('httpObl••••••••Secret' in body,'saved Oblio secret shows partial preview')
             db=sqlite3.connect(temp+'/app.sqlite')
             raw=' '.join(r[0] for r in db.execute('SELECT value FROM integration_settings'))+' '.join(r[0] for r in db.execute('SELECT detail FROM admin_audit'))
             check(all(secret not in raw for secret in ['sk_test_httpSaved','whsec_httpSaved','httpOblioSecret']),'stored API settings and admin audit do not expose plaintext secrets')

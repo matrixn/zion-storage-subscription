@@ -25,6 +25,8 @@ final class TestStripe extends Zion\StripeService {
 }
 $count=0;
 function check(bool $condition,string $name):void {global $count;if(!$condition)throw new RuntimeException('FAIL: '.$name);$count++;echo "PASS ".$name."\n";}
+check(Zion\IntegrationSettings::maskedSecret('sk_test_abcdefghijk123456')==='sk_test••••••••123456','saved secret preview shows only seven leading and six trailing characters');
+check(Zion\IntegrationSettings::maskedSecret('')==='' && Zion\IntegrationSettings::maskedSecret('short')==='••••••••' && Zion\IntegrationSettings::maskedSecret('1234567890123')==='••••••••','empty and short secrets never reveal a complete credential');
 function seedCatalog(Zion\Database $db):void {
  if(env('APP_ENV')!=='test' || $db->one('SELECT id FROM users LIMIT 1'))throw new RuntimeException('Fixture requires empty test database');
  $db->run('DELETE FROM billing_prices');

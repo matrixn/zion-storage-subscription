@@ -4,6 +4,11 @@ namespace Zion;
 
 /** A saved provider is authoritative as a whole, including empty/disabled values. */
 final class IntegrationSettings {
+ public static function maskedSecret(string $secret): string {
+  if($secret==='')return '';
+  if(mb_strlen($secret)<=13)return '••••••••';
+  return mb_substr($secret,0,7).'••••••••'.mb_substr($secret,-6);
+ }
  public function __construct(private Database $db) {}
  public function saved(string $provider): ?array {
   if(!in_array($provider,['stripe','oblio'],true))throw new \DomainException('Serviciu invalid.');

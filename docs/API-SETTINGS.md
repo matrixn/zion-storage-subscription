@@ -4,7 +4,7 @@ Open /admin → Configuration → API-uri Stripe și Oblio. Credentials remain a
 
 ## Stripe TEST and LIVE
 
-Two independent profiles store the secret API key and webhook signing secret. Old single-profile installations migrate logically to TEST, and existing local billing records migrate to TEST without changing their financial history. LIVE starts empty. On the first save, enter the keys explicitly; on later saves, blank fields retain that profile's saved secrets, and the clear checkbox removes them. Secrets are never returned to HTML.
+Two independent profiles store the secret API key and webhook signing secret. Old single-profile installations migrate logically to TEST, and existing local billing records migrate to TEST without changing their financial history. LIVE starts empty. On the first save, enter the keys explicitly; on later saves, blank fields retain that profile's saved secrets, and the clear checkbox removes them. Full secrets are never returned to HTML. Saved credentials show a placeholder with their first seven and last six characters separated by a fixed mask; credentials of 13 characters or fewer are fully masked. Inputs remain empty so saving an unchanged form preserves the encrypted value. Each field includes official setup links and guidance for obtaining the API key, webhook signing secret or Oblio client_secret.
 
 1. Select TEST or LIVE and enter the matching secret API key and webhook signing secret.
 2. Save. The application authenticates against Stripe and checks Products/Prices read access, then automatically synchronizes the six paid options. No Product/Price IDs are required.

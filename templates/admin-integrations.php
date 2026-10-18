@@ -10,7 +10,13 @@
 <form method="post" class="integration-form">
 <input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><input type="hidden" name="action" value="settings_save"><input type="hidden" name="provider" value="stripe"><input type="hidden" name="credential_mode" value="<?= $stripeMode ?>">
 <?php foreach(['secret_key'=>'Cheie API secretă Stripe (sk_'.$stripeMode.'_ / rk_'.$stripeMode.'_)','webhook_secret'=>'Secret semnare webhook (whsec_)'] as $key=>$label): ?>
-<label><?= e($label) ?><input type="password" name="<?= $key ?>" autocomplete="new-password" maxlength="2048" placeholder="<?= $stripeSaved&&$stripeSettings[$key]?'Salvată — lasă gol pentru păstrare':'Introdu cheia pentru administrare' ?>"></label>
+<label><?= e($label) ?><input type="password" name="<?= $key ?>" autocomplete="new-password" maxlength="2048" placeholder="<?= e($stripeSaved&&$stripeSettings[$key]?Zion\IntegrationSettings::maskedSecret($stripeSettings[$key]).' — salvată; lasă gol pentru păstrare':'Introdu cheia pentru administrare') ?>"></label>
+<?php if($key==='secret_key'): ?>
+<small>În <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer">Stripe → API keys</a>, selectează <?= $stripeMode==='test'?'sandboxul folosit la testare':'modul LIVE' ?> și copiază cheia secretă <code>sk_<?= $stripeMode ?>_…</code> sau o cheie restricționată <code>rk_<?= $stripeMode ?>_…</code> cu permisiunile necesare integrării. Cheia publică <code>pk_…</code> nu se folosește aici. <a href="https://docs.stripe.com/keys" target="_blank" rel="noopener noreferrer">Ghid oficial</a>.</small>
+<?php else: ?>
+<small>În <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener noreferrer">Stripe → Workbench → Webhooks</a>, selectează același mediu <?= strtoupper($stripeMode) ?>, creează o destinație cu endpointul și evenimentele afișate mai sus, apoi deschide destinația și apasă <strong>Reveal secret</strong> la <strong>Signing secret</strong>. Copiază valoarea <code>whsec_…</code>. <a href="https://docs.stripe.com/events/manage-webhook-endpoints#check-the-endpoint-secret" target="_blank" rel="noopener noreferrer">Ghid oficial</a>.</small>
+<?php if($stripeMode==='test'): ?><small>Pentru localhost, rulează <code>stripe listen --forward-to http://localhost:8088/webhooks/stripe?mode=test</code> în sandboxul potrivit și folosește secretul <code>whsec_…</code> afișat de CLI; acesta diferă de secretul destinației din Dashboard.</small><?php endif ?>
+<?php endif ?>
 <label class="check"><input type="checkbox" name="clear_<?= $key ?>" value="1"> Șterge cheia salvată pentru <?= e($label) ?></label>
 <?php endforeach ?>
 <button>Salvează, testează și sincronizează <?= strtoupper($stripeMode) ?></button></form>
@@ -22,7 +28,9 @@
 <input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><input type="hidden" name="action" value="settings_save"><input type="hidden" name="provider" value="oblio">
 <label class="check"><input type="checkbox" name="enabled" value="1" <?= $oblioSettings['enabled']?'checked':'' ?>> Activează emiterea reală în Oblio</label>
 <label>Email cont Oblio<input type="email" name="email" maxlength="254" value="<?= e($oblioSettings['email']) ?>" autocomplete="off"></label>
-<label>Secret API Oblio<input type="password" name="secret" maxlength="2048" autocomplete="new-password" placeholder="<?= $oblioSaved&&$oblioSettings['secret']?'Salvat — lasă gol pentru păstrare':'Introdu secretul pentru administrare' ?>"></label>
+<small>Adresa de email cu care te autentifici în Oblio; este identificatorul API <code>client_id</code>.</small>
+<label>Secret API Oblio<input type="password" name="secret" maxlength="2048" autocomplete="new-password" placeholder="<?= e($oblioSaved&&$oblioSettings['secret']?Zion\IntegrationSettings::maskedSecret($oblioSettings['secret']).' — salvat; lasă gol pentru păstrare':'Introdu secretul pentru administrare') ?>"></label>
+<small>În contul Oblio, deschide <strong>Setări → Date Cont</strong> și copiază tokenul <code>client_secret</code>. Nu introduce parola contului sau un <code>access_token</code> temporar. Secretul se regenerează când resetezi parola Oblio și trebuie actualizat aici. <a href="https://www.oblio.eu/api/" target="_blank" rel="noopener noreferrer">Documentație API Oblio</a>.</small>
 <label class="check"><input type="checkbox" name="clear_secret" value="1"> Șterge secretul API salvat</label>
 <div class="grid">
 <?php foreach(['cif'=>'CIF firmă emitentă','series'=>'Serie facturi','workstation'=>'Punct de lucru (opțional)','vat_rate'=>'Cotă TVA (%)','vat_name'=>'Denumire cotă TVA'] as $key=>$label): ?>

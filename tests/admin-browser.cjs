@@ -39,8 +39,10 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
    if(section==='integrations'){
     check(await page.getByRole('button',{name:'Testează conexiunea Stripe',exact:true}).isVisible()&&await page.getByRole('button',{name:'Sincronizează automat catalogul',exact:true}).isVisible(),'Stripe connection and full catalog controls are available');
     check(await page.locator('input[name=secret_key]').inputValue()==='','Stripe key never prefilled');
+    check((await page.locator('input[name=secret_key]').getAttribute('placeholder')).startsWith('sk_test••••••••pSaved'),'saved TEST key preview is visible in the empty password field');
     await page.getByText('Oblio · Configurat din administrare',{exact:true}).click();
     check(await page.locator('input[name=secret]').inputValue()===''&&await page.locator('input[name=secret]').getAttribute('type')==='password','Oblio secret masked and never prefilled');
+    check((await page.locator('input[name=secret]').getAttribute('placeholder')).startsWith('httpObl••••••••Secret'),'saved Oblio preview is visible in the empty password field');
     check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'expanded integration settings fit');
     await page.screenshot({path:path.join(artifacts,'admin-integrations-'+width+'.png'),fullPage:true});
     await page.locator('nav[aria-label="Configurație Stripe"]').getByRole('link',{name:'LIVE · Plăți reale',exact:true}).click();
