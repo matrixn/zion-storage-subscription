@@ -1,0 +1,27 @@
+1. Verantwortlicher und Umfang
+Die oben bezeichnete PFA ist für Website-, Konto-, Geschäfts- und Supportdaten verantwortlich. Kontakt: contact@zion3d.ro. Diese Erklärung betrifft Zion Storage und den Immich-Mediendienst. Kontoinhaber müssen mindestens 18 sein; Bilder Dritter einschließlich Kindern erfordern eine rechtmäßige Verarbeitungsbefugnis.
+
+2. Daten
+Wir verarbeiten Name, E-Mail, Sprache, Bestätigungszeitpunkte und Dokumentfassungen. Das Anmeldepasswort wird gehasht. Für automatische Einrichtung wird das ursprüngliche Passwort getrennt verschlüsselt höchstens 24 Stunden vorgehalten und nach Aktivierung/Ablauf durch Wartung gelöscht.
+Abrechnung erfordert Name/Adresse, Land, Postleitzahl, E-Mail, freiwillige Telefonnummer und gegebenenfalls Firmendaten. Stripe-Referenzen/-Status, Abonnements und Rechnungen werden gespeichert. Vollständige Kartendaten werden bei Stripe eingegeben, nicht in der Zion-Datenbank gespeichert.
+Immich speichert Dateien, Alben, Vorschaubilder und vorhandene EXIF-, Zeit-, Geräte- und GPS-Metadaten. Die Karte nutzt Standortdaten. Gesichtserkennung wird in der angegebenen Konfiguration nicht verwendet. Konfigurierte Kartenressourcen können Browserverbindungen zum jeweiligen Anbieter mit IP-/technischen Daten erzeugen.
+IP-/technische Daten dienen ferner Sitzungen, Missbrauchsschutz und Protokollen. Kontakt- und Widerrufserklärungen werden gespeichert. Verwaltungsstatistiken enthalten Foto-/Videoanzahl, Bytes, Kontingent und Erfassungszeit, keine öffentliche Galerie.
+
+3. Zwecke und Rechtsgrundlagen
+Vertrag und angeforderte vorvertragliche Schritte tragen Registrierung, Speicherung, Synchronisierung, Zahlungen, Servicemitteilungen und Support. Gesetzliche Pflichten tragen Steuerbelege und Verbraucherrechte. Berechtigte Interessen tragen angemessene Sicherheit, Betrugsprävention, Diagnose, Kapazität und Rechtsverteidigung. Einwilligung wird für entsprechend erforderliche optionale Funktionen genutzt, nicht pauschal. Registrierung ist keine Werbeanmeldung. Wir verkaufen keine Daten und nutzen Fotos nicht für Werbung.
+
+4. Hosting und Empfänger
+Dateien liegen auf persönlich betriebenem Server in Rumänien mit RAID-Redundanz. RAID ist keine unabhängige Sicherung oder Wiederherstellungsgarantie für jeden Vorfall. E-Mail wird über eigenes Hosting betrieben.
+Zugriff haben nur Anbieter/befugte Personen für Verwaltung, Support, Sicherheit oder gesetzliche Aufgaben. Dienstleister: Stripe (Zahlungen), Oblio (Rechnungen), Cloudflare (Proxy/Sicherheit). Deren Verantwortlichen-/Auftragsverarbeiterrollen hängen vom Dienst ab; sie nutzen eigene Infrastruktur/Unterauftragnehmer. Behörden, Buchhaltung und Berater können erforderliche Daten bei rechtmäßigem Zweck erhalten. Analytics und CAPTCHA sind in der angegebenen Konfiguration nicht aktiv.
+Cloudflare kann Daten weltweit verarbeiten. Rumänisches Hosting bedeutet nicht, dass jede Anbieter-Verarbeitung in Rumänien/EWR bleibt. Anwendbare Drittlandübermittlungen beruhen auf Angemessenheitsbeschlüssen oder Garantien wie Standardvertragsklauseln; der Mechanismus kann angefragt werden.
+
+5. Fristen und Löschung
+Dateien bleiben für Konto-/Dienstdauer. Nach Ende des bezahlten Anspruchs gilt eine Exportfrist von 30 Tagen, danach beginnt das Löschverfahren. Löschanträge/gesetzliche Ausnahmen werden einzeln geprüft. Rechtmäßig im aktiven kostenlosen Tarif gespeicherte Dateien werden nicht allein wegen fehlender Zahlung gelöscht.
+Kontodaten bleiben für Beziehung/Abwicklung erforderlich. Gewöhnliche Kontakte werden nach 90 Tagen bereinigt; API-Protokolle nach 30 Tagen oder 10.000 Einträgen. Widerrufsdaten bleiben zur Bearbeitung, danach höchstens drei Jahre ab Erledigung, außer bei dokumentiertem Streit/gesetzlicher Pflicht. Buchhaltungsbelege folgen gesetzlichen Fristen, üblicherweise fünf Jahre nach rumänischer Berechnung. Dateilöschung beseitigt keine Pflicht-Steuerbelege. Technische Bereinigung braucht geplante Wartung; künftige unabhängige Sicherungen benötigen eigene Regeln.
+
+6. Rechte und Sicherheit
+Sie können Auskunft, Berichtigung, Löschung, Einschränkung und unter gesetzlichen Voraussetzungen Übertragbarkeit/Widerspruch verlangen. Optionale Einwilligung ist für die Zukunft widerrufbar. Kontakt: contact@zion3d.ro. Angemessene Identitätsprüfung; Antwort grundsätzlich binnen eines Monats mit zulässigen DSGVO-Verlängerungen. Beschwerde bei ANSPDCP, www.dataprotection.ro, oder anderer zuständiger Aufsicht ist möglich.
+Wir nutzen Zugriffskontrollen, sichere Verbindungen soweit eingerichtet und Verschlüsselung von Anwendungsgeheimnissen. Ende-zu-Ende-Verschlüsselung oder ausgeschlossener Administratorzugriff werden nicht versprochen. Nichtzahlungsbeschränkungen folgen dem Abonnement; menschliche Prüfung kann verlangt werden. Keine werbliche Fotoprofilbildung oder rechtlich erhebliche Marketingentscheidung anhand der Bilder.
+
+7. Berufliche Nutzung und Änderungen
+Bei beruflicher Verarbeitung von Kunden-, Beschäftigten- oder anderen Drittdaten können Sie Inhaltsverantwortlicher sein. Fordern Sie vorher einen Vertrag nach Art. 28 DSGVO an; diese Information ersetzt ihn nicht. Für eigene Konto-/Abrechnungsdaten bleibt die PFA verantwortlich. Wesentliche Änderungen werden angemessen mitgeteilt; Fassungsdatum oben.

@@ -1,0 +1,27 @@
+1. Provider and contract
+Zion Storage is supplied by the PFA identified above, CUI 49490924, registration F38/36/2024, declared not VAT-registered. Contract, complaint and withdrawal contact: contact@zion3d.ro, telephone 0770675597. Customers must be at least 18 or businesses, in countries where supply/payment are lawful. Global access does not override legal/payment-provider restrictions.
+Select a plan, check/correct details and accept these terms before ordering. A paid contract is concluded upon acceptance of the order and payment confirmation; access also requires email verification. Confirmations/billing documents are electronic. Terms may be saved/printed. Available automatic messages use your selected language.
+
+2. Service and requirements
+Individual photo/video storage uses personally operated Romanian infrastructure and Immich. Plans shown at ordering: Free 10 GB, Personal 120 GB, Plus 250 GB, Titan 500 GB; 1 GB equals 1,000,000,000 bytes. Multiple accounts are not included. Internet and a compatible browser/app are required; features depend on versions/permissions. Maps may use file coordinates; facial recognition is not used in the declared configuration.
+You must have rights to store/share uploads. Illegal content, malware and infringement are prohibited. Secure your password and report unauthorized access. We do not promise uninterrupted availability, guaranteed recovery or end-to-end encryption. RAID is redundancy, not an independent backup. Keep separate copies of important files; statutory provider liability remains unaffected.
+
+3. Prices, payment and renewal
+EUR price and payable total are shown before payment. The operator does not collect VAT under its declared current non-registration status; cross-border obligations must be handled under applicable law and reflected in the order total. Romanian establishment alone does not justify adding standard VAT. Your bank may charge its own disclosed conversion costs.
+Stripe processes payment. Monthly/yearly subscriptions renew automatically until cancelled. Annual payment covers twelve months at eleven times the displayed monthly price. Renewal date/amount follow the subscription. Future price changes require prior notice and an opportunity to stop renewal; changing website prices does not automatically rewrite contracts. Oblio issues fiscal invoices; a Stripe confirmation alone is not a fiscal invoice.
+
+4. Upgrade, cancellation and nonpayment
+An eligible one-time paid upgrade to a larger plan is available within five days of the original purchase. The difference/future recurring price are disclosed before confirmation. The original renewal date is retained; the new plan's rate applies from the following billing period. Monthly/yearly intervals must remain compatible; arbitrary Stripe changes are not guaranteed.
+Stop renewal in Stripe billing or contact support. Normal cancellation takes effect at the paid period's end and differs from statutory withdrawal. Nonpayment/expiry may stop uploads; abuse suspension may restrict access. Failed payment does not immediately erase files. After paid access ends, you have 30 days to export, with support assistance if direct access is restricted, before deletion begins. Legitimate retention in an active free plan is separate.
+
+5. Withdrawal and refunds
+No additional voluntary change-of-mind refund guarantee is offered beyond statutory rights. A free plan does not remove consumer rights.
+Where a consumer withdrawal right applies, it may be exercised without a reason within 14 days of contract conclusion through “Withdraw from the contract” on the site or an unequivocal declaration to contact@zion3d.ro/business address. Identify your name, contract/order and confirmation address. No login is required. The acknowledgement includes declaration, date/time, is downloadable and is also sent by email.
+Mandatory refunds follow statutory deadlines, normally no later than 14 days after notice, using the original payment method subject to lawful exceptions. Proportionate charges for service supplied require all legal conditions, including an express request to start performance. Activating a continuing subscription does not automatically waive withdrawal. Businesses do not gain consumer withdrawal rights merely by contracting; other contractual/legal remedies remain.
+
+6. Conformity and disputes
+Mandatory remedies for nonconforming digital services, including restoration, price reduction or termination/refund where due, remain available. Contact support with order details and the issue, never passwords/full card data. We investigate and respond in a reasonable period respecting mandatory deadlines. Romanian OUG 34/2014 and OUG 141/2021 apply within their scope. Liability that cannot lawfully be excluded is not excluded.
+Romanian law applies without depriving consumers of mandatory protections otherwise applicable to them. No exclusive jurisdiction is imposed in breach of consumer rights. ANPC, anpc.ro, and applicable available alternative dispute resolution may be used.
+
+7. Data and versions
+Privacy/cookie policies explain data use. Professional processing of third-party content may need a separate processing agreement. New terms do not retroactively remove accrued rights; material changes are communicated. Accepted versions are recorded for new registrations.

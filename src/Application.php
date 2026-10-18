@@ -63,7 +63,7 @@ final class Application {
   if($this->page==='register') {
    $d=[]; foreach(['name','email','password','confirm','locale','plan'] as $k) $d[$k]=is_string($_POST[$k]??null)?(in_array($k,['password','confirm'],true)?$_POST[$k]:trim($_POST[$k])):'';
    if(!empty($_POST['company'])) {$this->render('message',['message'=>'register.sent']);return;}
-   if(production() && env('LEGAL_READY')!=='true') {$this->fail('legal.pending',503);return;}
+   if(production() && (env('LEGAL_READY')!=='true' || !LegalDocuments::ready())) {$this->fail('legal.pending',503);return;}
    if(mb_strlen($d['name'])<2 || mb_strlen($d['name'])>150 || !filter_var($d['email'],FILTER_VALIDATE_EMAIL) || strlen($d['email'])>254 || !in_array($d['locale'],TranslationService::LOCALES,true) || empty($_POST['terms']) || empty($_POST['privacy'])){$this->fail('error.validation');return;}
    if(!AccountService::passwordValid($d['password']) || $d['password']!==$d['confirm']){$this->fail('error.password');return;}
    if(!$this->plans->get($d['plan'])){$this->fail('error.plan');return;}
@@ -101,6 +101,11 @@ final class Application {
    }
    $this->render('message',['message'=>'resend.sent']);return;
   }
+  if($this->page==='contact' && ($_POST['request_type']??'')==='withdrawal'){
+   try{$receipt=(new WithdrawalService($this->db,$this->mail))->submit($_POST,$this->locale);}
+   catch(\InvalidArgumentException $e){$this->fail('error.validation');return;}
+   $this->render('withdrawal-received',['receipt'=>$receipt]);return;
+  }
   if($this->page==='contact') {
    if(!empty($_POST['company'])){$this->render('message',['message'=>'contact.sent']);return;}
    $d=[];foreach(['name','email','subject','message'] as $k)$d[$k]=trim((string)($_POST[$k]??''));
@@ -109,7 +114,7 @@ final class Application {
    $id=bin2hex(random_bytes(16));
    $this->db->transaction(function() use($id,$d) {
     $this->db->run('INSERT INTO contact_messages(id,name,email,subject,message,locale,created_at) VALUES(?,?,?,?,?,?,?)',[$id,$d['name'],$d['email'],$d['subject'],$d['message'],$this->locale,time()]);
-    $this->mail->queue(env('SUPPORT_EMAIL','support@zion3d.ro'),$this->locale,'support',$d,'support:'.$id);
+    $this->mail->queue(LegalDocuments::operator()['email'],$this->locale,'support',$d,'support:'.$id);
     $this->mail->queue($d['email'],$this->locale,'contact',[],'contact:'.$id);
    });
    $this->render('message',['message'=>'contact.sent']);return;
@@ -140,8 +145,8 @@ final class Application {
   if($this->page==='portal'){$this->redirect($this->billing->portal($u));}
   if($this->page==='activate') {
    if(!$u['terms_at'] || !$u['privacy_at']) {
-    if(empty($_POST['accept']) || (production() && env('LEGAL_READY')!=='true')){$this->fail('error.validation');return;}
-    $this->db->run('UPDATE users SET terms_at=?,privacy_at=? WHERE id=?',[time(),time(),$u['id']]);
+    if(empty($_POST['accept']) || (production() && (env('LEGAL_READY')!=='true' || !LegalDocuments::ready()))){$this->fail('error.validation');return;}
+    $this->db->run('UPDATE users SET terms_at=?,privacy_at=?,terms_version=?,privacy_version=? WHERE id=?',[time(),time(),LegalDocuments::VERSION,LegalDocuments::VERSION,$u['id']]);
    }
    if(($_POST['automatic']??'')==='1') {
     $this->accounts->automatic($u['id']);$this->redirect(Router::path($this->locale,'status'));
@@ -165,10 +170,12 @@ final class Application {
   $profile=$user?(new BillingProfileService($this->db))->get($user['id']):null;
   $billing=is_array($_POST['billing']??null)?$_POST['billing']:($profile??[]);
   $fiscalInvoices=$user?$this->db->run('SELECT oblio_series,oblio_number,invoice_url,amount,currency,status,billing_period_start,billing_period_end FROM fiscal_invoices WHERE user_id=? ORDER BY created_at DESC LIMIT 50',[$user['id']])->fetchAll():[];
+  $receipt=$data['receipt']??null;
   $error=$data['error']??null;$message=$data['message']??null;
   $selected=(string)($_GET['plan']??$_POST['plan']??'free'); if(!$this->plans->get($selected))$selected='free';
-  $canonicalPage=in_array($page,['home','how','register','contact'],true)?$page:'home';
-  $title=$t(match($page){'home'=>'hero.title','how'=>'how.title','register'=>'register.title','contact'=>'contact.title','legal'=>'legal.title',default=>'status.title'});
+  $canonicalPage=in_array($page,['home','how','register','contact','legal'],true)?$page:'home';
+  $legalQuery=$page==='legal'?'?document='.(in_array($_GET['document']??'',['privacy','terms','cookies'],true)?$_GET['document']:'privacy'):((($_GET['request']??$_POST['request_type']??'')==='withdrawal')?'?request=withdrawal':'');
+  $title=$t(match($page){'home'=>'hero.title','how'=>'how.title','register'=>'register.title','contact'=>'contact.title','legal'=>'legal.'.(in_array($_GET['document']??'',['privacy','terms','cookies'],true)?$_GET['document']:'privacy'),default=>'status.title'});
   $description=$t(match($page){'home'=>'hero.description','how'=>'how.description','register'=>'register.desc','contact'=>'contact.desc',default=>'footer.tag'});
   ob_start(); $file=dirname(__DIR__).'/templates/'.$view.'.php'; if(!is_file($file))$file=dirname(__DIR__).'/templates/status.php'; require $file; $content=ob_get_clean();
   require dirname(__DIR__).'/templates/layout.php';

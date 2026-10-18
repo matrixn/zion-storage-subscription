@@ -1,0 +1,27 @@
+1. Controller and scope
+The PFA identified above controls website, account, commercial and support data. Contact: contact@zion3d.ro. This policy covers Zion Storage and its Immich-based media service. Account holders must be at least 18; uploads depicting others, including children, require a lawful processing right.
+
+2. Data processed
+We process name, email, language, acceptance dates and document versions. The authentication password is hashed. Automatic onboarding separately retains an encrypted initial password for up to 24 hours, removed after activation or expiry through maintenance.
+Billing uses name/address, country, postcode, email, optional phone and relevant company details. Stripe identifiers/statuses, subscriptions and invoices are retained. Full card data are entered at Stripe, not stored in Zion's database.
+Immich stores files, albums, thumbnails and available metadata: EXIF, timestamps, device and GPS coordinates. Maps use location metadata. Facial recognition is not used in the declared configuration. Configured map resources may connect the browser to the selected provider and disclose IP/technical data.
+IP/technical data also support sessions, abuse prevention and logs. We store contact messages and withdrawal declarations. Administrative statistics contain photo/video counts, bytes, quota and collection time, not a public gallery.
+
+3. Purposes and legal bases
+Contract performance and requested pre-contractual steps support registration, storage, synchronization, payment, service messages and support. Legal duties support tax records and consumer rights. Legitimate interests support proportionate security, fraud prevention, diagnostics, capacity and legal claims. Consent is used where required for optional features, not as a blanket basis. Registration does not subscribe you to marketing. We do not sell data or use photos for advertising.
+
+4. Hosting, recipients and transfers
+Files are hosted on a personally operated Romanian server with RAID redundancy. RAID is not an independent backup or a guarantee of recovery from every incident. Email uses own hosting.
+Access is limited to the operator and authorized personnel for administration, support, security or legal duties. Providers include Stripe for payments, Oblio for invoices and Cloudflare for proxy/security. Controller/processor roles depend on the service; providers use their own infrastructure/subprocessors. Authorities, accounting providers and advisers may receive data for a lawful purpose. Analytics and CAPTCHA are not active in the declared configuration.
+Cloudflare may process traffic globally. Romanian hosting does not mean all provider processing stays in Romania/the EEA. Applicable third-country transfers rely on adequacy decisions or safeguards such as standard contractual clauses. Details of the applicable mechanism may be requested.
+
+5. Retention and deletion
+Files remain for the account/service duration. After paid entitlement ends, a 30-day export period precedes the deletion procedure. Erasure requests/legal exceptions are assessed individually. Files legitimately retained in an active free plan are not deleted merely for lack of payment.
+Account data remain as needed for the relationship and closure. Ordinary contact messages are cleaned after 90 days; API logs after 30 days or 10,000 entries. Withdrawal records remain for handling, then up to three years after resolution unless a documented dispute/legal duty requires longer. Accounting documents follow applicable law, generally five years calculated under Romanian accounting rules. File deletion does not erase mandatory fiscal records. Technical cleanup requires scheduled maintenance; future independent backups need separate retention rules.
+
+6. Rights and security
+You may request access, correction, erasure, restriction and, where applicable, portability/objection. Optional consent can be withdrawn prospectively. Contact contact@zion3d.ro. Identity checks are proportionate; the usual reply period is one month, subject to GDPR extensions. You may complain to ANSPDCP, www.dataprotection.ro, or another competent authority.
+We use access controls, secure connections where configured and encryption of application secrets. End-to-end encryption and administrator-inaccessible storage are not promised. Nonpayment restrictions follow subscription status; human review can be requested. We do not use advertising profiling or legally significant marketing decisions based on photos.
+
+7. Professional use and updates
+For professional uploads of client, employee or other third-party data, you may be the content controller. Request an Article 28 GDPR processing agreement before such use; this notice is not a substitute. The PFA remains controller for its own account/billing records. Material changes are communicated appropriately; the version date appears above.

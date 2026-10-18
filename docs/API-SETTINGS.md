@@ -60,7 +60,7 @@ References: [Stripe keys and environments](https://docs.stripe.com/keys), [Produ
 
 ## Product VAT
 
-Configure **Configurare → TVA produse** (`/admin?section=tax`). This database-backed setting applies to every paid plan and new paid upgrade, in both Stripe modes. Default: Romanian standard VAT 21% (effective 1 August 2025). Catalog amounts remain net: 1.99 EUR + 0.42 EUR VAT = 2.41 EUR; annual Personal is 21.89 EUR net / 26.49 EUR gross. Values from 0 to 100 with two decimals are accepted; 0 means no tax line.
+Configure **Configurare → TVA produse** (`/admin?section=tax`). This database-backed setting applies to every paid plan and new paid upgrade, in both Stripe modes. Unsaved default: 0, based on the operator’s declared non-VAT-registered status. Saved rates remain authoritative; set them correctly before LIVE sales. The Romanian standard 21% rate is retained as a configurable example, not an automatic entitlement to collect tax. For an explicitly configured 21% example, 1.99 EUR + 0.42 EUR VAT = 2.41 EUR and annual Personal is 21.89 EUR net / 26.49 EUR gross. At 0 no VAT is collected. Values from 0 to 100 with two decimals are accepted; 0 means no tax line.
 
 This is a fixed manual Romanian rate, not Stripe Tax or jurisdiction/exemption detection. Stripe Tax Rate IDs are created/reused automatically on purchase, scoped to API account/profile and percentage, with `inclusive=false`. Restricted Stripe keys need Tax Rates read/write permissions in addition to the existing catalog/Checkout permissions. API calls appear in the normal communication journal. New catalog Prices explicitly use `tax_behavior=exclusive`; manually mapped inclusive Prices are rejected.
 

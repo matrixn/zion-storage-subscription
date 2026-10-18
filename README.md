@@ -62,7 +62,7 @@ Separate Stripe TEST and LIVE profiles are configured in /admin. TEST remains th
 5. Use Stripe CLI forwarding for localhost: `stripe listen --forward-to localhost:8088/webhooks/stripe`. Use the emitted signing secret.
 6. Register a paid account, verify email, complete Checkout using Stripe's documented test cards. Test failure and cancellation as well.
 
-Paid catalog prices exclude VAT. Configure the global rate under `/admin?section=tax` (default Romania standard 21%); Stripe Checkout adds it separately and public pricing discloses the gross total. Tax Rates are managed automatically, without manual IDs. See [VAT configuration and historical billing behavior](docs/API-SETTINGS.md#product-vat).
+Paid catalog prices exclude VAT. Configure the global rate under `/admin?section=tax` (unsaved default 0 for the declared non-VAT-registered operator; saved rates are preserved); Stripe Checkout adds it separately and public pricing discloses the gross total. Tax Rates are managed automatically, without manual IDs. See [VAT configuration and historical billing behavior](docs/API-SETTINGS.md#product-vat).
 
 The return URL does not grant access. Webhooks verify the official SDK signature/timestamp and retrieve the current subscription with expanded latest invoice. Access requires the matching server-configured price, a paid latest invoice, active subscription and a verified email. Event order cannot restore an obsolete paid state. Database event IDs, email deduplication and locks support webhook retries. Subscription quota changes must be made through this application's configured catalog; arbitrary price changes in the Stripe dashboard are rejected.
 
@@ -94,7 +94,7 @@ The lime photo-stack brand icon is generated with ImageGen and exported locally 
 
 ## Legal and launch configuration
 
-Place approved localized plain-text legal documents in `legal/{ro,en,fr,de}/{privacy,terms,cookies}.txt`. They are escaped and displayed on supporting noindex routes. Set LEGAL_READY=true after all twelve documents are installed. Production registration refuses acceptance of unpublished terms; development signup remains available for testing. No legal or privacy guarantees beyond the supplied product claims are invented.
+Operator-specific localized plain-text documents are provided in `legal/{ro,en,fr,de}/{privacy,terms,cookies}.txt`. They are escaped and displayed on supporting noindex routes. Review [legal publication and operating procedures](docs/LEGAL-OPERATIONS.md), then set LEGAL_READY=true after all twelve documents are reviewed and SMTP/retention procedures are ready. Production registration refuses acceptance of unpublished terms; development signup remains available for testing. No legal or privacy guarantees beyond the supplied product claims are invented.
 
 Optional CAPTCHA uses Turnstile: set CAPTCHA_ENABLED=true, CAPTCHA_SITE_KEY, CAPTCHA_SECRET and the provided verification endpoint. Keep it off without configured keys. Server-side CSRF, honeypot and rate limits operate independently.
 

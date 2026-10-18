@@ -1,0 +1,17 @@
+1. Scope
+Cookies store small browser information for sessions, security and preferences. The operator is the PFA identified above, contact@zion3d.ro. This policy covers the public site and administration; Immich/Stripe may use separate technologies.
+
+2. First-party cookies
+zion_session — session, forms, CSRF protection and customer access. Browser-session lifetime; authenticated access expires after about four hours. Path /. HttpOnly, SameSite=Lax, Secure when HTTPS is configured.
+zion_admin_session — separate administrator session on /admin. Browser-session lifetime; administrative authorization expires after about one hour. Same protections with HTTPS.
+locale — RO/EN/FR/DE language preference, up to one year after its last update, path /. Not an advertising identifier. Change language or clear browser preferences to reset it.
+Session identifiers are not passwords and contain no photographs. Necessary session/security cookies do not depend on marketing consent.
+
+3. Providers
+Cloudflare supplies proxy/security. Depending on active security functions/challenges it may set cf_clearance or __cf_bm; presence/lifetime depend on configuration, not every visit. See developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/.
+Payment opens Stripe Checkout on Stripe infrastructure, which may use payment/security/fraud-prevention cookies; see stripe.com/legal/cookies-policy. The public site does not load Stripe.js merely to show plans. Server-side Oblio invoicing does not inject cookies into pricing pages.
+Immich may keep its own sessions, preferences and local data. Maps may contact the configured map provider; browser tools identify domains/requests.
+
+4. Optional technologies and choices
+Analytics, behavioural advertising and CAPTCHA are not active in the declared configuration at this date. We do not ask acceptance of nonexistent advertising categories. Optional consent-requiring technologies will be explained and activated only after the required choice; refusal/withdrawal must be as accessible as acceptance.
+Browser settings allow removing/blocking cookies. Blocking necessary cookies may prevent forms, login, language or payments. Choices apply per browser/device. See the privacy policy for data rights and recipients.

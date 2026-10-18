@@ -40,6 +40,7 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
     backend=http.server.ThreadingHTTPServer(('127.0.0.1',0),Backend);threading.Thread(target=backend.serve_forever,daemon=True).start()
     env=os.environ.copy();env.update(APP_ENV='test',APP_URL='http://localhost:8093',DB_PATH=temp+'/app.sqlite',APP_KEY='fixture-key-'*8,ADMIN_EMAIL='admin-fixture@example.com',ADMIN_PASSWORD='fixture-admin-password',MAIL_TRANSPORT='log',MAIL_LOG_DIRECTORY=temp+'/mail',OBLIO_ENABLED='false',STORAGE_API_URL='http://127.0.0.1:'+str(backend.server_port)+'/api',STORAGE_API_KEY='fixture-key',STORAGE_GATEWAY_KEY='fixture-gateway-key-'*3,STORAGE_GATEWAY_ENFORCED='false',STRIPE_SECRET_KEY='sk_test_unconfigured')
     subprocess.run(['php','bin/console.php','install'],cwd=ROOT,env=env,check=True,capture_output=True)
+    subprocess.run(['php','-r','require "src/bootstrap.php"; (new Zion\\Database())->run("INSERT INTO integration_settings(key,value) VALUES(?,?)",["billing:vat_bps","2100"]);'],cwd=ROOT,env=env,check=True,capture_output=True) # Exercise explicit 21% configuration; operator default is 0.
     with open(temp+'/server.log','w+') as log:
         server=subprocess.Popen(['php','-S','0.0.0.0:8093','-t','public','public/router.php'],cwd=ROOT,env=env,stdout=log,stderr=log)
         try:
@@ -205,6 +206,15 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
                 db=sqlite3.connect(temp+'/app.sqlite')
                 check(status==200 and 'au fost șterse' in body and not db.execute('SELECT id FROM users WHERE id=?',(reset_uid,)).fetchone(),'confirmed TEST deletion removes customer and frees signup email')
                 check(db.execute('SELECT status,snapshot FROM test_account_resets WHERE user_id=?',(reset_uid,)).fetchone()==('complete','{}'),'completed reset keeps only opaque recovery marker');db.close()
+            public_withdrawal=request(customer,'/en/contact?request=withdrawal')[1]
+            status,receipt,_=request(customer,'/en/contact?request=withdrawal',{'_csrf':csrf(public_withdrawal),'request_type':'withdrawal','name':'HTTP Withdrawal','email':'withdraw-http@example.com','contract':'Personal invoice 123'})
+            check(status==200 and 'Received:' in receipt,'withdrawal receipt is available without administrative privileges')
+            withdrawal_html=request(admin,'/admin?section=legal-requests')[1]
+            check('HTTP Withdrawal' in withdrawal_html and 'withdraw-http@example.com' in withdrawal_html,'admin has dedicated withdrawal intake view')
+            request_id=re.search(r'name="request_id" value="([a-f0-9]+)"',withdrawal_html).group(1)
+            check(request(admin,'/admin',{'action':'withdrawal_resolve','request_id':request_id,'notes':'Handled through support'})[0]==419,'withdrawal resolution requires admin CSRF')
+            status,withdrawal_html,_=request(admin,'/admin',{'_csrf':csrf(withdrawal_html),'action':'withdrawal_resolve','request_id':request_id,'notes':'Handled through support'})
+            check(status==200 and 'Handled through support' in withdrawal_html,'admin records withdrawal resolution without automatic financial action')
             if '--browser' in sys.argv:
                 db=sqlite3.connect(temp+'/app.sqlite');now=int(time.time());browser_id='b'*32;verify_token='c'*64
                 db.execute('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,0,0,?,?)',('d'*32,'Pending Browser','pending-browser@example.com',u['password_hash'],'ro','free',now,now))

@@ -9,7 +9,7 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
  await page.goto(origin+'/admin');await page.locator('input[name=email]').fill('admin-fixture@example.com');await page.locator('input[name=password]').fill('fixture-admin-password');await page.getByRole('button',{name:'Intră în administrare'}).click();
  check(await page.locator('h1').textContent()==='Dashboard','browser administrator lands on dashboard');
  const artifacts=path.join(__dirname,'artifacts');fs.mkdirSync(artifacts,{recursive:true});
- const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','integrations','catalog','tax','immich','audit','api-log'];
+ const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','legal-requests','integrations','catalog','tax','immich','audit','api-log'];
  for(const width of [320,390,768,1440]){
   await page.setViewportSize({width,height:1000});
   for(const section of sections){
@@ -114,6 +114,21 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
  await page.locator('[data-billing-switch] button[value=month]').click();
  check((await personal.locator('.plan-tax').innerText()).includes('2,41 EUR'),'monthly switch restores gross total');
 
+ for(const width of [390,1440]){
+  await page.setViewportSize({width,height:1000});
+  for(const [locale,slug] of Object.entries({ro:'documente',en:'legal',fr:'documents',de:'rechtliches'}))for(const doc of ['privacy','terms','cookies']){
+   const res=await page.goto(origin+'/'+locale+'/'+slug+'?document='+doc);
+   check(res.status()===200 && await page.locator('.legal-content h2').count()>=4,'structured legal content renders '+locale+doc);
+   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'legal content fits viewport '+width+locale+doc);
+   check((await page.locator('.legal-operator').innerText()).includes('F38/36/2024'),'legal operator identity present');
+   check((await page.locator('.header .languages a[lang=en]').getAttribute('href')).endsWith('?document='+doc),'language switch retains selected legal document');
+  }
+  await page.goto(origin+'/ro/documente?document=terms');await page.screenshot({path:path.join(artifacts,'legal-terms-'+width+'.png'),fullPage:false});
+ }
+ await page.goto(origin+'/en/contact?request=withdrawal');await page.locator('input[name=name]').fill('Withdrawal Browser');await page.locator('input[name=email]').fill('withdrawal-browser@example.com');await page.locator('input[name=contract]').fill('Personal / browser fixture order');await page.getByRole('button',{name:'Confirm withdrawal',exact:true}).click();
+ check((await page.locator('[data-legal-receipt]').innerText()).includes('I withdraw from the identified contract'),'browser withdrawal records explicit declaration');
+ const [receiptDownload]=await Promise.all([page.waitForEvent('download'),page.locator('[data-receipt-download]').click()]);check(receiptDownload.suggestedFilename()==='zion-storage-withdrawal.txt','withdrawal receipt can be downloaded as durable text');
+ await page.goto(origin+'/admin?section=legal-requests');check((await page.locator('main').innerText()).includes('Withdrawal Browser'),'operator can find received withdrawal in admin');
  const customer=await browser.newContext();const flow=await customer.newPage();flow.on('pageerror',e=>errors.push(e.message));
  await flow.goto(verify);await flow.locator('button[type=submit],form button').first().click();
  await flow.getByRole('link',{name:'Mai mult spațiu'}).click();

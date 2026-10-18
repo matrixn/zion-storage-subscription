@@ -31,6 +31,7 @@ if($cmd==='activation:retry'){
  echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;exit;
 }
 if($cmd==='maintenance'){
+ $db->run("DELETE FROM withdrawal_requests WHERE status='resolved' AND resolved_at<?",[strtotime('-3 years')]);
  $db->run('DELETE FROM activation_credentials WHERE expires_at<=?',[time()]);
  $db->run('DELETE FROM email_verifications WHERE expires_at<?',[time()-86400]);
  $db->run('DELETE FROM rate_limits WHERE expires_at<?',[time()]);

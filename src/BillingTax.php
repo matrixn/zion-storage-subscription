@@ -5,7 +5,7 @@ final class BillingTax {
  public function __construct(private Database $db) {}
  public function basisPoints(): int {
   $row=$this->db->one("SELECT value FROM integration_settings WHERE key='billing:vat_bps'");
-  return $row?(int)$row['value']:2100;
+  return $row?(int)$row['value']:(LegalDocuments::operator()['vat_registered']?2100:0);
  }
  public static function parse(string $value): int {
   $value=str_replace(',','.',trim($value));

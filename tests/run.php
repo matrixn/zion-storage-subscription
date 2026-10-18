@@ -113,3 +113,5 @@ require __DIR__.'/automatic-activation.php';
 require __DIR__.'/billing-tax.php';
 
 require __DIR__.'/immich-statistics.php';
+
+require __DIR__.'/legal.php';

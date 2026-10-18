@@ -26,6 +26,7 @@ final class MailerService {
     $tr=new TranslationService($row['locale']); $data=self::decode($row['payload']);
     $subject=$tr->get('email.'.$row['kind'].'.subject');
     $body=$tr->get('email.'.$row['kind'].'.body',$data);
+    if(isset($data['legal_receipt']))$body.="\n\n".$data['legal_receipt'];
     $html='<html lang="'.e($row['locale']).'"><body style="background:#0b1117;color:#e5eee9;font:16px Arial;padding:32px"><div style="max-width:560px;margin:auto"><h2>Zion Storage</h2><h1>'.e($subject).'</h1><p>'.nl2br(e($body)).'</p>';
     if(!empty($data['url'])) $html.='<p><a style="color:#bafa73" href="'.e($data['url']).'">'.e($tr->get('email.action')).'</a></p>';
     $html.='<p>'.e($tr->get('email.footer')).'</p></div></body></html>';
@@ -37,7 +38,7 @@ final class MailerService {
      $dsn=$scheme.'://'.rawurlencode(env('MAIL_USERNAME')).':'.rawurlencode(env('MAIL_PASSWORD')).'@'.env('MAIL_HOST').':'.env('MAIL_PORT','587');
      if($scheme==='smtp') $dsn.='?require_tls=true';
      $mailer=new Mailer(Transport::fromDsn($dsn));
-     $mailer->send((new Email())->from(new \Symfony\Component\Mime\Address(env('MAIL_FROM_ADDRESS'), 'Zion Storage'))->to($row['recipient'])->subject($subject)->text($body.(!empty($data['url'])?"\n".$data['url']:''))->html($html));
+     $mailer->send((new Email())->from(new \Symfony\Component\Mime\Address(LegalDocuments::operator()['email'], 'Zion Storage'))->to($row['recipient'])->subject($subject)->text($body.(!empty($data['url'])?"\n".$data['url']:''))->html($html));
     }
     $this->db->transaction(function() use($row,$data) {
      $this->db->run('UPDATE outbox SET sent_at=?,payload=? WHERE id=?',[time(),'{}',$row['id']]);

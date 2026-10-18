@@ -12,6 +12,7 @@ final class AccountService {
     $interval=$data['billing_interval']??'month';if(!in_array($interval,['month','year'],true))throw new \InvalidArgumentException('invalid_billing_interval');
     $this->db->run('UPDATE users SET billing_interval=? WHERE id=?',[$interval,$id]);
     $this->db->run('UPDATE users SET stripe_mode=? WHERE id=?',[(new IntegrationSettings($this->db))->stripe()['mode'],$id]);
+    $this->db->run('UPDATE users SET terms_version=?,privacy_version=? WHERE id=?',[LegalDocuments::VERSION,LegalDocuments::VERSION,$id]);
     $this->rememberPassword($id,$data['password']);
     if($data['plan']!=='free' && isset($data['billing'])) (new BillingProfileService($this->db))->save($id,$data['billing']);
    });

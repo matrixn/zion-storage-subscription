@@ -1,0 +1,27 @@
+1. Responsable et champ
+Le PFA identifié ci-dessus est responsable des données du site, des comptes, de la relation commerciale et du support. Contact : contact@zion3d.ro. Cette politique couvre Zion Storage et le service Immich. Le titulaire doit avoir au moins 18 ans ; les images de tiers, dont des enfants, nécessitent un droit de traitement licite.
+
+2. Données traitées
+Nom, email, langue, dates d’acceptation et versions des documents sont enregistrés. Le mot de passe d’authentification est haché. L’activation automatique conserve séparément le mot de passe initial chiffré pendant au plus 24 heures, puis le supprime après activation ou expiration via la maintenance.
+La facturation utilise nom/adresse, pays, code postal, email, téléphone facultatif et données professionnelles pertinentes. Nous conservons références/statuts Stripe, abonnements et factures. La carte complète est saisie chez Stripe, pas conservée dans la base Zion.
+Immich conserve fichiers, albums, miniatures et métadonnées : EXIF, dates, appareil, GPS. La carte utilise ces positions. La reconnaissance faciale n’est pas utilisée dans la configuration déclarée. Les ressources cartographiques peuvent connecter le navigateur au fournisseur configuré et lui transmettre IP/données techniques.
+Les IP/données techniques servent aux sessions, à la prévention des abus et aux journaux. Messages et déclarations de rétractation sont conservés. Les statistiques administratives portent sur nombres de photos/vidéos, octets, quota et date, sans galerie publique.
+
+3. Finalités et bases légales
+Contrat et démarches précontractuelles demandées justifient inscription, stockage, synchronisation, paiement, communications de service et support. Les obligations légales couvrent comptabilité et droits des consommateurs. Les intérêts légitimes couvrent sécurité proportionnée, fraude, diagnostic, capacité et défense des droits. Le consentement concerne les fonctions facultatives qui l’exigent, pas tous les traitements. L’inscription n’est pas un abonnement marketing. Nous ne vendons pas les données et n’utilisons pas les photos pour la publicité.
+
+4. Hébergement et destinataires
+Les fichiers sont sur un serveur personnel en Roumanie avec redondance RAID. Le RAID n’est pas une sauvegarde indépendante et ne garantit pas toute récupération. L’email utilise un hébergement propre.
+L’accès est limité à l’opérateur et aux personnes autorisées pour administration, support, sécurité ou obligations légales. Prestataires : Stripe (paiements), Oblio (factures), Cloudflare (proxy/sécurité). Leurs rôles de responsables/sous-traitants dépendent des services ; ils utilisent leurs propres infrastructures et sous-traitants. Autorités, comptables et conseillers peuvent recevoir les données nécessaires à une finalité licite. Analytics et CAPTCHA ne sont pas actifs dans la configuration déclarée.
+Cloudflare peut traiter le trafic mondialement. L’hébergement en Roumanie ne signifie pas que tout traitement reste en Roumanie/EEE. Les transferts applicables reposent sur une décision d’adéquation ou des garanties comme les clauses contractuelles types ; le mécanisme applicable peut être demandé.
+
+5. Conservation et effacement
+Les fichiers restent pendant le compte/service. Après la fin du droit à l’offre payante, trente jours permettent l’exportation, puis la procédure de suppression commence. Demandes d’effacement/exceptions légales sont examinées individuellement. Les fichiers légitimement conservés dans une offre gratuite active ne sont pas supprimés pour seule absence de paiement.
+Les données de compte restent nécessaires à la relation et sa clôture. Contacts ordinaires : nettoyage après 90 jours ; journaux API : 30 jours ou 10 000 entrées. Rétractations : traitement puis au plus trois ans après résolution, sauf litige/obligation légale documentés. Les documents comptables suivent la durée légale, généralement cinq ans calculés selon le droit roumain. Effacer des fichiers n’efface pas les pièces fiscales obligatoires. Le nettoyage nécessite la maintenance programmée ; de futures sauvegardes indépendantes nécessiteront des règles distinctes.
+
+6. Droits et sécurité
+Vous pouvez demander accès, rectification, effacement, limitation et, sous conditions légales, portabilité/opposition. Le consentement facultatif est révocable pour l’avenir. Contactez contact@zion3d.ro ; vérification d’identité proportionnée, réponse habituelle sous un mois avec prolongations légales RGPD. Réclamation possible à l’ANSPDCP, www.dataprotection.ro, ou autre autorité compétente.
+Nous appliquons contrôles d’accès, connexions sécurisées lorsqu’elles sont configurées et chiffrement des secrets. Nous ne promettons ni chiffrement de bout en bout ni impossibilité d’accès administratif. Les restrictions d’impayé suivent l’abonnement ; un réexamen humain peut être demandé. Aucun profilage publicitaire ni décision marketing à effet juridique fondés sur les photos.
+
+7. Usage professionnel et changements
+Pour les données professionnelles de clients, salariés ou tiers, vous pouvez être responsable du contenu. Demandez avant cet usage un accord article 28 RGPD ; cette politique ne le remplace pas. Le PFA reste responsable de ses dossiers propres de compte/facturation. Les changements importants seront communiqués ; date de version ci-dessus.

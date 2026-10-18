@@ -26,11 +26,11 @@ final class TaxHttp extends ChangesHttp {
 }
 $taxDb=new Zion\Database(':memory:');$taxDb->migrate();$taxDb->migrate();
 $taxSettings=new Zion\BillingTax($taxDb);
-check($taxSettings->basisPoints()===2100,'VAT defaults to Romania standard 21 percent');
+check($taxSettings->basisPoints()===0,'VAT defaults to no collection for the declared non-VAT-registered operator');
 check(Zion\BillingTax::total(199,2100)===241 && Zion\BillingTax::total(2189,2100)===2649,'monthly and annual VAT round to EUR cents without changing base price');
 check(Zion\BillingTax::parse('21,25')===2125 && Zion\BillingTax::percentage(2100)==='21','VAT input supports decimal comma and stable percent format');
 foreach(['-1','101','21.001','1e1','NaN',''] as $bad){try{Zion\BillingTax::parse($bad);check(false,'reject invalid VAT');}catch(DomainException $e){check(true,'reject invalid VAT '.$bad);}}
-seedCatalog($taxDb);$taxDb->run("DELETE FROM integration_settings WHERE key='billing:vat_bps'");
+seedCatalog($taxDb);$taxDb->run("UPDATE integration_settings SET value='2100' WHERE key='billing:vat_bps'"); // Explicit taxable-rate fixture, independent of operator defaults.
 $_ENV['ADMIN_EMAIL']='tax-admin@example.com';$_ENV['ADMIN_PASSWORD']='tax-admin-password';Zion\AccountControl::seedAdmin($taxDb);$taxAdmin=$taxDb->one('SELECT id FROM administrators')['id'];$_ENV['ADMIN_EMAIL']='';$_ENV['ADMIN_PASSWORD']='';
 $taxPlans=new Zion\Plans($taxDb);$taxMail=new Zion\MailerService($taxDb);$taxStore=new TestStorage();$taxAccounts=new Zion\AccountService($taxDb,$taxPlans,$taxMail,$taxStore);
 $taxSignup=function(string $email,string $interval='month')use($taxDb,$taxAccounts){

@@ -1,0 +1,1 @@
+<section class="wrap legal-page"><h1><?= e($t('withdrawal.received')) ?></h1><p><?= e($t('withdrawal.delivery')) ?></p><pre class="legal-receipt" data-legal-receipt><?= e($receipt) ?></pre><button class="button" type="button" data-receipt-download><?= e($t('withdrawal.download')) ?></button></section>

@@ -2,6 +2,8 @@
 
 ## 2026-10-19
 
+- Added operator-specific terms, privacy and cookie pages in RO/EN/FR/DE, printable structured legal content, document-preserving language links, explicit adult declaration and acceptance versions. Added a public withdrawal declaration/receipt with encrypted records and administrative handling, while preserving mandatory consumer remedies. Updated contact/sender address and the unsaved VAT default for the declared non-VAT-registered PFA; saved tax profiles and Stripe subscriptions are not silently rewritten.
+
 - Added encrypted Immich configuration, authenticated connection testing, manual read-only statistics sync, a five-minute Docker worker and CLI cron command, per-client photo/video and usage snapshots, dashboard totals and top-ten usage-versus-plan ranking. Saved configuration overrides Immich environment settings across provisioning and the access gateway; failures retain and label prior snapshots.
 
 ## 2026-10-18

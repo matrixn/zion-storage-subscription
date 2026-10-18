@@ -1,0 +1,17 @@
+1. Ce sunt și cine le folosește
+Cookie-urile sunt mici informații păstrate în browser; unele sunt necesare pentru sesiune și securitate, altele memorează preferințe. Operatorul Zion Storage este PFA-ul identificat mai sus. Pentru întrebări: contact@zion3d.ro. Această pagină descrie site-ul public și administrarea; serviciul Immich și paginile Stripe pot folosi și propriile tehnologii.
+
+2. Cookie-uri proprii
+zion_session — identificator de sesiune pentru site, formulare, protecție CSRF și accesul clientului. Durată: sesiunea browserului, cu expirarea accesului autentificat în aplicație după aproximativ patru ore. Cale: /. Este HttpOnly, SameSite=Lax și Secure când site-ul este configurat HTTPS.
+zion_admin_session — sesiune separată pentru administratori, pe calea /admin. Durată: sesiunea browserului; autorizarea administrativă expiră după aproximativ o oră. Are aceleași protecții tehnice când este folosit HTTPS.
+locale — memorează limba RO/EN/FR/DE. Durată maximă: un an de la ultima actualizare; cale /. Nu este identificator publicitar. Poți schimba limba sau șterge această preferință din browser.
+Identificatorul din cookie nu este parola și nu conține fotografiile tale. Cookie-urile de sesiune și protecție necesare funcționării nu sunt condiționate de un consimțământ pentru marketing.
+
+3. Furnizori și servicii distincte
+Cloudflare este utilizat ca proxy și pentru protecție. În funcție de funcțiile active sau provocările de securitate, poate seta cookie-uri precum cf_clearance ori __cf_bm; existența și durata lor depind de configurația Cloudflare. Acestea nu sunt declarate ca fiind prezente în orice vizită. Detalii actuale: developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/.
+Plata se deschide în Stripe Checkout, pe infrastructura Stripe, care poate folosi cookie-uri pentru securitate, prevenirea fraudei și efectuarea plății. Consultă stripe.com/legal/cookies-policy. Site-ul public nu încarcă Stripe.js doar pentru afișarea planurilor. Oblio este folosit server-side pentru facturi; integrarea nu injectează cookie-uri Oblio pe pagina de prețuri.
+Aplicația/webul Immich poate păstra propriile sesiuni, preferințe și date locale; harta poate accesa resursele furnizorului configurat acolo. Acele domenii și cereri se pot verifica în browser.
+
+4. Analytics, CAPTCHA și alegeri
+Nu avem Analytics, publicitate comportamentală sau CAPTCHA activate în configurația declarată la data acestei politici. Nu cerem acceptarea unor categorii publicitare inexistente. Dacă introducem tehnologii opționale care necesită consimțământ, le vom explica și vom cere alegerea înainte de activare; refuzul sau retragerea trebuie să fie la fel de accesibile ca acceptarea.
+Poți șterge sau bloca cookie-urile prin setările browserului. Blocarea celor necesare poate împiedica formularele, autentificarea, schimbarea limbii sau plata. Preferințele se configurează separat pentru fiecare browser/dispozitiv. Pentru drepturile asupra datelor și destinatari, consultă Politica de confidențialitate.

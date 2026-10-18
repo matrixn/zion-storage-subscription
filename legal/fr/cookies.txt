@@ -1,0 +1,17 @@
+1. Objet
+Les cookies stockent de petites informations de navigateur pour sessions, sécurité et préférences. Opérateur : PFA ci-dessus, contact@zion3d.ro. Cette politique vise le site public et l’administration ; Immich et Stripe peuvent employer leurs propres technologies.
+
+2. Cookies internes
+zion_session — session, formulaires, CSRF et accès client ; durée de session navigateur, accès authentifié expirant après environ quatre heures. Chemin /. HttpOnly, SameSite=Lax, Secure si HTTPS configuré.
+zion_admin_session — administration séparée sur /admin ; session navigateur, autorisation expirant après environ une heure. Mêmes protections avec HTTPS.
+locale — langue RO/EN/FR/DE, au plus un an depuis dernière actualisation, chemin /. Ce n’est pas un identifiant publicitaire. Changez la langue ou effacez la préférence.
+L’identifiant n’est pas le mot de passe et ne contient pas de photos. Les cookies nécessaires ne dépendent pas d’un consentement marketing.
+
+3. Prestataires
+Cloudflare assure proxy/sécurité et peut déposer cf_clearance ou __cf_bm selon fonctions/défis actifs. Présence/durée dépendent de la configuration ; ils ne sont pas présumés à chaque visite. Voir developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/.
+Le paiement ouvre Stripe Checkout sur Stripe, qui peut utiliser des cookies de paiement/sécurité/antifraude : stripe.com/legal/cookies-policy. Le site ne charge pas Stripe.js pour simplement afficher les offres. Oblio est intégré côté serveur et n’injecte pas ses cookies sur les tarifs.
+Immich peut conserver sessions, préférences et données locales. La carte peut joindre son fournisseur configuré ; domaines/requêtes sont visibles dans le navigateur.
+
+4. Fonctions facultatives et choix
+Analytics, publicité comportementale et CAPTCHA ne sont pas actifs dans la configuration déclarée à cette date. Aucune acceptation de catégories publicitaires inexistantes n’est demandée. Les futures techniques facultatives soumises à consentement seront expliquées et activées après le choix requis ; refus/retrait doivent être aussi accessibles que l’acceptation.
+Le navigateur permet suppression/blocage. Bloquer les cookies nécessaires peut empêcher formulaires, connexion, langue ou paiement. Les choix sont propres à chaque navigateur/appareil. Voir la politique de confidentialité pour droits/destinataires.

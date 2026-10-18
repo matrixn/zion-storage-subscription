@@ -1,0 +1,17 @@
+1. Umfang
+Cookies speichern kleine Browserinformationen für Sitzungen, Sicherheit und Einstellungen. Anbieter ist die oben bezeichnete PFA, Kontakt contact@zion3d.ro. Diese Erklärung betrifft Website/Verwaltung; Immich und Stripe können eigene Techniken nutzen.
+
+2. Eigene Cookies
+zion_session — Sitzung, Formulare, CSRF-Schutz, Kundenzugriff; Browsersitzung, authentifizierter Zugriff endet nach etwa vier Stunden. Pfad /. HttpOnly, SameSite=Lax, Secure bei eingerichtetem HTTPS.
+zion_admin_session — getrennte Verwaltung unter /admin; Browsersitzung, Verwaltungsberechtigung endet nach etwa einer Stunde. Gleiche Schutzmerkmale bei HTTPS.
+locale — RO/EN/FR/DE-Präferenz, höchstens ein Jahr nach letzter Aktualisierung, Pfad /. Keine Werbekennung. Sprache ändern oder Browsereinstellung löschen.
+Die Kennung ist kein Passwort und enthält keine Fotos. Notwendige Cookies hängen nicht von Werbeeinwilligung ab.
+
+3. Anbieter
+Cloudflare liefert Proxy/Sicherheit und kann je nach Schutzfunktionen/Prüfungen cf_clearance oder __cf_bm setzen. Vorhandensein/Laufzeit sind konfigurationsabhängig, nicht bei jedem Besuch vorausgesetzt. Siehe developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/.
+Zahlung öffnet Stripe Checkout auf Stripe-Infrastruktur mit möglichen Zahlungs-/Sicherheits-/Betrugsschutzcookies: stripe.com/legal/cookies-policy. Die Website lädt Stripe.js nicht lediglich zur Tarifanzeige. Serverseitige Oblio-Abrechnung setzt keine Oblio-Cookies auf der Preisseite.
+Immich kann eigene Sitzungen, Präferenzen und lokale Daten speichern. Die Karte kann ihren konfigurierten Anbieter kontaktieren; Domains/Anfragen sind im Browser erkennbar.
+
+4. Optionale Techniken und Wahl
+Analytics, verhaltensbasierte Werbung und CAPTCHA sind in der zum Fassungsdatum angegebenen Konfiguration nicht aktiv. Nicht vorhandene Werbekategorien verlangen keine Zustimmung. Künftige einwilligungspflichtige optionale Techniken werden erklärt und nach erforderlicher Auswahl aktiviert; Ablehnung/Widerruf müssen ebenso zugänglich sein.
+Cookies lassen sich im Browser löschen/blockieren. Notwendige Cookies zu sperren kann Formulare, Anmeldung, Sprache oder Zahlung verhindern. Einstellungen gelten je Browser/Gerät. Datenschutzrechte/Empfänger erläutert die Datenschutzerklärung.
