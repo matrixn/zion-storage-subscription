@@ -47,7 +47,7 @@ Verified users can resume signup through a new one-use email link. The secure se
 
 Only Stripe test keys and non-live webhook events are accepted in this release. No live billing was enabled.
 
-1. Set STRIPE_SECRET_KEY in private .env (TEST MODE). Install/migrate the database and sign into /admin.
+1. Install/migrate the database and sign into /admin. Configure the Stripe API key and webhook signing secret in **API-uri Stripe și Oblio** (TEST MODE). After saving a service, all its .env settings are ignored; see [API settings](docs/API-SETTINGS.md).
 2. In the billing catalog, create or validate the six EUR recurring Prices: Personal 199/month or 2189/year, Plus 359/month or 3949/year, Titan 599/month or 6589/year, in minor units. Annual billing gives one month free. Product/Price mappings live in the database, not .env. See [pricing configuration and transition](docs/PRICING.md).
 3. Register `/webhooks/stripe`, configure STRIPE_WEBHOOK_SECRET and subscribe to:
    - checkout.session.completed

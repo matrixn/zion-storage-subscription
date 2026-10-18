@@ -16,7 +16,7 @@ return array_map(static function(array $plan): array {
  };
  $plan['invoice_name_ro'] = $plan['slug']==='free' ? '' : 'Abonament Zion Storage '.$plan['name'].' '.$plan['capacity'];
  $plan['invoice_unit'] = 'abonament';
- $plan['invoice_vat_rate'] = env('OBLIO_VAT_RATE');
+ $plan['invoice_vat_rate'] = '';
  $plan['invoice_product_code'] = 'ZS_'.strtoupper($plan['slug']);
  return $plan;
 }, $plans);

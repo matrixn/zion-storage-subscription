@@ -15,6 +15,11 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
   check(await page.getByRole('heading',{name:'Jurnal administrare'}).isVisible(),'admin audit visible '+width);
   check(await page.getByRole('heading',{name:'Upgrade-uri și schimbări de plan'}).isVisible(),'admin upgrades visible '+width);
   check(await page.locator('input[name=password]').getAttribute('type')==='password','new customer password masked');
+  check(await page.locator('input[name=secret_key]').getAttribute('type')==='password' && await page.locator('input[name=secret_key]').inputValue()==='','Stripe key masked and never prefilled');
+  await page.getByText('Oblio · Configurat din administrare',{exact:true}).click();
+  check(await page.locator('input[name=secret]').inputValue()==='' && await page.locator('input[name=secret]').getAttribute('type')==='password','Oblio secret masked and never prefilled');
+  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'expanded integration settings fit mobile');
+  await page.getByText('Oblio · Configurat din administrare',{exact:true}).click();
   await page.screenshot({path:path.join(artifacts,'admin-'+width+'.png'),fullPage:true});
  }
  const customer=await browser.newContext();const flow=await customer.newPage();flow.on('pageerror',e=>errors.push(e.message));

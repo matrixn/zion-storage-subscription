@@ -9,7 +9,7 @@ final class BillingCatalog {
  }
  private function audit(string $admin,string $detail): void { $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin,'billing_catalog',$detail,time()]); }
  public function save(string $slug,string $interval,string $priceId,string $admin): void {
-  if(!env('STRIPE_SECRET_KEY'))throw new \DomainException('Configurează cheia Stripe TEST pe server înainte de a valida un ID.');
+  if(!(new IntegrationSettings($this->db))->stripe()['secret_key'])throw new \DomainException('Configurează cheia Stripe TEST în administrare înainte de a valida un ID.');
   $p=$this->plans->get($slug,$interval);
   if(!$p || $slug==='free' || !preg_match('/^price_[a-zA-Z0-9_]+$/D',$priceId))throw new \DomainException('Plan, interval sau Price ID invalid.');
   $price=$this->stripe->prices->retrieve($priceId)->toArray();self::validatePrice($price,$p);
@@ -33,7 +33,7 @@ final class BillingCatalog {
   });
  }
  public function legacy(string $slug,string $id,string $admin): void {
-  if(!env('STRIPE_SECRET_KEY'))throw new \DomainException('Configurează cheia Stripe TEST pe server înainte de a valida un ID.');
+  if(!(new IntegrationSettings($this->db))->stripe()['secret_key'])throw new \DomainException('Configurează cheia Stripe TEST în administrare înainte de a valida un ID.');
   if(!$this->plans->get($slug) || $slug==='free' || !preg_match('/^price_[a-zA-Z0-9_]+$/D',$id))throw new \DomainException('Plan sau Price ID invalid.');
   $p=$this->stripe->prices->retrieve($id)->toArray();$interval=$p['recurring']['interval']??'';
   if(($p['livemode']??true) || !in_array($interval,['month','year'],true) || ($p['recurring']['interval_count']??1)!==1 || !in_array($p['currency']??'',['ron','eur'],true) || !is_int($p['unit_amount']??null) || $p['unit_amount']<=0)throw new \DomainException('Price istoric incompatibil.');
@@ -45,7 +45,7 @@ final class BillingCatalog {
   });
  }
  public function create(string $slug,string $interval,string $admin): void {
-  if(!env('STRIPE_SECRET_KEY'))throw new \DomainException('Configurează cheia Stripe TEST pe server înainte de a crea produse.');
+  if(!(new IntegrationSettings($this->db))->stripe()['secret_key'])throw new \DomainException('Configurează cheia Stripe TEST în administrare înainte de a crea produse.');
   $p=$this->plans->get($slug,$interval);if(!$p || $slug==='free')throw new \DomainException('Plan invalid.');
   if($p['stripe_price_id'])throw new \DomainException('Există deja un Price activ pentru această opțiune.');
   $lock=fopen(dirname(__DIR__).'/storage/catalog.lock','c');flock($lock,LOCK_EX);

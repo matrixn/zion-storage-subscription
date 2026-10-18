@@ -9,7 +9,7 @@ final class OblioInvoiceService
 
     public function __construct(private Database $db, private MailerService $mail, ?OblioClient $client = null, ?array $config = null)
     {
-        $this->config = $config ?? require dirname(__DIR__).'/config/oblio.php';
+        $this->config = $config ?? (new IntegrationSettings($db))->oblio();
         $this->client = $client ?? new OblioClient($this->config);
     }
 

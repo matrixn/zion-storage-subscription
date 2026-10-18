@@ -88,6 +88,19 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             body=request(admin,'/admin')[1]
             request(admin,'/admin',{'_csrf':csrf(body),'action':'plan','user_id':u['id'],'plan':'120gb','reason':'Manual downgrade'})
             check(Backend.records[0]['quotaSizeInBytes']==120_000_000_000,'admin manual downgrade synchronizes storage')
+            body=request(admin,'/admin')[1]
+            check('API-uri Stripe' in body and 'Secret API Oblio' in body,'admin exposes API settings section')
+            check(request(admin,'/admin',{'action':'settings_save','provider':'stripe','secret_key':'sk_test_httpSaved'})[0]==419,'API settings writes require admin CSRF')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','secret_key':'sk_test_httpSaved','webhook_secret':'whsec_httpSaved'})
+            check(status==200 and 'Valorile din .env' in body and 'sk_test_httpSaved' not in body and 'whsec_httpSaved' not in body,'Stripe settings save without exposing secrets in HTML')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'stripe','secret_key':'sk_live_httpRejected'})
+            check(status==422 and 'sk_live_httpRejected' not in body,'unsupported Stripe mode is rejected without echoing key')
+            status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'settings_save','provider':'oblio','email':'oblio@example.com','secret':'httpOblioSecret','cif':'RO12345678','series':'ZS','language':'RO','vat_rate':'0','vat_name':'Scutit'})
+            check(status==200 and 'httpOblioSecret' not in body and 'Configurat din administrare' in body,'Oblio disabled configuration saves without exposing API secret')
+            db=sqlite3.connect(temp+'/app.sqlite')
+            raw=' '.join(r[0] for r in db.execute('SELECT value FROM integration_settings'))+' '.join(r[0] for r in db.execute('SELECT detail FROM admin_audit'))
+            check(all(secret not in raw for secret in ['sk_test_httpSaved','whsec_httpSaved','httpOblioSecret']),'stored API settings and admin audit do not expose plaintext secrets')
+            db.close()
             if '--browser' in sys.argv:
                 db=sqlite3.connect(temp+'/app.sqlite');now=int(time.time());browser_id='b'*32;verify_token='c'*64
                 db.execute('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,email_verified_at,storage_user_id,status,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',(browser_id,'Upgrade Browser','upgrade-browser@example.com',u['password_hash'],'ro','120gb',now,'browser-storage','active',now,now,now,now))
@@ -101,6 +114,6 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
                 subprocess.run([node,script,'http://localhost:8093/ro/verificare-email?token='+verify_token],cwd=ROOT,env=env,check=True)
             body=request(admin,'/admin')[1];status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'logout'})
             check(status==200 and 'Autentificare administrator' in body,'logout removes administrative access')
-            log.flush();log.seek(0);text=log.read();check('secure-admin-client-password' not in text and 'fixture-admin-password' not in text,'server logs contain no plaintext credentials')
+            log.flush();log.seek(0);text=log.read();check(all(secret not in text for secret in ['secure-admin-client-password','fixture-admin-password','sk_test_httpSaved','whsec_httpSaved','httpOblioSecret']),'server logs contain no plaintext credentials')
             print(f'{checks} admin HTTP assertions passed. No external services contacted.')
         finally:server.terminate();server.wait(timeout=10);backend.shutdown()

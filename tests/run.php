@@ -97,3 +97,4 @@ require __DIR__.'/services.php';
 require __DIR__.'/fiscal.php';
 require __DIR__.'/changes.php';
 require __DIR__.'/catalog.php';
+require __DIR__.'/integration-settings.php';

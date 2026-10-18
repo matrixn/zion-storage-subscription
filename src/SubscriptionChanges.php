@@ -52,7 +52,7 @@ class SubscriptionChanges {
    $s=$this->stripe->subscriptions->retrieve($local['stripe_subscription_id'])->toArray();
    $from=$this->plans->get($u['selected_plan_id'],$local['billing_interval']);$p=$offer['plan'];$item=$s['items']['data'][0]??[];
    $this->validateSubscription($s,$u,$from,$local['renewal_at']);
-   if(!$p['stripe_price_id'] || !env('STRIPE_SECRET_KEY'))throw new \DomainException('upgrade.unconfigured');
+   if(!$p['stripe_price_id'] || !(new IntegrationSettings($this->db))->stripe()['secret_key'])throw new \DomainException('upgrade.unconfigured');
    $price=$this->stripe->prices->retrieve($p['stripe_price_id'])->toArray();
    if(($price['currency']??'')!==$p['currency'] || ($price['unit_amount']??null)!==$p['price_amount'] || ($price['recurring']['interval']??'')!==$p['billing_interval'] || ($price['recurring']['interval_count']??1)!==1 || !($price['active']??false))throw new \DomainException('upgrade.unconfigured');
    if(!(new BillingProfileService($this->db))->get($u['id']))throw new \DomainException('billing.required');

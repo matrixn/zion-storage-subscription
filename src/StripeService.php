@@ -3,8 +3,10 @@ namespace Zion;
 class StripeService implements BillingService {
  protected \Stripe\StripeClient $client;
  protected OblioInvoiceService $fiscal;
+ protected array $settings;
  public function __construct(protected Database $db,protected Plans $plans,protected MailerService $mail,protected StorageProvisioningService $storage, ?OblioInvoiceService $fiscal=null) {
-  $key=env('STRIPE_SECRET_KEY','sk_test_unconfigured');
+  $this->settings=(new IntegrationSettings($db))->stripe();
+  $key=$this->settings['secret_key']?:'sk_test_unconfigured';
   if(!str_starts_with($key,'sk_test_') && !str_starts_with($key,'rk_test_')) throw new \RuntimeException('Only Stripe TEST MODE is enabled in this release');
   $this->client=new \Stripe\StripeClient($key);
   $this->fiscal=$fiscal??new OblioInvoiceService($db,$mail);
@@ -16,7 +18,7 @@ class StripeService implements BillingService {
   if(!$profile) throw new \InvalidArgumentException('billing.required');
   BillingProfileService::validate($profile,$u);
   $interval=$u['billing_interval']??'month';$p=$this->plans->get($u['selected_plan_id'],$interval);
-  if(!$p || !$p['stripe_price_id'] || !env('STRIPE_SECRET_KEY')) throw new \RuntimeException('billing_unconfigured');
+  if(!$p || !$p['stripe_price_id'] || !$this->settings['secret_key']) throw new \RuntimeException('billing_unconfigured');
   // Serialize session creation so two tabs cannot create separate subscriptions.
   $lock=fopen(dirname(__DIR__).'/storage/checkout-'.$u['id'].'.lock','c'); flock($lock,LOCK_EX);
   try {
@@ -43,7 +45,7 @@ class StripeService implements BillingService {
   $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
   if(!$s || !$s['stripe_customer_id']) throw new \RuntimeException('billing_unavailable');
   // Never expose Stripe's generic plan switcher: it bypasses the five-day policy.
-  $key='restricted-portal-v1:'.hash('sha256',env('STRIPE_SECRET_KEY'));
+  $key='restricted-portal-v1:'.hash('sha256',$this->settings['secret_key']);
   $stored=$this->db->one('SELECT value FROM integration_settings WHERE key=?',[$key]);
   if($stored)$config=$this->client->billingPortal->configurations->retrieve($stored['value']);
   else {
@@ -60,8 +62,8 @@ class StripeService implements BillingService {
  public function changes(): SubscriptionChanges { return new SubscriptionChanges($this->db,$this->plans,$this->mail,$this->storage,$this->client,$this->fiscal); }
  public function catalog(): BillingCatalog { return new BillingCatalog($this->db,$this->plans,$this->client); }
  public function receive(string $payload,string $signature): void {
-  if(!env('STRIPE_WEBHOOK_SECRET')) throw new \RuntimeException('webhook_unconfigured');
-  $event=\Stripe\Webhook::constructEvent($payload,$signature,env('STRIPE_WEBHOOK_SECRET'));
+  if(!$this->settings['webhook_secret']) throw new \RuntimeException('webhook_unconfigured');
+  $event=\Stripe\Webhook::constructEvent($payload,$signature,$this->settings['webhook_secret']);
   if($event->livemode) throw new \RuntimeException('live_event_rejected');
   $this->process($event->toArray());
  }

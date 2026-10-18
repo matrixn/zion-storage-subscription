@@ -5,7 +5,9 @@ final class Plans {
  public function all(string $interval='month'): array {
   if(!in_array($interval,['month','year'],true))throw new \InvalidArgumentException('invalid_billing_interval');
   $plans=require dirname(__DIR__).'/config/plans.php';
+  $vat=(new IntegrationSettings($this->db))->oblio()['vat_rate'];
   foreach($plans as &$p){
+   $p['invoice_vat_rate']=$vat;
    $p['billing_interval']=$interval;$p['price_amount']=$interval==='year'?$p['yearly_price']:$p['monthly_price'];
    if($interval==='year'){$p['invoice_name_ro']='Abonament anual Zion Storage '.$p['name'].' '.$p['capacity'];$p['invoice_product_code'].='_YEAR';}
    $row=$this->db->one("SELECT * FROM billing_prices WHERE plan=? AND interval=? AND status='active'",[$p['slug'],$interval]);

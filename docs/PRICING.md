@@ -12,7 +12,7 @@ Annual billing charges the displayed total once per year: twelve months of stora
 
 ## Configure through /admin
 
-Set only Stripe secret/webhook credentials in private .env. Run php bin/console.php install, then sign into /admin with the administrator seeded from ADMIN_EMAIL and ADMIN_PASSWORD. In the catalog, either validate/save an existing Price ID or create the matching TEST Product/Price for each of the six paid options. Creation uses one Product per plan and separate monthly/yearly Prices. Stable product IDs, lookup keys and idempotency keys allow retries to reuse created objects.
+Run php bin/console.php install, then sign into /admin with the administrator seeded from ADMIN_EMAIL and ADMIN_PASSWORD. Save Stripe secret/webhook credentials in its API settings section; this disables environment fallback for Stripe. In the catalog, either validate/save an existing Price ID or create the matching TEST Product/Price for each of the six paid options. Creation uses one Product per plan and separate monthly/yearly Prices. Stable product IDs, lookup keys and idempotency keys allow retries to reuse created objects. See [API configuration](API-SETTINGS.md).
 
 Validation requires TEST MODE, active Price, exact EUR minor-unit amount and recurring interval/count. Checkout validates again before issuing a session. Replacing/disabling a mapping affects new purchases only; historical IDs remain recognizable. Catalog actions require admin authentication and CSRF and are audited. Keep billing_prices and billing_products in database backups.
 

@@ -1,5 +1,7 @@
 # Fiscal invoicing with Oblio
 
+Configure Oblio authentication, issuer, VAT and issuance controls in /admin → API-uri Stripe și Oblio. After the first save, all OBLIO_* environment values are ignored. The environment variables below remain bootstrap fallbacks for installations that have not saved an admin configuration. See [configuration precedence and secret storage](API-SETTINGS.md).
+
 Stripe remains responsible for card payments, subscription state, recurring charges and payment confirmation. Oblio is responsible for fiscal numbering and issued fiscal documents. A Stripe payment confirmation/receipt is not presented as the final fiscal invoice.
 
 ## Configuration
