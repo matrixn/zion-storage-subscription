@@ -6,7 +6,7 @@ let checks=0;function check(v,label){if(!v)throw Error(label);checks++;}
  for(const width of [320,360,390,430,768,1024,1440,1920])for(const locale of ['ro','en','fr','de']){
   await page.setViewportSize({width,height:1000});const res=await page.goto(origin+'/'+locale+'/');check(res.status()===200,'home '+locale+width);
   check(await page.locator('#hero-backup').isVisible(),'backup initially visible');
-  check(await page.locator('[data-hero-carousel]').getAttribute('data-playing')==='false','reduced motion starts paused');
+  check(await page.locator('[data-hero-carousel]').getAttribute('data-running')==='false','reduced motion starts paused');
   check(await page.locator('[data-carousel-controls]').isVisible(),'controls progressively enabled');
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'backup no horizontal overflow '+locale+width);
   const before=await page.locator('.hero').evaluate(el=>el.getBoundingClientRect().height);
@@ -28,11 +28,17 @@ let checks=0;function check(v,label){if(!v)throw Error(label);checks++;}
   check(await page.locator('.hero-scene.is-entering').evaluate(el=>getComputedStyle(el).animationName)==='none','reduced-motion transitions disabled');
  }
  const automatic=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'no-preference'});const auto=await automatic.newPage();
- await auto.clock.install();await auto.goto(origin+'/en/');await auto.waitForTimeout(200);await auto.clock.runFor(8200);
- check(await auto.locator('#hero-comparison').isVisible(),'autoplay advances after eight seconds');
- await auto.locator('[data-scene-select="0"]').click();await auto.mouse.move(0,0);await auto.clock.runFor(9000);check(await auto.locator('#hero-backup').isVisible(),'manual interaction pauses autoplay');
- await auto.locator('[data-scene-play]').click();await auto.mouse.move(0,0);await auto.clock.runFor(8200);check(await auto.locator('#hero-comparison').isVisible(),'explicit play resumes autoplay');
- await auto.locator('[data-hero-carousel]').hover();await auto.clock.runFor(9000);check(await auto.locator('#hero-comparison').isVisible(),'hover suspends rotation');
+ await auto.clock.install();await auto.goto(origin+'/en/');await auto.mouse.move(0,0);await auto.waitForTimeout(200);
+ check(await auto.locator('[data-scene-play]').count()===0,'pause button removed');
+ await auto.clock.runFor(3900);check(await auto.locator('#hero-comparison').isVisible(),'autoplay advances after four seconds');
+ await auto.locator('[data-scene-select="0"]').click();await auto.mouse.move(0,0);await auto.clock.runFor(1500);
+ await auto.locator('.header').hover();check(await auto.locator('[data-hero-carousel]').getAttribute('data-running')==='false','header hover pauses carousel');
+ const elapsed=await auto.locator('[data-scene-progress]').evaluate(el=>el.getAnimations()[0].currentTime);
+ check(elapsed>1000&&elapsed<3000,'progress shows elapsed portion');
+ await auto.clock.runFor(6000);check(await auto.locator('#hero-backup').isVisible(),'header hover prevents rotation');
+ check(await auto.locator('[data-scene-progress]').evaluate(el=>el.getAnimations()[0].currentTime)===elapsed,'progress freezes while paused');
+ await auto.mouse.move(0,0);await auto.clock.runFor(2700);check(await auto.locator('#hero-comparison').isVisible(),'remaining time resumes after header hover');
+ await auto.locator('[data-hero-carousel]').hover();await auto.clock.runFor(6000);check(await auto.locator('#hero-comparison').isVisible(),'slider hover suspends rotation');
  await auto.mouse.move(0,0);await auto.locator('#pricing').scrollIntoViewIfNeeded();await auto.waitForTimeout(100);await auto.clock.runFor(9000);check(await auto.locator('#hero-comparison').isVisible(),'offscreen carousel does not rotate');
  const fallback=await browser.newContext({javaScriptEnabled:false,viewport:{width:320,height:900}});const nojs=await fallback.newPage();await nojs.goto(origin+'/ro/');
  check(await nojs.locator('#hero-backup').isVisible()&&await nojs.locator('[data-carousel-controls]').isHidden(),'no-JS original illustration remains visible');

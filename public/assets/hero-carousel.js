@@ -1,32 +1,37 @@
 'use strict';
 document.querySelectorAll('[data-hero-carousel]').forEach(carousel=>{
  const slides=[...carousel.querySelectorAll('[data-hero-scene]')],selectors=[...carousel.querySelectorAll('[data-scene-select]')];
- const play=carousel.querySelector('[data-scene-play]'),status=carousel.querySelector('[data-scene-status]');
- const motion=matchMedia('(prefers-reduced-motion: reduce)');
- let index=0,playing=!motion.matches,timer=null,hovered=false,visible=true,touch=null;
- function stopTimer(){clearTimeout(timer);timer=null;}
- function schedule(){
-  stopTimer();
-  if(playing&&!hovered&&visible&&!document.hidden)timer=setTimeout(()=>show(index+1,false),8000);
+ const status=carousel.querySelector('[data-scene-status]'),progress=carousel.querySelector('[data-scene-progress]');
+ const motion=matchMedia('(prefers-reduced-motion: reduce)'),surfaces=[carousel,document.querySelector('.header')].filter(Boolean),hovered=new Set();
+ const duration=4000,animation=progress.animate([{transform:'scaleX(0)'},{transform:'scaleX(1)'}],{duration,fill:'both'});animation.pause();
+ let index=0,timer=null,remaining=duration,started=0,visible=true,touch=null;
+ function keyboardFocus(){const active=document.activeElement;return active?.matches(':focus-visible')&&surfaces.some(surface=>surface.contains(active));}
+ function stop(){
+  if(timer!==null){remaining=Math.max(0,remaining-(performance.now()-started));clearTimeout(timer);timer=null;}
+  animation.pause();animation.currentTime=duration-remaining;carousel.dataset.running='false';
  }
- function updatePlay(){play.textContent=playing?play.dataset.pauseLabel:play.dataset.playLabel;carousel.dataset.playing=String(playing);}
- function pause(){playing=false;stopTimer();updatePlay();}
+ function sync(){
+  const run=!motion.matches&&!hovered.size&&visible&&!document.hidden&&!keyboardFocus();
+  if(!run){stop();return;}
+  if(timer!==null)return;
+  started=performance.now();animation.currentTime=duration-remaining;animation.play();carousel.dataset.running='true';
+  timer=setTimeout(()=>{timer=null;show(index+1,false);},remaining);
+ }
  function show(next,manual=true){
-  if(manual)pause();
-  index=(next+slides.length)%slides.length;
+  stop();remaining=duration;animation.currentTime=0;index=(next+slides.length)%slides.length;
   slides.forEach((slide,i)=>{slide.hidden=i!==index;slide.classList.toggle('is-entering',i===index);});
   selectors.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===index)));
   if(manual)status.textContent=status.dataset.statusTemplate.replace('{current}',String(index+1)).replace('{total}',String(slides.length)).replace('{title}',slides[index].dataset.title);
-  schedule();
+  sync();
  }
  carousel.querySelector('[data-scene-previous]').addEventListener('click',()=>show(index-1));
  carousel.querySelector('[data-scene-next]').addEventListener('click',()=>show(index+1));
  selectors.forEach(button=>button.addEventListener('click',()=>show(Number(button.dataset.sceneSelect))));
- play.addEventListener('click',()=>{playing=!playing;updatePlay();schedule();});
- carousel.addEventListener('mouseenter',()=>{hovered=true;stopTimer();});
- carousel.addEventListener('mouseleave',()=>{hovered=false;schedule();});
- carousel.addEventListener('focusin',event=>{if(event.target!==play)pause();else stopTimer();});
- carousel.addEventListener('focusout',()=>schedule());
+ surfaces.forEach(surface=>{
+  surface.addEventListener('pointerenter',event=>{if(event.pointerType==='mouse'){hovered.add(surface);sync();}});
+  surface.addEventListener('pointerleave',event=>{if(event.pointerType==='mouse'){hovered.delete(surface);sync();}});
+  surface.addEventListener('focusin',()=>queueMicrotask(sync));surface.addEventListener('focusout',()=>queueMicrotask(sync));
+ });
  carousel.addEventListener('keydown',event=>{
   if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();show(index+(event.key==='ArrowRight'?1:-1));}
  });
@@ -37,8 +42,7 @@ document.querySelectorAll('[data-hero-carousel]').forEach(carousel=>{
   if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy))show(index+(dx<0?1:-1));
  });
  viewport.addEventListener('pointercancel',()=>{touch=null;});
- document.addEventListener('visibilitychange',schedule);
- motion.addEventListener('change',event=>{if(event.matches)pause();});
- if('IntersectionObserver' in window)new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;schedule();},{threshold:.15}).observe(carousel);
- carousel.querySelector('[data-carousel-controls]').hidden=false;updatePlay();schedule();
+ document.addEventListener('visibilitychange',sync);motion.addEventListener('change',sync);
+ if('IntersectionObserver' in window)new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;sync();},{threshold:.15}).observe(carousel);
+ carousel.querySelector('[data-carousel-controls]').hidden=false;sync();
 });

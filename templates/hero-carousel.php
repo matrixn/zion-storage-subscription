@@ -26,7 +26,7 @@
   <button class="scene-arrow" type="button" data-scene-previous aria-label="<?= e($t('carousel.previous')) ?>"><span aria-hidden="true">←</span></button>
   <div class="scene-picker"><button type="button" data-scene-select="0" aria-controls="hero-backup" aria-pressed="true"><?= e($t('carousel.backup')) ?></button><button type="button" data-scene-select="1" aria-controls="hero-comparison" aria-pressed="false"><?= e($t('carousel.compare')) ?></button></div>
   <button class="scene-arrow" type="button" data-scene-next aria-label="<?= e($t('carousel.next')) ?>"><span aria-hidden="true">→</span></button>
-  <button class="scene-play" type="button" data-scene-play data-play-label="<?= e($t('carousel.play')) ?>" data-pause-label="<?= e($t('carousel.pause')) ?>"><?= e($t('carousel.pause')) ?></button>
+  <div class="scene-progress-track" aria-hidden="true"><span data-scene-progress></span></div>
  </div>
  <span class="sr-only" data-scene-status aria-live="polite" aria-atomic="true" data-status-template="<?= e($t('carousel.position',['current'=>'{current}','total'=>'{total}','title'=>'{title}'])) ?>"></span>
 </div>
