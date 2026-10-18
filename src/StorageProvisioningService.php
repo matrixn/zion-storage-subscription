@@ -9,7 +9,8 @@ class StorageProvisioningService {
   $ch=curl_init($base.$path);
   curl_setopt_array($ch,[CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_HTTPHEADER=>['x-api-key: '.env('STORAGE_API_KEY'),'Content-Type: application/json'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>20,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_FOLLOWLOCATION=>false]);
   if($body!==null) curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($body,JSON_THROW_ON_ERROR));
-  $raw=curl_exec($ch); $code=curl_getinfo($ch,CURLINFO_HTTP_CODE); curl_close($ch);
+  $started=microtime(true);$raw=curl_exec($ch); $code=curl_getinfo($ch,CURLINFO_HTTP_CODE);
+  ApiLog::curlResult('immich',$method,$base.$path,$ch,$raw,$started,[$body??[],env('STORAGE_API_KEY')]);curl_close($ch);
   if($raw===false || $code<200 || $code>=300) throw new \RuntimeException('storage_request_failed');
   return json_decode($raw,true,512,JSON_THROW_ON_ERROR)?:[];
  }

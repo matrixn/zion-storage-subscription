@@ -27,7 +27,10 @@ final class Security {
   if(!$token || !str_starts_with(env('CAPTCHA_VERIFY_URL'),'https://')) return false;
   $ch=curl_init(env('CAPTCHA_VERIFY_URL'));
   curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>http_build_query(['secret'=>env('CAPTCHA_SECRET'),'response'=>$token,'remoteip'=>self::clientIp()]),CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>8]);
-  $data=json_decode(curl_exec($ch)?:'{}',true); curl_close($ch);
+  $started=microtime(true);$raw=curl_exec($ch);$data=json_decode($raw?:'{}',true);
+  $details=ApiLog::responseDetails($raw,(int)curl_getinfo($ch,CURLINFO_HTTP_CODE),curl_errno($ch),curl_error($ch),[$token,env('CAPTCHA_SECRET'),self::clientIp()]);
+  if(($data['success']??false)!==true){$details['failed']=true;if(!$details['code'])$details['code']='captcha_rejected';$details['message']='Verificarea CAPTCHA a fost respinsă.';}
+  ApiLog::record('captcha','POST',env('CAPTCHA_VERIFY_URL'),(int)curl_getinfo($ch,CURLINFO_HTTP_CODE),$started,$details);curl_close($ch);
   return ($data['success']??false)===true;
  }
 }

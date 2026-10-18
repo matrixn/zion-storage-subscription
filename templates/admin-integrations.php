@@ -5,6 +5,7 @@
 <details open><summary>Stripe <?= strtoupper($stripeMode) ?> · <?= $stripeSaved?'Configurat din administrare':'.env (până la prima salvare)' ?></summary>
 <p>Modul activ pe site: <strong><?= strtoupper($stripeActiveMode) ?></strong>. Configurezi acum <strong><?= strtoupper($stripeMode) ?></strong>. Cheile, prețurile și verificările sunt separate între TEST și LIVE.</p>
 <p>3 produse și 6 prețuri recurente sunt create sau reutilizate automat în modul selectat: Personal, Plus și Titan, lunar și anual. Nu trebuie să completezi Product ID sau Price ID. Salvarea cheilor nu schimbă modul activ.</p>
+<p><a href="/admin?section=api-log&amp;provider=stripe&amp;mode=<?= $stripeMode ?>&amp;status=error">Vezi erorile Stripe <?= strtoupper($stripeMode) ?> în jurnalul API ↗</a> · Include diagnostice DNS, TLS, timeout și răspunsuri HTTP.</p>
 <?php require __DIR__.'/admin-stripe-status.php'; ?>
 <p>Endpoint webhook <?= strtoupper($stripeMode) ?>: <code><?= e(base_url().'/webhooks/stripe?mode='.$stripeMode) ?></code>. Evenimente: checkout.session.completed, invoice.paid, invoice.payment_failed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted.</p>
 <form method="post" class="integration-form">

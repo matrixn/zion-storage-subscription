@@ -24,8 +24,10 @@ class OblioClient
             CURLOPT_TIMEOUT => 20, CURLOPT_FOLLOWLOCATION => false,
         ]);
         if ($method !== 'GET') curl_setopt($ch, CURLOPT_POSTFIELDS, $json ? json_encode($data, JSON_THROW_ON_ERROR) : http_build_query($data));
+        $started = microtime(true);
         $body = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        ApiLog::curlResult('oblio',$method,$url,$ch,$body,$started,[$data,$token??'',$this->config['secret']??'']);
         curl_close($ch);
         if ($body === false || $status < 200 || $status >= 300) throw new OblioException('provider_transport_failed');
         try { $result = json_decode($body, true, 512, JSON_THROW_ON_ERROR); }

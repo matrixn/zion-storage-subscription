@@ -19,7 +19,7 @@ final class AdminApplication {
   if(production())header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
   $path=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
-  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','audit'=>'Jurnal administrare'];
+  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
   $default=match(true){$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
@@ -30,6 +30,7 @@ final class AdminApplication {
   $this->stripeMode=(string)($_POST['credential_mode']??$_GET['stripe_mode']??$stripeActiveMode);
   if(!in_array($this->stripeMode,['test','live'],true)){http_response_code(404);return;}
   $stripeMode=$this->stripeMode;
+  $apiFilters=[];$apiEntries=null;
   $admin=null;$error=null;$notice=$_SESSION['admin_notice']??null;unset($_SESSION['admin_notice']);
   if(($_SESSION['admin_until']??0)>time() && isset($_SESSION['admin_id']))$admin=$this->db->one('SELECT id,email FROM administrators WHERE id=?',[$_SESSION['admin_id']]);
   $method=$_SERVER['REQUEST_METHOD'];
@@ -99,6 +100,10 @@ final class AdminApplication {
   $catalogMode=$section==='catalog'?$stripeMode:$stripeActiveMode;
   $plans=$this->plans->all('month',$catalogMode);$yearPlans=$this->plans->all('year',$catalogMode);$catalogRows=$admin?$this->db->run('SELECT * FROM billing_prices WHERE stripe_mode=? ORDER BY plan,interval,created_at DESC',[$catalogMode])->fetchAll():[];$clients=[];$changes=[];$audit=[];$search=trim((string)($_GET['q']??''));
   if($admin){
+   if($section==='api-log'){
+    foreach(['provider','status','mode','direction'] as $key)$apiFilters[$key]=is_string($_GET[$key]??null)?$_GET[$key]:'';
+    $apiEntries=ApiLog::page($apiFilters,max(1,(int)($_GET['page']??1)));
+   }
    $integrations=new IntegrationSettings($this->db);$stripeSettings=$integrations->stripe($section==='integrations'?$stripeMode:$stripeActiveMode);$oblioSettings=$integrations->oblio();$stripeProfiles=$integrations->stripeProfiles();
    $stripeSaved=$integrations->saved('stripe')!==null;$oblioSaved=$integrations->saved('oblio')!==null;
    $stripeState=(new StripeIntegration($this->db,$this->plans,null,$stripeMode))->state();

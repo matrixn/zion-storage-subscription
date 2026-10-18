@@ -25,7 +25,8 @@ class StorageGateway {
   if(!$base || (production() && !str_starts_with($base,'https://')))return null;
   $ch=curl_init($base.'/users/me');
   curl_setopt_array($ch,[CURLOPT_HTTPHEADER=>$forward,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_TIMEOUT=>8,CURLOPT_FOLLOWLOCATION=>false]);
-  $raw=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);
+  $started=microtime(true);$raw=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);
+  ApiLog::curlResult('immich','GET',$base.'/users/me',$ch,$raw,$started,array_values($headers));curl_close($ch);
   if($code!==200 || !is_string($raw))return null;
   $result=json_decode($raw,true);return is_string($result['id']??null)?$result['id']:null;
  }

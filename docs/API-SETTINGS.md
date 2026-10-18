@@ -30,6 +30,18 @@ Each registration, Checkout, subscription, plan change, fiscal invoice and recor
 
 Prices, Product associations, diagnostics and manual pauses are isolated by mode. Dashboard financial/subscription metrics use the active mode; local user/access/quota totals remain shared. The site header shows a compact sandbox payment notice in RO/EN/FR/DE whenever TEST is active, and hides it in LIVE.
 
+## API communication journal
+
+Open /admin → Jurnal administrare → Comunicare API. The separate Acțiuni administrare submenu retains the existing operator audit trail. The menu remains at two vertical levels. Filter communication records by provider, success/error, Stripe TEST/LIVE and incoming/outgoing direction, with 50 rows per page.
+
+Logging is automatic for all application Stripe SDK requests, not just connection tests: catalog, Checkout, subscriptions, portal operations, payment/upgrade verification and workers use the same instrumented transport. Oblio authentication and document requests, Immich provisioning/quota/gateway identity calls, CAPTCHA verification and incoming Stripe webhooks are also covered. SMTP delivery and the Immich media traffic forwarded directly by Nginx are not API calls made by this PHP application and are not included. Fixture transports that replace the SDK client are outside this instrumentation.
+
+Records contain time, service, mode, direction, method, sanitized host/route, HTTP status (or no response), duration, provider/transport error code, filtered diagnostic message and Stripe Request ID when returned. Stripe SDK internal retries appear as one completed transport operation. No request/response bodies, authentication headers, cookies or query parameters are stored; error-message text is scrubbed for request values, credentials, URLs, emails and long numbers. No stack traces or webhook payloads are captured. Admin pages escape all diagnostic text and use no-store responses. Webhook signature failures use a fixed safe message. A successful webhook entry describes request handling, not necessarily activation or collection of a payment.
+
+The journal is a separate `api-communication.sqlite` file beside DB_PATH, outside the public directory. This preserves transport diagnostics when billing transactions roll back and avoids contention with the business database. API_LOG_PATH can optionally override this location. Keep its directory writable by the same PHP/worker user; files are created with mode 0600. Writes retain at most 10,000 entries from the last 30 days; cleanup runs with each new record. Logging failures never change the API result and emit only a generic server-log warning. The admin page reports an unreadable log file explicitly.
+
+For “Stripe nu poate fi contactat”, repeat Testează conexiunea Stripe after installing this version, then follow the error-journal link beside the Stripe settings. DNS failures, timeout/connectivity failures and missing CA/TLS certificate errors retain the underlying transport details. HTTP failures show provider codes/messages and Request IDs for correlation with Stripe. The journal adds diagnostics without disabling TLS verification or changing retry/payment behavior. It cannot recover errors that happened before installation.
+
 ## Oblio and deployment
 
 Oblio still has its own independent configuration: account email/API secret, issuer CIF, invoice series, optional workstation, document language, VAT rate/name, real issuance toggle and permission to issue real documents for Stripe TEST payments. Saving Oblio validates locally and does not contact it. LIVE Stripe payments use the same issuer settings; simulation remains the default until real issuance is explicitly enabled.

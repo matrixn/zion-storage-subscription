@@ -26,9 +26,11 @@ final class Application {
    header('Cache-Control: no-store');
    if($method!=='POST') {http_response_code(405);return;}
    if((int)($_SERVER['CONTENT_LENGTH']??0)>1048576){http_response_code(413);return;}
-   try{$this->billing->receive(file_get_contents('php://input',false,null,0,1048577),$_SERVER['HTTP_STRIPE_SIGNATURE']??'');http_response_code(204);}
-   catch(\Stripe\Exception\SignatureVerificationException|\UnexpectedValueException|\JsonException $e){http_response_code(400);}
-   catch(\Throwable $e){error_log('Billing event requires retry');http_response_code(503);}
+   $started=microtime(true);$log=['direction'=>'in','mode'=>in_array($_GET['mode']??'',['test','live'],true)?$_GET['mode']:'','message'=>'Webhook procesat.'];$code=204;
+   try{$this->billing->receive(file_get_contents('php://input',false,null,0,1048577),$_SERVER['HTTP_STRIPE_SIGNATURE']??'');}
+   catch(\Stripe\Exception\SignatureVerificationException|\UnexpectedValueException|\JsonException $e){$code=400;$log['code']='invalid_webhook';$log['message']='Semnătură sau format webhook invalid.';}
+   catch(\Throwable $e){error_log('Billing event requires retry');$code=503;$log['code']='webhook_retry';$log['message']='Procesarea webhookului necesită reîncercare; consultă și cererile API din același interval.';}
+   ApiLog::record('stripe','POST','/webhooks/stripe',$code,$started,$log);http_response_code($code);
    return;
   }
   if($path==='/sitemap.xml') {$this->sitemap();return;}

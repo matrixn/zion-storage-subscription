@@ -9,7 +9,7 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
  await page.goto(origin+'/admin');await page.locator('input[name=email]').fill('admin-fixture@example.com');await page.locator('input[name=password]').fill('fixture-admin-password');await page.getByRole('button',{name:'Intră în administrare'}).click();
  check(await page.locator('h1').textContent()==='Dashboard','browser administrator lands on dashboard');
  const artifacts=path.join(__dirname,'artifacts');fs.mkdirSync(artifacts,{recursive:true});
- const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','integrations','catalog','audit'];
+ const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','integrations','catalog','audit','api-log'];
  for(const width of [320,390,768,1440]){
   await page.setViewportSize({width,height:1000});
   for(const section of sections){
@@ -62,6 +62,13 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
     await page.screenshot({path:path.join(artifacts,'admin-stripe-live-'+width+'.png'),fullPage:true});
    }
    if(section==='catalog')check(await page.locator('.table').first().locator('input[name=price_id]').count()===0,'main catalog no longer asks for manual Price IDs');
+   if(section==='api-log'){
+    check(await page.locator('h2').textContent()==='Comunicare API','API journal has a dedicated page');
+    await page.locator('select[name=provider]').selectOption('immich');await page.locator('select[name=status]').selectOption('ok');
+    await page.getByRole('button',{name:'Filtrează',exact:true}).click();
+    check(new URL(page.url()).searchParams.get('section')==='api-log' && (await page.locator('table').innerText()).includes('Immich'),'API log filters preserve section and show recorded traffic');
+    await page.screenshot({path:path.join(artifacts,'admin-api-log-'+width+'.png'),fullPage:true});
+   }
   }
  }
  // Navigation and search also work without scripts.
