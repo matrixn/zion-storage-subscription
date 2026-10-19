@@ -1,4 +1,3 @@
-@font-face{font-family:'Zion Legal Heading';src:url('/assets/fonts/Unbounded-Medium.ttf') format('truetype');font-style:normal;font-weight:500;font-display:swap}
 /* Legal documents share the public site's charcoal and lime palette. */
 .legal-document{max-width:1320px;padding-block:72px 100px}
 .legal-document .legal-heading{display:grid;grid-template-columns:minmax(0,1fr) 240px;align-items:center;gap:60px;padding-bottom:40px}
@@ -37,7 +36,7 @@
 @media print{body{background:#fff!important;color:#000!important}.legal-document{width:100%;max-width:none;padding:0}.legal-document .legal-heading{display:block;padding-bottom:20px}.legal-document .legal-heading h1{font-size:30px}.legal-document .legal-nav,.legal-emblem,.legal-toc,.legal-help,.legal-back{display:none}.legal-layout{display:block}.legal-sidebar{position:static;display:block}.legal-document .legal-operator{padding:12px 0;border:0;margin-bottom:20px}.legal-document .legal-content{padding:0;border:0;background:none;font-size:11px}.legal-document p,.legal-document strong,.legal-document a,.legal-document .legal-content,.legal-document .legal-content h2,.legal-section-number,.legal-version time{color:#000!important}.legal-document .legal-content h2{font-size:17px;break-after:avoid}.legal-document .legal-content section{padding-block:16px}.legal-document .legal-content p{orphans:3;widows:3}}
 
 /* Unbounded Medium matches the heading typography on zion3d.ro. */
-.legal-document h1,.legal-document h2{font-family:'Zion Legal Heading','Zion Sans',sans-serif;font-weight:500;font-synthesis:none}
+.legal-document h1,.legal-document h2{font-family:'Zion Heading','Zion Sans',sans-serif;font-weight:500;font-synthesis:none}
 .legal-document .legal-heading h1{font-size:clamp(32px,4vw,56px);line-height:1.25;letter-spacing:-.035em}
 .legal-document .legal-content h2{font-size:19px;line-height:1.55;letter-spacing:-.025em}
 .legal-document .legal-help h2{font-size:23px;line-height:1.5;letter-spacing:-.025em}

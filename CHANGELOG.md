@@ -2,6 +2,8 @@
 
 ## 2026-10-19
 
+- Applied the self-hosted Unbounded heading font across all public pages, including the homepage, carousel and pricing. Adjusted heading sizes for responsive layouts and versioned the stylesheet URLs; body text and admin typography stay unchanged.
+
 - Added encrypted Listmonk transactional email configuration in admin, saved token previews, template/connection checks, explicit test emails, redacted API diagnostics and a Docker mail worker. Saved settings override LISTMONK environment values; existing localized outbox messages remain pending on upstream errors.
 
 - Added operator-specific terms, privacy and cookie pages in RO/EN/FR/DE, printable structured legal content, document-preserving language links, explicit adult declaration and acceptance versions. Added a public withdrawal declaration/receipt with encrypted records and administrative handling, while preserving mandatory consumer remedies. Updated contact/sender address and the unsaved VAT default for the declared non-VAT-registered PFA; saved tax profiles and Stripe subscriptions are not silently rewritten.
