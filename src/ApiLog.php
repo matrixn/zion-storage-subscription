@@ -77,7 +77,7 @@ final class ApiLog {
  }
  public static function page(array $filters,int $page=1): array {
   $where=[];$params=[];
-  foreach(['provider'=>['stripe','oblio','immich','captcha'],'status'=>['ok','error'],'mode'=>['test','live'],'direction'=>['in','out']] as $key=>$allowed)if(in_array($filters[$key]??'',$allowed,true)){$where[]=$key.'=?';$params[]=$filters[$key];}
+  foreach(['provider'=>['stripe','oblio','immich','listmonk','captcha'],'status'=>['ok','error'],'mode'=>['test','live'],'direction'=>['in','out']] as $key=>$allowed)if(in_array($filters[$key]??'',$allowed,true)){$where[]=$key.'=?';$params[]=$filters[$key];}
   if(is_string($filters['event']??null) && preg_match('/^(?:evt_[a-zA-Z0-9_]+|[a-f0-9]{16})$/D',$filters['event']) && strlen($filters['event'])<=150){$where[]='instr(context,?)>0';$params[]='"'.$filters['event'].'"';}
   $condition=$where?' WHERE '.implode(' AND ',$where):'';
   try{

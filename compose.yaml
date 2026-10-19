@@ -13,6 +13,22 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+  mail-worker:
+    build: .
+    command: ["php", "bin/mail-worker.php"]
+    user: www-data
+    env_file: .env
+    volumes:
+      - zion_data:/var/www/html/storage
+    restart: unless-stopped
+    depends_on:
+      - web
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      options:
+        max-size: "5m"
+        max-file: "3"
   immich-worker:
     build: .
     command: ["php", "bin/immich-worker.php"]

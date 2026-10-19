@@ -11,7 +11,7 @@ final class IntegrationSettings {
  }
  public function __construct(private Database $db) {}
  public function saved(string $provider): ?array {
-  if(!in_array($provider,['stripe','oblio','immich'],true))throw new \DomainException('Serviciu invalid.');
+  if(!in_array($provider,['stripe','oblio','immich','listmonk'],true))throw new \DomainException('Serviciu invalid.');
   $row=$this->db->one('SELECT value FROM integration_settings WHERE key=?',['provider:'.$provider]);
   return $row?EncryptedPayload::decode($row['value']):null;
  }
@@ -38,6 +38,19 @@ final class IntegrationSettings {
  public function immich(): array {
   return $this->saved('immich')??['url'=>rtrim(env('STORAGE_API_URL'),'/'),'api_key'=>env('STORAGE_API_KEY')];
  }
+ public function listmonk(): array {
+  return $this->saved('listmonk')??['enabled'=>env('LISTMONK_URL')!=='','url'=>rtrim(env('LISTMONK_URL'),'/'),'api_user'=>env('LISTMONK_API_USER'),'api_token'=>env('LISTMONK_API_TOKEN'),'template_id'=>env('LISTMONK_TEMPLATE_ID'),'from_email'=>env('LISTMONK_FROM_EMAIL')];
+ }
+ public static function validateListmonk(array $data): void {
+  $url=(string)($data['url']??'');$parsed=parse_url($url);
+  if($url!=='' && (!$parsed || !in_array($parsed['scheme']??'',['https','http'],true) || empty($parsed['host']) || isset($parsed['user']) || isset($parsed['pass']) || isset($parsed['query']) || isset($parsed['fragment']) || preg_match('/[\x00-\x20\x7f]/',$url) || strlen($url)>1000))throw new \DomainException('Introdu URL-ul de bază Listmonk HTTP/HTTPS, fără autentificare, parametri sau fragment.');
+  if($url!=='' && production() && !str_starts_with($url,'https://'))throw new \DomainException('În producție, Listmonk trebuie să folosească HTTPS.');
+  foreach(['api_user','api_token'] as $key)if(strlen($data[$key]??'')>2048 || preg_match('/[\x00-\x20\x7f]/',$data[$key]??''))throw new \DomainException('Utilizatorul și tokenul API nu pot conține spații sau caractere de control.');
+  if(str_contains($data['api_user']??'',':'))throw new \DomainException('Utilizatorul API nu poate conține două puncte.');
+  if(($data['template_id']??'')!=='' && (!preg_match('/^[1-9][0-9]{0,8}$/D',(string)$data['template_id'])))throw new \DomainException('ID-ul șablonului trebuie să fie un număr întreg pozitiv.');
+  if(($data['from_email']??'')!=='' && (strlen($data['from_email'])>254 || !filter_var($data['from_email'],FILTER_VALIDATE_EMAIL)))throw new \DomainException('Adresa expeditorului Listmonk este invalidă.');
+  if($data['enabled']??false)foreach(['url','api_user','api_token','template_id','from_email'] as $key)if(($data[$key]??'')==='')throw new \DomainException('Completează toate cele cinci câmpuri înainte de activarea Listmonk.');
+ }
  public function oblio(): array {
   $saved=$this->saved('oblio');
   return $saved===null?require dirname(__DIR__).'/config/oblio.php':$saved+['currencies'=>['EUR','RON']];
@@ -46,7 +59,7 @@ final class IntegrationSettings {
   $this->db->transaction(fn()=>$this->saveValues($provider,$input,$admin));
  }
  private function saveValues(string $provider,array $input,string $admin): void {
-  $old=$this->saved($provider)??($provider==='immich'?$this->immich():[]);
+  $old=$this->saved($provider)??(match($provider){'immich'=>$this->immich(),'listmonk'=>$this->listmonk(),default=>[]});
   if($provider==='stripe'){
    $mode=(string)($input['credential_mode']??'test');
    if(!in_array($mode,['test','live'],true))throw new \DomainException('Mod Stripe invalid.');
@@ -66,6 +79,10 @@ final class IntegrationSettings {
    if($data['secret_key']!=='' && !preg_match('/^(sk|rk)_'.$mode.'_[a-zA-Z0-9]+$/D',$data['secret_key']))throw new \DomainException('Cheia API trebuie să corespundă modului Stripe selectat.');
    if($data['webhook_secret']!=='' && !preg_match('/^whsec_[a-zA-Z0-9]+$/D',$data['webhook_secret']))throw new \DomainException('Secret webhook Stripe invalid.');
    $profiles[$mode]=$data;$data=$profiles;
+  }elseif($provider==='listmonk'){
+   $data=['enabled'=>($input['enabled']??'')==='1','url'=>rtrim(trim((string)($input['url']??'')),'/'),'api_token'=>$secret('api_token')];
+   foreach(['api_user','template_id','from_email'] as $key)$data[$key]=trim((string)($input[$key]??''));
+   self::validateListmonk($data);
   }elseif($provider==='immich'){
    $url=rtrim(trim((string)($input['url']??'')),'/');$parsed=parse_url($url);
    if($url!=='' && (!$parsed || !in_array($parsed['scheme']??'',['https','http'],true) || empty($parsed['host']) || isset($parsed['user']) || isset($parsed['pass']) || isset($parsed['query']) || isset($parsed['fragment']) || preg_match('/[\x00-\x20\x7f]/',$url) || strlen($url)>1000))throw new \DomainException('Introdu un URL Immich HTTP/HTTPS valid, fără autentificare, parametri sau fragment.');

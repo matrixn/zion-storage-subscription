@@ -1,5 +1,5 @@
 <section><h2>Comunicare API</h2>
-<p>Cereri către Stripe, Oblio, Immich și CAPTCHA, plus webhookurile Stripe primite. Se înregistrează reușitele și erorile, inclusiv la plăți, sincronizări și operațiuni automate. Ultimele 30 de zile, maximum 10.000 de înregistrări.</p>
+<p>Cereri către Stripe, Oblio, Immich, Listmonk și CAPTCHA, plus webhookurile Stripe primite. Se înregistrează reușitele și erorile, inclusiv la plăți, sincronizări și operațiuni automate. Ultimele 30 de zile, maximum 10.000 de înregistrări.</p>
 <p>Cheile, antetele de autentificare, parametrii și corpurile integrale ale cererilor/răspunsurilor nu sunt salvate. Mesajele de diagnostic sunt filtrate. Pentru Stripe, o înregistrare include reîncercările interne ale SDK-ului.</p>
 <nav class="filter-tabs" aria-label="Filtrare webhookuri"><a href="/admin?section=api-log&amp;provider=stripe&amp;direction=in">Webhookuri Stripe</a><a href="/admin?section=api-log&amp;provider=stripe&amp;direction=in&amp;status=error">Webhookuri cu erori</a></nav>
 <details><summary>Debug webhook și recuperarea unei plăți confirmate</summary>
@@ -9,7 +9,7 @@
 <p>Evenimentul este citit prin API-ul Stripe din mediul ales și verificat înainte de procesare. Evenimentele finalizate nu sunt aplicate din nou. Reprocesarea nu creează o plată și nu verifică secretul sau livrarea destinației webhook.</p>
 </details>
 <form method="get" class="search api-log-filters"><input type="hidden" name="section" value="api-log">
-<?php foreach(['provider'=>['Serviciu',['stripe'=>'Stripe','oblio'=>'Oblio','immich'=>'Immich','captcha'=>'CAPTCHA']],'status'=>['Rezultat',['error'=>'Erori','ok'=>'Reușite']],'mode'=>['Mediu Stripe',['test'=>'TEST','live'=>'LIVE']],'direction'=>['Direcție',['out'=>'Trimise','in'=>'Primite']]] as $key=>[$label,$options]): ?>
+<?php foreach(['provider'=>['Serviciu',['stripe'=>'Stripe','oblio'=>'Oblio','immich'=>'Immich','listmonk'=>'Listmonk','captcha'=>'CAPTCHA']],'status'=>['Rezultat',['error'=>'Erori','ok'=>'Reușite']],'mode'=>['Mediu Stripe',['test'=>'TEST','live'=>'LIVE']],'direction'=>['Direcție',['out'=>'Trimise','in'=>'Primite']]] as $key=>[$label,$options]): ?>
 <label><?= e($label) ?><select name="<?= e($key) ?>"><option value="">Toate</option><?php foreach($options as $value=>$text): ?><option value="<?= e($value) ?>" <?= ($apiFilters[$key]??'')===$value?'selected':'' ?>><?= e($text) ?></option><?php endforeach ?></select></label>
 <?php endforeach ?><label>Event ID / ID livrare<input name="event" maxlength="150" value="<?= e($apiFilters['event']??'') ?>" placeholder="evt_… sau ID livrare"></label><button>Filtrează</button><a href="/admin?section=api-log">Resetează</a></form>
 <?php if(!$apiEntries['available']): ?><p role="alert" class="alert">Jurnalul nu poate fi citit. Verifică permisiunile directorului bazei de date pentru utilizatorul PHP.</p>

@@ -19,9 +19,9 @@ final class AdminApplication {
   if(production())header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
   $path=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
-  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
+  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
-  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',str_starts_with($action,'listmonk_')=>'listmonk',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
@@ -57,6 +57,24 @@ final class AdminApplication {
      $this->db->run("UPDATE withdrawal_requests SET status='resolved',resolved_at=?,notes=? WHERE id=? AND status='new'",[time(),$note,$id]);
      $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin['id'],'withdrawal_resolve',$id,time()]);
      $_SESSION['admin_notice']='Cererea a fost marcată soluționată. Această acțiune nu execută plăți sau operațiuni Stripe.';$this->redirect();
+    }
+    if(in_array($action,['listmonk_save','listmonk_check','listmonk_test'],true)){
+     $settings=new IntegrationSettings($this->db);
+     if($action==='listmonk_save'){
+      $settings->save('listmonk',$_POST,$admin['id']);
+      $_SESSION['admin_notice']='Configurația Listmonk a fost salvată. Variabilele LISTMONK_* din .env sunt ignorate.';
+     }else{
+      if(!Security::limit($this->db,'listmonk-actions:'.$admin['id'],8,900))throw new \DomainException('Prea multe teste Listmonk. Reîncearcă mai târziu.');
+      $client=new ListmonkClient($settings->listmonk());
+      if($action==='listmonk_check'){$client->check();$message='Conexiunea și șablonul tranzacțional sunt confirmate. Livrarea emailului se verifică separat printr-un mesaj de test.';}
+      else{
+       $to=trim((string)($_POST['test_email']??''));
+       $client->send($to,'Zion Storage — test Listmonk','<html lang="ro"><body><h1>Zion Storage</h1><p>Conexiunea Listmonk funcționează. Acesta este un email de test.</p></body></html>','Conexiunea Listmonk funcționează. Acesta este un email de test.','ro','test');
+       $message='Listmonk a acceptat emailul de test. Verifică inboxul, spamul și jurnalul SMTP din Listmonk; acceptarea API nu garantează livrarea în inbox.';
+      }
+      $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin['id'],$action,'accepted',time()]);$_SESSION['admin_notice']=$message;
+     }
+     $this->redirect();
     }
     if(in_array($action,['immich_save','immich_check','immich_sync'],true)){
      if($action==='immich_save'){
@@ -146,6 +164,7 @@ final class AdminApplication {
     $apiEntries=ApiLog::page($apiFilters,max(1,(int)($_GET['page']??1)));
    }
    $integrations=new IntegrationSettings($this->db);$stripeSettings=$integrations->stripe($section==='integrations'?$stripeMode:$stripeActiveMode);$oblioSettings=$integrations->oblio();$stripeProfiles=$integrations->stripeProfiles();
+   $listmonkSettings=$integrations->listmonk();$listmonkSaved=$integrations->saved('listmonk')!==null;
    $immichSettings=$integrations->immich();$immichSaved=$integrations->saved('immich')!==null;
    $immichOverview=(new ImmichStatistics($this->db))->overview();
    $stripeSaved=$integrations->saved('stripe')!==null;$oblioSaved=$integrations->saved('oblio')!==null;

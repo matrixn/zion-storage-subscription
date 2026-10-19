@@ -20,7 +20,7 @@ Open http://localhost:8088/ro/ (or /en/, /fr/, /de/). Keep .env private and neve
 
 Administration is available at `/admin`: create manual customers, manage plans and suspensions, inspect/retry upgrades, and view the operator audit trail. Paid customer upgrades collect the one-time price difference during the original five-day window and preserve the existing renewal date and billing interval. See [administration, installation, upgrade deadlines and suspension gateway](docs/ADMIN-AND-UPGRADES.md).
 
-Run `php bin/console.php mail:work` to deliver queued email. Local `MAIL_TRANSPORT=log` renders emails under private `storage/mail/`; no messages are sent externally. Open these files locally to follow verification links. Do not publish this folder.
+Configure **Email / Listmonk** in `/admin?section=listmonk` for transactional API delivery, connection testing and masked encrypted credentials; see [Listmonk setup](docs/LISTMONK.md). Docker Compose includes an automatic mail worker. For non-Docker installations, schedule `php bin/console.php mail:work` every minute to deliver queued email. Local `MAIL_TRANSPORT=log` renders emails under private `storage/mail/`; no messages are sent externally. Open these files locally to follow verification links. Do not publish this folder.
 
 ## Structure
 

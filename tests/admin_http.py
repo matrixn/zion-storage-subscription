@@ -3,6 +3,7 @@ import http.server, threading, subprocess, tempfile, os, time, json, urllib.requ
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 checks=0
+import base64
 def check(value,label):
     global checks
     if not value: raise AssertionError(label)
@@ -10,10 +11,14 @@ def check(value,label):
 class Backend(http.server.BaseHTTPRequestHandler):
     records=[]
     last_api_key=None
+    listmonk_messages=[]
     def log_message(self,*args): pass
     def respond(self,obj,code=200):
         self.send_response(code);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(json.dumps(obj).encode())
     def do_GET(self):
+        if self.path.startswith('/api/templates/'):
+            if self.headers.get('Authorization')!='Basic '+base64.b64encode(b'fixture-api-user:fixture-listmonk-api-token-123456').decode():return self.respond({'message':'Unauthorized'},401)
+            return self.respond({'data':{'id':7,'type':'tx'}})
         Backend.last_api_key=self.headers.get('x-api-key')
         if self.path=='/api/users/me':
             return self.respond({'id':'immich-admin-test'} if self.headers.get('Authorization')=='Bearer fixture-user' else {},200 if self.headers.get('Authorization')=='Bearer fixture-user' else 401)
@@ -23,6 +28,10 @@ class Backend(http.server.BaseHTTPRequestHandler):
         return self.respond(self.records if '?' in self.path else self.records[0])
     def do_POST(self):
         body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if self.path=='/api/tx':
+            if self.headers.get('Authorization')!='Basic '+base64.b64encode(b'fixture-api-user:fixture-listmonk-api-token-123456').decode():return self.respond({'message':'Unauthorized'},401)
+            if body.get('subscriber_mode')!='external' or body.get('template_id')!=7:return self.respond({'message':'Invalid transactional payload'},400)
+            Backend.listmonk_messages.append(body);return self.respond({'data':True})
         if self.headers.get('x-api-key') not in ['fixture-key','fixture-immich-api-key-123456']:return self.respond({},403)
         body.pop('password');body.update(id='immich-admin-test',quotaUsageInBytes=0);self.records.append(body);self.respond(body)
     def do_PUT(self):
@@ -38,7 +47,7 @@ def request(opener,path,data=None,headers=None):
 def csrf(html):return re.search(r'name="_csrf" value="([a-f0-9]+)"',html).group(1)
 with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
     backend=http.server.ThreadingHTTPServer(('127.0.0.1',0),Backend);threading.Thread(target=backend.serve_forever,daemon=True).start()
-    env=os.environ.copy();env.update(APP_ENV='test',APP_URL='http://localhost:8093',DB_PATH=temp+'/app.sqlite',APP_KEY='fixture-key-'*8,ADMIN_EMAIL='admin-fixture@example.com',ADMIN_PASSWORD='fixture-admin-password',MAIL_TRANSPORT='log',MAIL_LOG_DIRECTORY=temp+'/mail',OBLIO_ENABLED='false',STORAGE_API_URL='http://127.0.0.1:'+str(backend.server_port)+'/api',STORAGE_API_KEY='fixture-key',STORAGE_GATEWAY_KEY='fixture-gateway-key-'*3,STORAGE_GATEWAY_ENFORCED='false',STRIPE_SECRET_KEY='sk_test_unconfigured')
+    env=os.environ.copy();env.update(LISTMONK_URL='',APP_ENV='test',APP_URL='http://localhost:8093',DB_PATH=temp+'/app.sqlite',APP_KEY='fixture-key-'*8,ADMIN_EMAIL='admin-fixture@example.com',ADMIN_PASSWORD='fixture-admin-password',MAIL_TRANSPORT='log',MAIL_LOG_DIRECTORY=temp+'/mail',OBLIO_ENABLED='false',STORAGE_API_URL='http://127.0.0.1:'+str(backend.server_port)+'/api',STORAGE_API_KEY='fixture-key',STORAGE_GATEWAY_KEY='fixture-gateway-key-'*3,STORAGE_GATEWAY_ENFORCED='false',STRIPE_SECRET_KEY='sk_test_unconfigured')
     subprocess.run(['php','bin/console.php','install'],cwd=ROOT,env=env,check=True,capture_output=True)
     subprocess.run(['php','-r','require "src/bootstrap.php"; (new Zion\\Database())->run("INSERT INTO integration_settings(key,value) VALUES(?,?)",["billing:vat_bps","2100"]);'],cwd=ROOT,env=env,check=True,capture_output=True) # Exercise explicit 21% configuration; operator default is 0.
     with open(temp+'/server.log','w+') as log:
@@ -60,6 +69,24 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(status==200 and 'Totul, dintr-o privire.' in body,'administrator logs in to dashboard with installed env credentials')
             check('name="secret_key"' not in body and 'name="password"' not in body,'dashboard separates configuration and customer forms')
             check(request(admin,'/admin?section=unknown')[0]==404,'unknown admin section is rejected')
+            lm_body=request(admin,'/admin?section=listmonk')[1]
+            check('LISTMONK_API_TOKEN' in lm_body and 'type="text" name="api_token"' in lm_body,'dedicated Listmonk settings render token as masked text input')
+            check(request(customer,'/admin?section=listmonk')[1].find('name="api_token"')==-1,'Listmonk credentials require admin authentication')
+            check(request(admin,'/admin',{'action':'listmonk_save'})[0]==419,'Listmonk save requires CSRF')
+            lm_input={'action':'listmonk_save','enabled':'1','url':'http://127.0.0.1:'+str(backend.server_port),'api_user':'fixture-api-user','api_token':'fixture-listmonk-api-token-123456','template_id':'7','from_email':'contact@example.com'}
+            status,lm_body,_=request(admin,'/admin',dict(lm_input,_csrf=csrf(lm_body)))
+            check(status==200 and 'value="fixture••••••••123456"' in lm_body and 'fixture-listmonk-api-token-123456' not in lm_body,'saved Listmonk token appears inside input with seven and six rule')
+            status,lm_body,_=request(admin,'/admin',{'_csrf':csrf(lm_body),'action':'listmonk_check'})
+            check(status==200 and 'șablonul tranzacțional sunt confirmate' in lm_body,'Listmonk authenticated template check works over real fixture HTTP')
+            status,lm_body,_=request(admin,'/admin',{'_csrf':csrf(lm_body),'action':'listmonk_test','test_email':'listmonk-test@example.com'})
+            check(status==200 and len(Backend.listmonk_messages)==1 and Backend.listmonk_messages[0]['subscriber_emails']==['listmonk-test@example.com'],'explicit admin test sends Listmonk transaction to chosen recipient')
+            queue_script='require "src/bootstrap.php"; $d=new Zion\\Database(); $m=new Zion\\MailerService($d); foreach(["ro","en","fr","de"] as $l)$m->queue("queue-".$l."@example.com",$l,"verify",["url"=>"https://storage.example/verify?token=fixture-queue-action"],"listmonk-queue-".$l); echo $m->deliver();'
+            queue_result=subprocess.run(['php','-r',queue_script],cwd=ROOT,env=env,check=True,capture_output=True,text=True)
+            check(queue_result.stdout.strip()=='4' and len(Backend.listmonk_messages)==5,'CLI worker delivers all four localized outbox messages through real Listmonk fixture HTTP')
+            check({m['data']['locale'] for m in Backend.listmonk_messages[1:]}=={'ro','en','fr','de'} and all('fixture-queue-action' in m['data']['html'] and 'fixture-queue-action' in m['altbody'] for m in Backend.listmonk_messages[1:]),'transactional messages preserve locale and action links in HTML and plaintext')
+            api_body=request(admin,'/admin?section=api-log&provider=listmonk')[1]
+            check('/api/tx' in api_body and 'fixture-listmonk-api-token-123456' not in api_body and 'listmonk-test@example.com' not in api_body,'Listmonk calls are filterable in redacted API journal')
+            request(admin,'/admin',dict(lm_input,enabled='0',_csrf=csrf(lm_body))) # Restore log transport for other isolated fixtures.
             tax_body=request(admin,'/admin?section=tax')[1]
             check('name="vat_rate"' in tax_body and 'value="21"' in tax_body and '2,41 EUR' in tax_body,'admin tax settings default to 21 percent and preview gross total')
             check(request(admin,'/admin',{'action':'tax_save','vat_rate':'19'})[0]==419,'VAT updates require admin CSRF')

@@ -4,7 +4,7 @@ use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Mime\Email;
 final class MailerService {
- public function __construct(private Database $db) {}
+ public function __construct(private Database $db,private ?ListmonkClient $listmonkClient=null) {}
  public static function encode(array $data): string {
   return EncryptedPayload::encode($data);
  }
@@ -30,7 +30,12 @@ final class MailerService {
     $html='<html lang="'.e($row['locale']).'"><body style="background:#0b1117;color:#e5eee9;font:16px Arial;padding:32px"><div style="max-width:560px;margin:auto"><h2>Zion Storage</h2><h1>'.e($subject).'</h1><p>'.nl2br(e($body)).'</p>';
     if(!empty($data['url'])) $html.='<p><a style="color:#bafa73" href="'.e($data['url']).'">'.e($tr->get('email.action')).'</a></p>';
     $html.='<p>'.e($tr->get('email.footer')).'</p></div></body></html>';
-    if(env('MAIL_TRANSPORT','log')==='log' && !production()) {
+    $listmonk=(new IntegrationSettings($this->db))->listmonk();
+    if($listmonk['enabled']) {
+     ($this->listmonkClient??new ListmonkClient($listmonk))->send($row['recipient'],$subject,$html,$body.(!empty($data['url'])?"\n".$data['url']:''),$row['locale'],$row['kind']);
+    } elseif(env('MAIL_TRANSPORT')==='listmonk') {
+     throw new \RuntimeException('listmonk_disabled');
+    } elseif(env('MAIL_TRANSPORT','log')==='log' && !production()) {
      $dir=env('MAIL_LOG_DIRECTORY',dirname(__DIR__).'/storage/mail'); if(!is_dir($dir)) mkdir($dir,0700,true);
      file_put_contents($dir.'/'.$row['id'].'.html',$html,LOCK_EX); chmod($dir.'/'.$row['id'].'.html',0600);
     } else {

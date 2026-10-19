@@ -9,7 +9,7 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
  await page.goto(origin+'/admin');await page.locator('input[name=email]').fill('admin-fixture@example.com');await page.locator('input[name=password]').fill('fixture-admin-password');await page.getByRole('button',{name:'Intră în administrare'}).click();
  check(await page.locator('h1').textContent()==='Dashboard','browser administrator lands on dashboard');
  const artifacts=path.join(__dirname,'artifacts');fs.mkdirSync(artifacts,{recursive:true});
- const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','legal-requests','integrations','catalog','tax','immich','audit','api-log'];
+ const sections=['dashboard','clients','new-client','subscriptions','changes','invoices','operations','legal-requests','integrations','catalog','tax','immich','listmonk','audit','api-log'];
  for(const width of [320,390,768,1440]){
   await page.setViewportSize({width,height:1000});
   for(const section of sections){

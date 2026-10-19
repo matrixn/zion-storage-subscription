@@ -5,6 +5,7 @@ $_ENV['APP_ENV']='test';$_ENV['MAIL_TRANSPORT']='log';$_ENV['STRIPE_SECRET_KEY']
 $_ENV['STRIPE_PRICE_120GB']='price_120'; $_ENV['APP_URL']='http://localhost:8088';
 $_ENV['APP_KEY']=str_repeat('test-key',8);
 $_ENV['OBLIO_ENABLED']='false';
+putenv('LISTMONK_URL=');$_ENV['LISTMONK_URL']='';
 $_ENV['MAIL_LOG_DIRECTORY']=dirname(__DIR__).'/storage/test-mail';
 final class NoNetworkStripe implements Stripe\HttpClient\ClientInterface {
  public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null) { throw new RuntimeException('Unexpected network call in tests'); }
@@ -115,3 +116,5 @@ require __DIR__.'/billing-tax.php';
 require __DIR__.'/immich-statistics.php';
 
 require __DIR__.'/legal.php';
+
+require __DIR__.'/listmonk.php';
