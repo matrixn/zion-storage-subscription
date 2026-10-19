@@ -2,6 +2,8 @@
 
 ## 2026-10-19
 
+- Added deduplicated, encrypted administrator notifications for new registrations and immediate Listmonk dispatch. Enabled due Oblio invoice processing in the Docker mail worker and added a combined operations:work command for existing Synology containers, fiscal worker activity, readable issuance errors and protected per-invoice retries.
+
 - Updated transactional emails with a branded charcoal layout, lime confirmation button and a full selectable fallback URL below it, with localized instructions in RO/EN/FR/DE and unchanged plaintext links.
 
 - Clarified verification-to-payment onboarding in all four languages: browser confirmation uses a CSRF-protected POST automatically, followed by an explicit account-confirmed screen with plan, billing interval and a payment button showing the gross EUR total. Opening the email link via GET alone still does not consume the token or start a payment.

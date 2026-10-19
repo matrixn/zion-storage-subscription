@@ -21,7 +21,7 @@ final class AdminApplication {
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
   $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
-  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',$action==='fiscal_retry'=>'invoices',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
@@ -57,6 +57,15 @@ final class AdminApplication {
      $this->db->run("UPDATE withdrawal_requests SET status='resolved',resolved_at=?,notes=? WHERE id=? AND status='new'",[time(),$note,$id]);
      $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin['id'],'withdrawal_resolve',$id,time()]);
      $_SESSION['admin_notice']='Cererea a fost marcată soluționată. Această acțiune nu execută plăți sau operațiuni Stripe.';$this->redirect();
+    }
+    if($action==='fiscal_retry'){
+     if(!Security::limit($this->db,'fiscal-retry:'.$admin['id'],5,900))throw new \DomainException('Prea multe reîncercări de facturare. Reîncearcă mai târziu.');
+     $id=(string)($_POST['fiscal_id']??'');if(!preg_match('/^[a-f0-9]{32}$/D',$id))throw new \DomainException('Factură invalidă.');
+     $fiscal=new OblioInvoiceService($this->db,new MailerService($this->db));
+     if(!$this->db->one("SELECT id FROM fiscal_invoices WHERE id=? AND status IN ('pending','failed')",[$id]))throw new \DomainException('Se pot relua doar facturile în așteptare sau cu eroare.');
+     $ok=$fiscal->process($id);$row=$this->db->one('SELECT status,error_message FROM fiscal_invoices WHERE id=?',[$id]);
+     $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin['id'],'fiscal_retry',$id.'; '.$row['status'],time()]);
+     $_SESSION['admin_notice']=$ok?'Procesare finalizată: '.$row['status'].'.':'Factura a rămas în așteptare. '.OblioInvoiceService::errorDescription($row['error_message']??'');$this->redirect();
     }
     if($action==='mail_retry'){
      if(!Security::limit($this->db,'mail-retry:'.$admin['id'],3,900))throw new \DomainException('Prea multe reluări ale cozii. Reîncearcă mai târziu.');
@@ -191,6 +200,7 @@ final class AdminApplication {
    $dashboard=in_array($section,['dashboard','operations'],true)?(new AdminDashboard($this->db))->snapshot():[];
    $subscriptionRows=$section==='subscriptions'?$this->db->run("SELECT s.*,u.email FROM subscriptions s JOIN users u ON u.id=s.user_id WHERE (CAST(? AS INTEGER)=0 OR s.status IN ('past_due','unpaid','incomplete')) ORDER BY s.renewal_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll():[];
    $fiscalRows=$section==='invoices'?$this->db->run("SELECT f.id,f.stripe_invoice_id,f.amount,f.currency,f.stripe_mode,f.status,f.error_message,f.oblio_series,f.oblio_number,f.created_at,u.email FROM fiscal_invoices f JOIN users u ON u.id=f.user_id WHERE (CAST(? AS INTEGER)=0 OR f.status IN ('pending','processing','failed')) ORDER BY f.created_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll():[];
+   $fiscalDiagnostics=$section==='invoices'?(new OblioInvoiceService($this->db,new MailerService($this->db)))->diagnostics():[];
    $mailRows=$section==='operations'?$this->db->run('SELECT recipient,kind,attempts,created_at FROM outbox WHERE sent_at IS NULL ORDER BY created_at LIMIT 30')->fetchAll():[];
    $eventRows=$section==='operations'?$this->db->run("SELECT id,type,status,created_at FROM billing_events WHERE status<>'complete' ORDER BY created_at LIMIT 30")->fetchAll():[];
   }

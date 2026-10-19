@@ -87,15 +87,18 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             signup_html=request(customer,'/en/register')[1]
             signup_data={'_csrf':csrf(signup_html),'name':'Immediate Mail','email':'immediate-mail@example.com','password':'fixture-mail-password','confirm':'fixture-mail-password','locale':'en','plan':'free','terms':'1','privacy':'1'}
             status,signup_html,_=request(customer,'/en/register',signup_data)
-            check(status==200 and len(Backend.listmonk_messages)==6 and Backend.listmonk_messages[-1]['subscriber_emails']==['immediate-mail@example.com'],'signup sends actual verification email immediately without running worker')
-            activation_body=Backend.listmonk_messages[-1]['altbody']
+            check(status==200 and len(Backend.listmonk_messages)==7 and Backend.listmonk_messages[-2]['subscriber_emails']==['immediate-mail@example.com'],'signup sends actual verification email immediately without running worker')
+            check(Backend.listmonk_messages[-1]['subscriber_emails']==['admin-fixture@example.com'] and Backend.listmonk_messages[-1]['data']['kind']=='admin_signup','new registration immediately notifies configured administrator')
+            activation_body=Backend.listmonk_messages[-2]['altbody']
             activation_token=re.search(r'token=([a-f0-9]{64})',activation_body).group(1)
             verify_path='/en/verify-email?token='+activation_token
             check('name="token"' in request(customer,verify_path)[1],'immediately sent signup email contains usable verification link')
             resend_html=request(customer,'/en/resend')[1]
             status,_,_=request(customer,'/en/resend',{'_csrf':csrf(resend_html),'email':'immediate-mail@example.com'})
-            check(status==200 and len(Backend.listmonk_messages)==7 and activation_token not in Backend.listmonk_messages[-1]['altbody'],'public resend immediately sends replacement confirmation instead of waiting for worker')
+            check(status==200 and len(Backend.listmonk_messages)==8 and activation_token not in Backend.listmonk_messages[-1]['altbody'],'public resend immediately sends replacement confirmation instead of waiting for worker')
             check(request(admin,'/admin',{'action':'mail_retry'})[0]==419,'manual mail queue processing requires admin CSRF')
+            check(sum(m['data']['kind']=='admin_signup' for m in Backend.listmonk_messages)==1,'confirmation resend does not create duplicate signup notification')
+            check(request(admin,'/admin',{'action':'fiscal_retry','fiscal_id':'a'*32})[0]==419,'fiscal retry requires administrator CSRF')
             subprocess.run(['php','-r','require "src/bootstrap.php"; (new Zion\\MailerService(new Zion\\Database()))->queue("manual-retry@example.com","en","activated",[],"manual-mail-fixture");'],cwd=ROOT,env=env,check=True,capture_output=True)
             lm_body=request(admin,'/admin?section=listmonk')[1]
             status,lm_body,_=request(admin,'/admin',{'_csrf':csrf(lm_body),'action':'mail_retry'})
@@ -106,6 +109,8 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check('/api/tx' in api_body and 'fixture-listmonk-api-token-123456' not in api_body and 'listmonk-test@example.com' not in api_body,'Listmonk calls are filterable in redacted API journal')
             subprocess.run(['php','-r','require "src/bootstrap.php"; $clean=new Zion\\Database(); $clean->run("DELETE FROM email_verifications WHERE user_id IN (SELECT id FROM users WHERE email=?)",["immediate-mail@example.com"]); $clean->run("DELETE FROM users WHERE email=?",["immediate-mail@example.com"]);'],cwd=ROOT,env=env,check=True,capture_output=True) # Keep later fixed dashboard fixtures independent.
             request(admin,'/admin',dict(lm_input,enabled='0',_csrf=csrf(lm_body))) # Restore log transport for other isolated fixtures.
+            operations_result=subprocess.run(['php','bin/console.php','operations:work'],cwd=ROOT,env=env,check=True,capture_output=True,text=True)
+            check('fiscal' in json.loads(operations_result.stdout) and 'mail_accepted' in json.loads(operations_result.stdout),'single CLI command processes fiscal queue and email queue')
             tax_body=request(admin,'/admin?section=tax')[1]
             check('name="vat_rate"' in tax_body and 'value="21"' in tax_body and '2,41 EUR' in tax_body,'admin tax settings default to 21 percent and preview gross total')
             check(request(admin,'/admin',{'action':'tax_save','vat_rate':'19'})[0]==419,'VAT updates require admin CSRF')

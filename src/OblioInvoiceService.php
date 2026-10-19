@@ -198,10 +198,45 @@ final class OblioInvoiceService
             } catch (\Throwable $e) {
                 $safe = $e instanceof OblioException ? $e->getMessage() : 'fiscal_processing_failed';
                 $this->db->run("UPDATE fiscal_invoices SET status='failed',error_message=?,next_attempt_at=?,updated_at=? WHERE id=?", [$safe,time()+min(86400,60*(2**min((int)$row['attempts'],10))),time(),$id]);
+                ApiLog::record('oblio','POST','/fiscal/process',0,microtime(true),['failed'=>true,'code'=>$safe,'message'=>self::errorDescription($safe),'context'=>['stage'=>'fiscal','invoice_id'=>$row['stripe_invoice_id']]]);
                 error_log('Fiscal invoice pending; id='.$id.'; code='.$safe);
                 return false;
             }
         } finally { flock($lock, LOCK_UN); fclose($lock); }
+    }
+
+    /** Invoked only by an actual CLI worker; connection checks do not mark activity. */
+    public function work(): array
+    {
+        $started=time();$this->workerState(['started_at'=>$started]);
+        $result=$this->retryPending(true);
+        $this->workerState(['started_at'=>$started,'finished_at'=>time()]+$result);
+        return $result;
+    }
+    private function workerState(array $state): void
+    {
+        $this->db->run("INSERT INTO integration_settings(key,value) VALUES('oblio:worker',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[json_encode($state,JSON_THROW_ON_ERROR)]);
+    }
+    public function diagnostics(): array
+    {
+        $counts=array_fill_keys(['pending','processing','failed','issued','simulated','no_charge','cancelled'],0);
+        foreach($this->db->run('SELECT status,COUNT(*) total FROM fiscal_invoices GROUP BY status')->fetchAll() as $row)$counts[$row['status']]=(int)$row['total'];
+        $row=$this->db->one("SELECT value FROM integration_settings WHERE key='oblio:worker'");$worker=$row?json_decode($row['value'],true):[];
+        return ['counts'=>$counts,'worker'=>$worker?:[],'worker_recent'=>(int)($worker['started_at']??0)>time()-180];
+    }
+    public static function errorDescription(string $code): string
+    {
+        return match($code){
+            'real_document_for_test_payment_blocked'=>'Plată Stripe TEST: emiterea unui document fiscal real este dezactivată pentru acest mod.',
+            'provider_disabled'=>'Emiterea reală Oblio este dezactivată.',
+            'billing_profile_missing'=>'Lipsesc datele de facturare ale clientului.',
+            'fiscal_configuration_missing'=>'Completează firma emitentă, seria și cota/denumirea TVA în configurarea Oblio.',
+            'provider_credentials_missing','provider_auth_failed'=>'Autentificarea Oblio nu este configurată sau a fost respinsă.',
+            'provider_transport_failed','provider_request_rejected','provider_invalid_response'=>'Oblio nu a acceptat cererea. Vezi răspunsul în jurnalul API.',
+            'unsupported_invoice_period_or_lines'=>'Perioada sau liniile facturii Stripe necesită verificare înainte de emitere.',
+            'interrupted_worker'=>'Procesarea a fost întreruptă; factura poate fi reluată.',
+            default=>$code,
+        };
     }
 
     public function retryPending(bool $dueOnly = false, int $limit = 20): array

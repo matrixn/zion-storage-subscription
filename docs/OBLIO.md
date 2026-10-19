@@ -109,3 +109,17 @@ Provider API credentials, access tokens, passwords and raw provider error bodies
 Official API contracts: [Oblio API](https://www.oblio.eu/api/), [official WooCommerce integration](https://github.com/OblioSoftware/oblio-woocommerce), [Stripe invoice retrieval](https://docs.stripe.com/api/invoices/retrieve), [Stripe line item periods](https://docs.stripe.com/api/invoice-line-item/object).
 
 Local acceptance exercises initial purchase, duplicate events, renewals, outage, safe retry after remote creation/response loss, interrupted workers, profile changes, amounts/periods, tax configuration, email completion, failed payments, cancellation and simulation. Complete a controlled provider-account acceptance with approved credentials/issuer settings before enabling real fiscal issuance. No actual Oblio account, production numbering sequence or fiscal registration was changed.
+
+## Automatic processing and recovery
+
+The updated Docker `mail-worker` processes due fiscal jobs before delivering email. It keeps retry backoff, frozen simulation intent, TEST-payment permission and invoice idempotency intact. The Stripe webhook only persists the job and never waits for Oblio network requests.
+
+For the custom Synology layout with only `zion_storage_web`, schedule this as root every minute (no new container, volumes or environment mapping required):
+
+```sh
+docker exec --user www-data zion_storage_web php /var/www/html/bin/console.php operations:work
+```
+
+This processes due fiscal documents and then mail, including newly issued invoice notifications. `mail:work` remains mail-only. `oblio:retry --due` remains fiscal-only.
+
+Admin → Facturi fiscale shows queue counts, the real worker heartbeat and human-readable error reasons. Each pending/failed row has a CSRF-protected issuance retry. Issued and simulated rows cannot be retried into new invoices. If no row exists for a paid order, inspect/replay its original `invoice.paid` event through the Stripe API journal. A successful API connection test alone does not create a fiscal job. A Stripe TEST transaction remains blocked from real issuance unless the existing explicit setting permits it; this update does not turn that setting on or convert old simulations.

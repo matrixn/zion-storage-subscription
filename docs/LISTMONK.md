@@ -27,3 +27,9 @@ Before saving the profile, LISTMONK_URL enables environment configuration. After
 `Jurnal administrare → Comunicare API → Listmonk` contains each connection/send attempt, HTTP status and redacted provider/transport errors. Tokens, Basic credentials, recipients, email bodies and action links are not persisted in the API journal. No real credentials or external sends are required for the fixture tests. Live delivery must be confirmed against the operator's configured Listmonk installation.
 
 Official contracts: [transactional API](https://listmonk.app/docs/apis/transactional/), [templates](https://listmonk.app/docs/apis/templates/), [templating and Safe](https://listmonk.app/docs/templating/).
+
+## Registration notices and combined worker
+
+Each successful new public account registration queues one Romanian notification per administrator email stored in the database. It contains name, email, plan/capacity, billing interval and registration time, but never the password or a payment-success assertion. Duplicate registrations and confirmation resends do not generate new notices. With Listmonk enabled, the application attempts these notices immediately after the customer confirmation; API failures remain queued.
+
+The Docker mail worker now processes due Oblio invoices as well as email. On the custom Synology installation, schedule `docker exec --user www-data zion_storage_web php /var/www/html/bin/console.php operations:work` every minute to cover both queues; `mail:work` alone does not issue invoices.

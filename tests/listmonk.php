@@ -56,6 +56,17 @@ $listBefore=count($listClient->calls);$listMail->deliver();
 check(count($listClient->calls)===$listBefore && !$listDb->one('SELECT id FROM outbox WHERE dedupe_key=?',['access:'.$listHash]),'worker discards expired confirmation without sending dead activation link');
 check(!$listMail->diagnostics()['worker_recent'],'web sends and manual flush do not create a worker heartbeat');
 $listMail->work();check($listMail->diagnostics()['worker_recent'] && !empty($listMail->diagnostics()['worker']['finished_at']),'actual mail worker records recent completed activity');
+$registration=new Zion\AccountService($listDb,new Zion\Plans($listDb),$listMail,new TestStorage());
+$signupData=['name'=>'New Customer','email'=>'signup-notice@example.com','password'=>'never-email-this-password','locale'=>'en','plan'=>'free'];
+$signupId=$registration->register($signupData);
+$signupNotice=$listDb->one("SELECT * FROM outbox WHERE kind='admin_signup' AND dedupe_key LIKE ?",['admin-signup:'.$signupId.':%']);
+check($signupNotice['recipient']==='listmonk-admin@example.com' && $signupNotice['locale']==='ro','new signup notifies administrator stored in database');
+$signupPayload=Zion\MailerService::decode($signupNotice['payload']);
+check($signupPayload['email']==='signup-notice@example.com' && $signupPayload['plan']==='Free' && !str_contains(json_encode($signupPayload),'never-email-this-password'),'administrator notification includes selected plan and contact without password');
+$registration->register($signupData);$registration->issueVerification($signupId);
+check((int)$listDb->one("SELECT COUNT(*) n FROM outbox WHERE kind='admin_signup'")['n']===1,'duplicate signup and verification resend never duplicate administrator notification');
+$listMail->deliverRegistrationNotifications($signupId);
+check($listDb->one('SELECT sent_at FROM outbox WHERE id=?',[$signupNotice['id']])['sent_at']!==null,'Listmonk dispatch sends administrator registration notice immediately');
 $listInput['enabled']='0';$listInput['clear_api_token']='1';$listSettings->save('listmonk',$listInput,$listAdmin);
 check(!$listSettings->listmonk()['enabled'] && $listSettings->listmonk()['api_token']==='','disabled saved Listmonk profile never restores environment token');
 foreach(['URL','API_USER','API_TOKEN','TEMPLATE_ID','FROM_EMAIL'] as $suffix){putenv('LISTMONK_'.$suffix.'=');$_ENV['LISTMONK_'.$suffix]='';}

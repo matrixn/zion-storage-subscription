@@ -13,7 +13,7 @@ try{
  $settings=new Zion\IntegrationSettings($db);$settings->save('stripe',['credential_mode'=>'test','secret_key'=>'sk_test_fixture','webhook_secret'=>'whsec_debugFixture'],$admin);
  $accounts=new Zion\AccountService($db,$plans,$mail,$store);
  $uid=$accounts->register(['name'=>'Webhook Client','email'=>'webhook-fixture@example.com','password'=>'fixture-webhook-password','locale'=>'ro','plan'=>'120gb']);
- $payload=Zion\MailerService::decode($db->one('SELECT payload FROM outbox')['payload']);parse_str(parse_url($payload['url'],PHP_URL_QUERY),$q);$accounts->verify($q['token']);
+ $payload=Zion\MailerService::decode($db->one("SELECT payload FROM outbox WHERE kind='verify'")['payload']);parse_str(parse_url($payload['url'],PHP_URL_QUERY),$q);$accounts->verify($q['token']);
  (new Zion\BillingProfileService($db))->save($uid,['type'=>'individual','name'=>'Webhook Client','billing_email'=>'webhook-fixture@example.com','country'=>'RO','county'=>'Bucuresti','city'=>'Bucuresti','address'=>'Strada Test 1','postal_code'=>'010101']);
  $billing=new DebugStripeFixture($db,$plans,$mail,$store);
  $send=function(array $event,string $secret='whsec_debugFixture',?int $time=null)use($billing){$raw=json_encode($event);$time??=time();$billing->receive($raw,'t='.$time.',v1='.hash_hmac('sha256',$time.'.'.$raw,$secret));};

@@ -76,7 +76,7 @@ final class Application {
    if(!Security::captcha((string)($_POST['cf-turnstile-response']??''))){$this->fail('error.captcha');return;}
    // Same response for existing accounts. No session privilege is granted before verification.
    $id=$this->accounts->register($d);
-   if($id)$this->mail->deliverVerification($id);
+   if($id){$this->mail->deliverVerification($id);$this->mail->deliverRegistrationNotifications($id);}
    $this->render('message',['message'=>'register.sent']);return;
   }
   if($this->page==='verify') {

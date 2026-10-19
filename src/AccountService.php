@@ -15,6 +15,11 @@ final class AccountService {
     $this->db->run('UPDATE users SET terms_version=?,privacy_version=? WHERE id=?',[LegalDocuments::VERSION,LegalDocuments::VERSION,$id]);
     $this->rememberPassword($id,$data['password']);
     if($data['plan']!=='free' && isset($data['billing'])) (new BillingProfileService($this->db))->save($id,$data['billing']);
+    $plan=$this->plans->get($data['plan'],$interval);
+    foreach($this->db->run('SELECT email FROM administrators')->fetchAll() as $administrator){
+     $recipient=strtolower($administrator['email']);
+     $this->mail->queue($recipient,'ro','admin_signup',['name'=>$data['name'],'email'=>strtolower($data['email']),'plan'=>$plan['name'],'capacity'=>$plan['capacity'],'interval'=>$interval==='year'?'Anual':'Lunar','created'=>(new \DateTimeImmutable('now',new \DateTimeZone('Europe/Bucharest')))->format('d.m.Y H:i'),'url'=>base_url().'/admin?section=clients&q='.rawurlencode(strtolower($data['email']))],'admin-signup:'.$id.':'.hash('sha256',$recipient));
+    }
    });
   } catch(\PDOException $e) { if($this->db->one('SELECT id FROM users WHERE email=?',[$data['email']])) return null; throw $e; }
   $this->issueVerification($id); return $id;

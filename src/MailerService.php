@@ -24,6 +24,12 @@ final class MailerService {
    ApiLog::record('listmonk','POST','/outbox',0,microtime(true),['failed'=>true,'code'=>'confirmation_dispatch_pending','message'=>'Confirmarea a rămas în coadă; verifică configurația, APP_KEY și permisiunile storage/mail.lock.','context'=>['stage'=>'outbox']]);return 0;
   }
  }
+ public function deliverRegistrationNotifications(string $userId): void {
+  try{
+   if(!(new IntegrationSettings($this->db))->listmonk()['enabled'])return;
+   foreach($this->db->run("SELECT id FROM outbox WHERE sent_at IS NULL AND kind='admin_signup' AND dedupe_key LIKE ? LIMIT 10",['admin-signup:'.$userId.':%'])->fetchAll() as $row)$this->deliver(1,(int)$row['id'],true);
+  }catch(\Throwable $e){error_log('Administrator signup notification pending');}
+ }
  public function diagnostics(): array {
   $pending=$this->db->one('SELECT COUNT(*) total,COALESCE(SUM(attempts=0),0) unattempted,COALESCE(SUM(attempts>0),0) failed,MIN(created_at) oldest FROM outbox WHERE sent_at IS NULL');
   $row=$this->db->one("SELECT value FROM integration_settings WHERE key='mail:worker'");
@@ -63,7 +69,7 @@ final class MailerService {
     if(isset($data['legal_receipt']))$body.="\n\n".$data['legal_receipt'];
     $html='<!doctype html><html lang="'.e($row['locale']).'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.e($subject).'</title></head><body style="margin:0;padding:0;background-color:#0b1115;color:#edf2e9;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#0b1115"><tr><td align="center" style="padding:28px 16px"><table role="presentation" width="560" cellpadding="0" cellspacing="0" bgcolor="#111b20" style="width:100%;max-width:560px;border:1px solid #27342f;border-radius:16px"><tr><td style="padding:30px 24px"><p style="margin:0 0 30px;color:#edf2e9;font-size:23px;letter-spacing:-1px;font-weight:bold">zion <span style="font-weight:normal">storage</span><span style="color:#c4f582">.</span></p><h1 style="margin:0 0 20px;font-size:28px;line-height:1.3;font-weight:600;letter-spacing:-0.6px;color:#edf2e9">'.e($subject).'</h1><p style="margin:0 0 24px;font-size:15px;line-height:1.8;color:#b9c6be">'.nl2br(e($body)).'</p>';
     if(!empty($data['url'])) {
-     $action=$tr->get($row['kind']==='verify'?'email.verify.action':'email.action');
+     $action=$tr->get(match($row['kind']){'verify'=>'email.verify.action','admin_signup'=>'email.admin_signup.action',default=>'email.action'});
      $html.='<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 26px"><tr><td bgcolor="#c4f582" style="border-radius:8px;background-color:#c4f582"><a href="'.e($data['url']).'" style="display:inline-block;padding:16px 23px;border:1px solid #c4f582;border-radius:8px;background-color:#c4f582;color:#172014!important;text-decoration:none;font-size:15px;font-weight:bold;line-height:1.4">'.e($action).' <span aria-hidden="true">↗</span></a></td></tr></table><p style="margin:0 0 10px;font-size:12px;line-height:1.7;color:#9ba8a1">'.e($tr->get('email.copy_link')).'</p><p style="margin:0 0 28px;font-size:12px;line-height:1.8;word-break:break-all;overflow-wrap:anywhere"><a href="'.e($data['url']).'" style="color:#c4f582;text-decoration:underline;word-break:break-all;overflow-wrap:anywhere">'.e($data['url']).'</a></p>';
     }
     $html.='<p style="border-top:1px solid #27342f;padding-top:22px;margin:0;color:#9ba8a1;font-size:12px;line-height:1.7">'.e($tr->get('email.footer')).'</p></td></tr></table></td></tr></table></body></html>';

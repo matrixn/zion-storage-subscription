@@ -205,3 +205,11 @@ $mail->deliver();
 check((int)$db->one("SELECT COUNT(*) n FROM fiscal_invoices WHERE status='issued' AND completed_at IS NULL")['n']===0,'issued fiscal notifications complete through durable mail outbox');
 check((int)$db->one("SELECT COUNT(*) n FROM outbox WHERE dedupe_key LIKE 'fiscal-render:%' AND sent_at IS NOT NULL")['n']===4,'all four fiscal notification HTML templates render');
 echo "\n$count total assertions passed including fiscal acceptance scenarios. No production fiscal documents issued.\n";
+
+$workerInvoice=fiscalInvoiceFixture('in_worker_fixture',$nov,$dec);
+$workerFiscalId=$fiscal->capture($workerInvoice,$u,$subscription,$p);
+check(!$fiscal->diagnostics()['worker_recent'],'connection and invoice capture do not create fiscal worker activity');
+$fiscal->work();
+check($db->one('SELECT status FROM fiscal_invoices WHERE id=?',[$workerFiscalId])['status']==='issued' && $fiscal->diagnostics()['worker_recent'],'background fiscal worker issues pending paid invoice and records activity');
+$workerCount=count($provider->documents);$fiscal->work();
+check(count($provider->documents)===$workerCount,'repeated worker ticks never duplicate issued fiscal documents');

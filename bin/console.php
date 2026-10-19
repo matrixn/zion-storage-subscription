@@ -21,6 +21,11 @@ if($cmd==='changes:retry'){
  foreach($db->run("SELECT user_id FROM account_controls WHERE quota_sync='pending' LIMIT 100")->fetchAll() as $r){try{$admin->syncQuota($r['user_id']);$processed++;}catch(Throwable $e){$failed++;}}
  echo json_encode(['processed'=>$processed,'failed'=>$failed],JSON_THROW_ON_ERROR).PHP_EOL;exit($failed?1:0);
 }
+if($cmd==='operations:work'){
+ try{$fiscal=(new Zion\OblioInvoiceService($db,$mail))->work();}
+ catch(Throwable $e){$fiscal=['error'=>'fiscal_worker_failed'];error_log('Fiscal worker requires retry');}
+ $sent=$mail->work();echo json_encode(['fiscal'=>$fiscal,'mail_accepted'=>$sent],JSON_THROW_ON_ERROR).PHP_EOL;exit(isset($fiscal['error'])?1:0);
+}
 if($cmd==='oblio:retry'){
  $result=(new Zion\OblioInvoiceService($db,$mail))->retryPending(in_array('--due',$argv,true));
  echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;exit($result['pending']>0?1:0);
@@ -65,4 +70,4 @@ $queries=[
  ,'fiscal-invoices'=>'SELECT id,user_id,stripe_invoice_id,stripe_subscription_id,oblio_invoice_id,oblio_series,oblio_number,amount,currency,status,error_message,attempts,issued_at,notification_sent_at,completed_at FROM fiscal_invoices ORDER BY created_at DESC LIMIT 100'
 ];
 if(isset($queries[$cmd])){echo json_encode($db->run($queries[$cmd])->fetchAll(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE).PHP_EOL;exit;}
-echo "Commands: immich:sync [--due], key, install, migrate, activation:retry, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";
+echo "Commands: operations:work, immich:sync [--due], key, install, migrate, activation:retry, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";
