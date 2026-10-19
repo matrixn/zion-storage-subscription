@@ -266,6 +266,27 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(request(admin,'/admin',{'action':'withdrawal_resolve','request_id':request_id,'notes':'Handled through support'})[0]==419,'withdrawal resolution requires admin CSRF')
             status,withdrawal_html,_=request(admin,'/admin',{'_csrf':csrf(withdrawal_html),'action':'withdrawal_resolve','request_id':request_id,'notes':'Handled through support'})
             check(status==200 and 'Handled through support' in withdrawal_html,'admin records withdrawal resolution without automatic financial action')
+            archive_uid='a'*32
+            archive_setup='require "src/bootstrap.php"; $d=new Zion\\Database(); $d->run("INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,stripe_mode,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,? ,?,?,?,1,1,?,?)",[str_repeat("a",32),"Archive Live","archive-live@example.com","fixture","ro","120gb","live",time(),time()]); $d->run("INSERT INTO invoices(id,user_id,amount,currency,created_at,stripe_mode) VALUES(?,?,199,?,?,?)",["in_archive_live",str_repeat("a",32),"eur",time(),"live"]); $d->run("INSERT INTO fiscal_invoices(id,user_id,stripe_invoice_id,stripe_subscription_id,stripe_customer_id,amount,currency,plan,status,idempotency_key,source_snapshot,oblio_series,oblio_number,created_at,updated_at,stripe_mode) VALUES(?,?,?,?,?,199,?,?,?,?,?,?,?, ?,?,?)",[str_repeat("b",32),str_repeat("a",32),"in_archive_live","sub_archive","cus_archive","eur","120gb","issued","archive-fixture","{}","ZS","1",time(),time(),"live"]);'
+            subprocess.run(['php','-r',archive_setup],cwd=ROOT,env=env,check=True,capture_output=True)
+            client_page=request(admin,'/admin?section=clients&q=archive-live')[1]
+            subprocess.run(['php','-r','require "src/bootstrap.php"; (new Zion\\Database())->run("INSERT INTO invoices(id,user_id,amount,currency,created_at,stripe_mode) VALUES(?,?,199,?,?,?)",["in_archive_unbilled",str_repeat("a",32),"eur",time(),"live"]);'],cwd=ROOT,env=env,check=True,capture_output=True)
+            unbilled_page=request(admin,'/admin?section=invoices')[1]
+            check('in_archive_unbilled' in unbilled_page and 'Generează factura' in unbilled_page,'LIVE payment without fiscal record exposes manual generation action')
+            check('Arhivează clientul LIVE' in client_page and 'Șterge definitiv contul TEST' not in client_page,'LIVE management offers archive instead of destructive deletion')
+            check(request(admin,'/admin',{'action':'archive','user_id':archive_uid,'reason':'Archive fixture'})[0]==419,'LIVE archive requires CSRF')
+            status,archived_page,_=request(admin,'/admin',{'_csrf':csrf(client_page),'action':'archive','user_id':archive_uid,'reason':'Archive fixture'})
+            check(status==200 and 'Client LIVE arhivat' in archived_page,'administrator can soft archive LIVE customer')
+            check('archive-live@example.com' not in request(admin,'/admin?section=clients&q=archive-live')[1] and 'archive-live@example.com' in request(admin,'/admin?section=clients&archived=1')[1],'archived client disappears from default listing and remains in archive listing')
+            archive_db=sqlite3.connect(temp+'/app.sqlite')
+            check(archive_db.execute('SELECT is_deleted FROM users WHERE id=?',(archive_uid,)).fetchone()[0]==1 and archive_db.execute("SELECT COUNT(*) FROM fiscal_invoices WHERE stripe_invoice_id='in_archive_live'").fetchone()[0]==1,'LIVE archive preserves original fiscal invoice and customer row')
+            check(request(admin,'/admin',{'action':'fiscal_generate','invoice_id':'in_archive_live'})[0]==419,'manual fiscal generation requires CSRF')
+            archive_body=request(admin,'/admin?section=clients&archived=1')[1]
+            status,_,_=request(admin,'/admin',{'_csrf':csrf(archive_body),'action':'restore','user_id':archive_uid,'reason':'Restore fixture'})
+            check(status==200 and 'archive-live@example.com' in request(admin,'/admin?section=clients&q=archive-live')[1],'LIVE customer can be restored to listing')
+            archive_db.close()
+            archive_cleanup='require "src/bootstrap.php"; $d=new Zion\\Database(); foreach(["fiscal_invoices","invoices","account_controls","admin_audit"] as $table)$d->run("DELETE FROM ".$table." WHERE user_id=?",[str_repeat("a",32)]); $d->run("DELETE FROM users WHERE id=?",[str_repeat("a",32)]);'
+            subprocess.run(['php','-r',archive_cleanup],cwd=ROOT,env=env,check=True,capture_output=True)
             if '--browser' in sys.argv:
                 db=sqlite3.connect(temp+'/app.sqlite');now=int(time.time());browser_id='b'*32;verify_token='c'*64
                 db.execute('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,0,0,?,?)',('d'*32,'Pending Browser','pending-browser@example.com',u['password_hash'],'ro','free',now,now))

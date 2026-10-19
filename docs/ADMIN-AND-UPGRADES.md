@@ -80,3 +80,11 @@ Schedule `php bin/console.php changes:retry` every minute, before `oblio:retry -
 Operations are serialized in the same billing → per-user lock order as webhooks. A remote price change whose response was lost is reconciled by its authoritative subscription webhook. Successful payment remains durable if quota or fiscal work fails. Unpaid-session cancellation first expires the Stripe session; an already completed payment cannot be marked cancelled locally. External cancellation, refunds or unexpected subscription mutations require operator review rather than an automatic second charge.
 
 No live Stripe, real customer, installed Immich proxy or real fiscal provider was modified by local development. The release retains the existing Stripe TEST MODE restriction.
+
+## LIVE archive and TEST invoice cleanup
+
+LIVE clients have **Arhivează clientul LIVE** instead of physical deletion. The archive stores `is_deleted=1` and `archived_at`, suspends access using the existing account-control flow and hides the client from the default list. **Clienți arhivați** retains access to the record and allows restoration to the list. Restoration does not silently unban the account. Files, payment history, invoices and the Stripe subscription remain; archiving is not subscription cancellation or a refund. LIVE clients continue to be rejected by the destructive TEST-reset endpoint.
+
+A confirmed TEST reset now deletes its linked Oblio invoice(s) and collections first, with original issuer/series/number, remote identity validation and stable deletion idempotency keys. Only locally recorded documents with a verified TEST payment source qualify. A refused deletion (for example because the invoice is not the last in its series), missing identity or ambiguous real issuance keeps the local account and fiscal records for recovery. Confirmed stages are retained in the encrypted reset snapshot so retries do not repeat completed remote work. Mixed LIVE/TEST histories and unresolved fiscal corrections still block destructive TEST cleanup.
+
+Run `php bin/console.php migrate` (or install) before serving this update to add the archive columns idempotently.

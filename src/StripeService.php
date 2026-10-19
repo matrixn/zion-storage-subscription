@@ -132,6 +132,35 @@ class StripeService implements BillingService {
   }
   return $invoice;
  }
+ /** Recover a missing fiscal job from the original paid Stripe invoice, without replaying entitlements. */
+ public function prepareFiscalInvoice(string $id): string {
+  $lock=fopen(dirname(__DIR__).'/storage/billing.lock','c');flock($lock,LOCK_EX);
+  try{return $this->prepareFiscalInvoiceLocked($id);}finally{flock($lock,LOCK_UN);fclose($lock);}
+ }
+ private function prepareFiscalInvoiceLocked(string $id): string {
+  $existing=$this->db->one('SELECT id,stripe_mode FROM fiscal_invoices WHERE stripe_invoice_id=?',[$id]);
+  if($existing){if($existing['stripe_mode']!==$this->settings['mode'])throw new \DomainException('Mediul plății nu corespunde.');return $existing['id'];}
+  $payment=$this->db->one('SELECT * FROM invoices WHERE id=?',[$id]);
+  if(!$payment)$payment=$this->db->one('SELECT invoice_id id,user_id,amount,currency,stripe_mode FROM plan_changes WHERE invoice_id=? AND paid_at IS NOT NULL',[$id]);
+  if(!$payment || $payment['stripe_mode']!==$this->settings['mode'] || $payment['amount']<=0)throw new \DomainException('Plata nu există în mediul selectat.');
+  if($this->db->one("SELECT user_id FROM test_account_resets WHERE user_id=? AND status='pending'",[$payment['user_id']]))throw new \DomainException('Clientul are o resetare TEST în curs.');
+  $invoice=$this->fetchInvoice($id);$user=$this->db->one('SELECT * FROM users WHERE id=?',[$payment['user_id']]);
+  if(!$user || ($invoice['id']??'')!==$id || ($invoice['status']??'')!=='paid' || ($invoice['livemode']??null)!==($this->settings['mode']==='live') || ($invoice['amount_paid']??null)!==$payment['amount'] || strtoupper($invoice['currency']??'')!==strtoupper($payment['currency']))throw new \DomainException('Stripe nu confirmă identitatea, suma sau plata facturii selectate.');
+  $upgrade=$this->db->one('SELECT * FROM plan_changes WHERE invoice_id=? AND user_id=? AND paid_at IS NOT NULL',[$id,$user['id']]);
+  if($upgrade){
+   if($upgrade['stripe_mode']!==$this->settings['mode'] || $upgrade['customer_id']!==($invoice['customer']??''))throw new \DomainException('Identitatea upgrade-ului nu corespunde plății.');
+   $plan=$this->plans->byPrice($upgrade['to_price']);if(!$plan)throw new \DomainException('Planul plății nu este disponibil.');
+   return $this->fiscal->captureUpgrade($invoice,$user,$upgrade,$plan);
+  }
+  $subscriptionId=$invoice['subscription']??$invoice['parent']['subscription_details']['subscription']??'';
+  if(!is_string($subscriptionId) || $subscriptionId==='')throw new \DomainException('Factura Stripe nu are un abonament identificabil.');
+  $subscription=$this->fetchSubscription($subscriptionId);
+  if(($subscription['metadata']['user_id']??'')!==$user['id'] || ($subscription['customer']??null)!==($invoice['customer']??null) || ($subscription['livemode']??false)!==($this->settings['mode']==='live'))throw new \DomainException('Abonamentul Stripe nu aparține clientului selectat.');
+  $lines=$invoice['lines']['data']??[];$price=$lines[0]['price']['id']??$lines[0]['pricing']['price_details']['price']??'';$plan=$this->plans->byPrice($price);
+  if(!$plan || $plan['stripe_mode']!==$this->settings['mode'])throw new \DomainException('Planul istoric al plății nu poate fi identificat.');
+  $fiscalId=$this->db->transaction(fn()=>$this->fiscal->capture($invoice,$user,$subscription,$this->invoicePlan($invoice,$plan)));
+  return $fiscalId??throw new \DomainException('Plata nu necesită factură fiscală.');
+ }
  private function invoicePlan(array $invoice,array $fallback): array {
   $lines=$invoice['lines']['data']??[];
   if(count($lines)===1) {

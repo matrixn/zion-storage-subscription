@@ -2,6 +2,8 @@
 
 ## 2026-10-19
 
+- Added explicit manual Oblio generation for TEST/LIVE payments, recovery of missing jobs from authoritative Stripe invoices and audited per-document TEST overrides with duplicate protection. TEST client reset now removes linked Oblio invoices/collections with resumable failure handling; LIVE clients are soft archived with retained invoices and history, a dedicated archive list and restoration.
+
 - Added deduplicated, encrypted administrator notifications for new registrations and immediate Listmonk dispatch. Enabled due Oblio invoice processing in the Docker mail worker and added a combined operations:work command for existing Synology containers, fiscal worker activity, readable issuance errors and protected per-invoice retries.
 
 - Updated transactional emails with a branded charcoal layout, lime confirmation button and a full selectable fallback URL below it, with localized instructions in RO/EN/FR/DE and unchanged plaintext links.

@@ -7,7 +7,7 @@ final class AdminDashboard {
  public function __construct(private Database $db) {}
  public function snapshot(?int $now=null): array {
   $now??=time();$since=$now-30*86400;$mode=(new IntegrationSettings($this->db))->stripe()['mode'];
-  $clients=$this->db->one("SELECT COUNT(*) total,COALESCE(SUM(u.created_at>=?),0) new30,COALESCE(SUM(u.status='active' AND c.banned_at IS NULL),0) active,COALESCE(SUM(u.email_verified_at IS NULL),0) unverified,COALESCE(SUM(c.banned_at IS NOT NULL),0) banned,COALESCE(SUM(c.manual_plan IS NOT NULL),0) manual,COALESCE(SUM(u.storage_quota_bytes),0) allocated FROM users u LEFT JOIN account_controls c ON c.user_id=u.id",[$since]);
+  $clients=$this->db->one("SELECT COUNT(*) total,COALESCE(SUM(u.created_at>=?),0) new30,COALESCE(SUM(u.status='active' AND c.banned_at IS NULL AND u.is_deleted=0),0) active,COALESCE(SUM(u.email_verified_at IS NULL),0) unverified,COALESCE(SUM(c.banned_at IS NOT NULL),0) banned,COALESCE(SUM(c.manual_plan IS NOT NULL),0) manual,COALESCE(SUM(u.storage_quota_bytes),0) allocated FROM users u LEFT JOIN account_controls c ON c.user_id=u.id",[$since]);
   $subscriptions=$this->db->one("SELECT COUNT(*) total,COALESCE(SUM(status='active' AND paid_confirmed=1),0) active,COALESCE(SUM(status='active' AND paid_confirmed=1 AND billing_interval='year'),0) yearly,COALESCE(SUM(status IN ('past_due','unpaid','incomplete')),0) attention FROM subscriptions WHERE stripe_mode=?",[$mode]);
   $queues=[
    'changes'=>$this->count("SELECT COUNT(*) n FROM plan_changes WHERE stripe_mode=? AND status IN ('creating','paid','applying','retry','review')",[$mode]),

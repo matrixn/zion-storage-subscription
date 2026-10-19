@@ -4,8 +4,9 @@ namespace Zion;
 
 /** Destructive TEST-only reset. Remote work is resumable; local cleanup is atomic. */
 final class TestAccountReset {
- private \Stripe\StripeClient $stripe;private bool $networkAllowed;
- public function __construct(private Database $db,private SubscriptionChanges $changes,private StorageProvisioningService $storage,?\Stripe\StripeClient $stripe=null){
+ private \Stripe\StripeClient $stripe;private bool $networkAllowed;private OblioClient $oblio;
+ public function __construct(private Database $db,private SubscriptionChanges $changes,private StorageProvisioningService $storage,?\Stripe\StripeClient $stripe=null,?OblioClient $oblio=null){
+  $this->oblio=$oblio??new OblioClient((new IntegrationSettings($db))->oblio());
   $this->networkAllowed=$stripe!==null || env('APP_ENV')!=='test';
   $this->stripe=$stripe??new \Stripe\StripeClient((new IntegrationSettings($db))->stripe('test')['secret_key']?:'sk_test_unconfigured');
  }
@@ -18,9 +19,11 @@ final class TestAccountReset {
   if($u['stripe_mode']!=='test')throw new \DomainException('Resetarea este disponibilă doar pentru conturile TEST.');
   foreach(['subscriptions','checkout_sessions','plan_changes','invoices','fiscal_invoices','billing_events'] as $table)if($this->db->one('SELECT 1 FROM '.$table." WHERE user_id=? AND stripe_mode<>'test' LIMIT 1",[$u['id']]))throw new \DomainException('Contul are înregistrări LIVE și nu poate fi resetat ca test.');
   foreach($this->db->run('SELECT * FROM fiscal_invoices WHERE user_id=?',[$u['id']])->fetchAll() as $f){
-   if(in_array($f['status'],['issued','cancelled'],true) || $f['oblio_invoice_id'] || $f['oblio_series'] || $f['oblio_number'] || $f['issued_at'])throw new \DomainException('Contul are documente fiscale reale; resetarea de test nu le șterge.');
    $source=EncryptedPayload::decode($f['source_snapshot']);
-   if(!($source['simulated']??false) && $f['attempts']>0 && $f['amount']>0)throw new \DomainException('Există o posibilă emitere fiscală reală în așteptare. Clarifică documentul înainte de resetare.');
+   $document=$f['oblio_series']!==null && $f['oblio_number']!==null;
+   if(!$document && (in_array($f['status'],['issued','cancelled'],true) || $f['oblio_invoice_id'] || $f['issued_at']))throw new \DomainException('Documentul fiscal real nu are o identitate completă pentru ștergere.');
+   if($document && (($source['invoice']['livemode']??null)!==false || ($source['invoice']['id']??'')!==$f['stripe_invoice_id']))throw new \DomainException('Factura nu poate fi asociată sigur unei plăți TEST.');
+   if(!$document && !($source['simulated']??false) && $f['attempts']>0 && $f['amount']>0)throw new \DomainException('Există o posibilă emitere fiscală reală în așteptare. Clarifică documentul înainte de resetare.');
    if($this->db->one('SELECT 1 FROM fiscal_corrections WHERE original_fiscal_invoice_id=?',[$f['id']]))throw new \DomainException('Contul are corecții fiscale; resetarea de test a fost oprită.');
   }
  }
@@ -90,6 +93,20 @@ final class TestAccountReset {
       $this->db->run("INSERT INTO account_controls(user_id,banned_at,reason,updated_at) VALUES(?,?,'Resetare TEST în curs',?) ON CONFLICT(user_id) DO UPDATE SET banned_at=excluded.banned_at,reason=excluded.reason",[$uid,time(),time()]);
       $this->db->run("UPDATE users SET status='banned',updated_at=? WHERE id=?",[time(),$uid]);
      });
+    }
+    $documents=$this->db->run("SELECT * FROM fiscal_invoices WHERE user_id=? AND oblio_series IS NOT NULL AND oblio_number IS NOT NULL ORDER BY issued_at DESC,CAST(oblio_number AS INTEGER) DESC",[$uid])->fetchAll();
+    foreach($documents as $document){
+     $key='oblio:'.$document['id'];if(in_array($key,$plan['done'],true))continue;
+     $payload=EncryptedPayload::decode($document['request_snapshot']??'{}');$cif=(string)($payload['cif']??'');
+     if($cif==='' || $cif==='SIMULATION')throw new \DomainException('Lipsește firma emitentă din evidența facturii TEST.');
+     if(!in_array($key.':validated',$plan['done'],true)){
+      $remote=$this->oblio->getInvoice($cif,$document['oblio_series'],$document['oblio_number']);
+      if(($remote['series']??'')!==$document['oblio_series'] || ltrim((string)($remote['number']??''),'0')!==ltrim($document['oblio_number'],'0') || ($document['oblio_invoice_id'] && (string)($remote['id']??'')!==(string)$document['oblio_invoice_id']))throw new \DomainException('Identitatea facturii Oblio nu corespunde evidenței locale.');
+      $plan['done'][]=$key.':validated';$this->save($uid,$plan,'oblio_validated');
+     }
+     try{$this->oblio->deleteInvoice($cif,$document['oblio_series'],$document['oblio_number'],'zion-test-reset:'.$document['id']);}
+     catch(\Throwable $e){throw new \DomainException('Oblio nu a confirmat ștergerea facturii '.$document['oblio_series'].' '.$document['oblio_number'].'. Oblio permite ștergerea doar a ultimului document din serie. Datele sunt păstrate; verifică jurnalul API și reîncearcă.');}
+     $plan['done'][]=$key;$this->save($uid,$plan,'oblio_deleted');
     }
     foreach($plan['sessions'] as $id=>$open)if($open && !in_array('session:'.$id,$plan['done'],true)){
      $this->network();$s=$this->stripe->checkout->sessions->retrieve($id)->toArray();

@@ -21,11 +21,11 @@ final class AdminApplication {
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
   $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
-  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',$action==='fiscal_retry'=>'invoices',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',in_array($action,['fiscal_retry','fiscal_generate'],true)=>'invoices',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset','archive','restore'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
-  $attentionOnly=($_GET['attention']??'')==='1';
+  $attentionOnly=($_GET['attention']??'')==='1';$archivedOnly=($_GET['archived']??'')==='1';
   $stripeActiveMode=(new IntegrationSettings($this->db))->stripe()['mode'];
   $this->stripeMode=(string)($_POST['credential_mode']??$_GET['stripe_mode']??$stripeActiveMode);
   if(!in_array($this->stripeMode,['test','live'],true)){http_response_code(404);return;}
@@ -57,6 +57,17 @@ final class AdminApplication {
      $this->db->run("UPDATE withdrawal_requests SET status='resolved',resolved_at=?,notes=? WHERE id=? AND status='new'",[time(),$note,$id]);
      $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin['id'],'withdrawal_resolve',$id,time()]);
      $_SESSION['admin_notice']='Cererea a fost marcată soluționată. Această acțiune nu execută plăți sau operațiuni Stripe.';$this->redirect();
+    }
+    if($action==='fiscal_generate'){
+     if(!Security::limit($this->db,'fiscal-generate:'.$admin['id'],10,900))throw new \DomainException('Prea multe generări. Reîncearcă mai târziu.');
+     $invoiceId=(string)($_POST['invoice_id']??'');if(!preg_match('/^in_[a-zA-Z0-9_]+$/D',$invoiceId))throw new \DomainException('Referință Stripe invalidă.');
+     $payment=$this->db->one('SELECT stripe_mode FROM fiscal_invoices WHERE stripe_invoice_id=?',[$invoiceId])??$this->db->one('SELECT stripe_mode FROM invoices WHERE id=?',[$invoiceId])??$this->db->one('SELECT stripe_mode FROM plan_changes WHERE invoice_id=? AND paid_at IS NOT NULL',[$invoiceId]);
+     if(!$payment)throw new \DomainException('Plata nu există.');
+     $mail=new MailerService($this->db);$fiscal=new OblioInvoiceService($this->db,$mail);
+     $existing=$this->db->one('SELECT id FROM fiscal_invoices WHERE stripe_invoice_id=?',[$invoiceId]);
+     $id=$existing['id']??(new StripeService($this->db,$this->plans,$mail,new StorageProvisioningService(),$fiscal,$payment['stripe_mode']))->prepareFiscalInvoice($invoiceId);
+     $ok=$fiscal->generateManually($id,$admin['id']);$row=$this->db->one('SELECT status,error_message FROM fiscal_invoices WHERE id=?',[$id]);
+     $_SESSION['admin_notice']=$ok?'Factura a fost generată în Oblio.':'Factura nu a fost emisă. '.OblioInvoiceService::errorDescription($row['error_message']??'');$this->redirect();
     }
     if($action==='fiscal_retry'){
      if(!Security::limit($this->db,'fiscal-retry:'.$admin['id'],5,900))throw new \DomainException('Prea multe reîncercări de facturare. Reîncearcă mai târziu.');
@@ -131,10 +142,11 @@ final class AdminApplication {
      }
      $_SESSION['admin_notice']=$result['message'];$this->redirect();
     }
+    if(in_array($action,['plan','unban','sync'],true) && $this->db->one('SELECT id FROM users WHERE id=? AND is_deleted=1',[(string)($_POST['user_id']??'')]))throw new \DomainException('Restaurează clientul arhivat înainte de modificarea accesului sau planului.');
     $this->initializeBilling();
     if($action==='test_account_reset'){
      (new TestAccountReset($this->db,$this->changes,new StorageProvisioningService()))->reset((string)($_POST['user_id']??''),(string)($_POST['confirm_email']??''),($_POST['confirm_reset']??'')==='1',($_POST['delete_storage']??'')==='1',$admin['id']);
-     unset($_SESSION['admin_activation_link']);$_SESSION['admin_notice']='Contul TEST și tranzacțiile locale au fost șterse. Te poți înregistra din nou cu același email. Istoricul plăților de test rămâne în Stripe.';$this->section='clients';$this->redirect();
+     unset($_SESSION['admin_activation_link']);$_SESSION['admin_notice']='Contul TEST și tranzacțiile locale au fost șterse. Te poți înregistra din nou cu același email. Facturile TEST asociate au fost eliminate din Oblio când au existat. Istoricul plăților de test rămâne în Stripe.';$this->section='clients';$this->redirect();
     }
     if($action==='activation_link'){
      $link=$this->service->activationLink((string)($_POST['user_id']??''),$admin['id']);
@@ -154,6 +166,7 @@ final class AdminApplication {
      $notice='Configurația Stripe a fost actualizată. Abonamentele existente nu au fost repricate.';
     }
     elseif($action==='create'){$this->service->create($_POST,$admin['id']);$notice='Client creat cu plan manual. Confirmarea emailului și acceptarea termenilor sunt necesare înainte de activare. Comunică parola inițială printr-un canal sigur.';}
+    elseif(in_array($action,['archive','restore'],true)){$this->service->archive($uid,$action==='archive',$reason,$admin['id']);$notice=$action==='archive'?'Client LIVE arhivat. Accesul este suspendat; abonamentul și facturile sunt păstrate.':'Client restaurat în listă. Ridică separat suspendarea dacă dorești reactivarea accesului.';}
     elseif($action==='plan'){$this->changes->adminPlan($uid,(string)($_POST['plan']??''),$admin['id'],$reason);$notice='Plan actualizat. Data de reînnoire este păstrată; nicio încasare sau rambursare imediată.';}
     elseif($action==='sync'){$this->service->syncQuota($uid,$admin['id']);$notice='Cota a fost sincronizată.';}
     elseif(in_array($action,['ban','unban'],true)){$this->service->ban($uid,$action==='ban',$reason,$admin['id']);$notice='Starea contului a fost actualizată. Verifică starea protecției Immich în tabel.';}
@@ -187,7 +200,7 @@ final class AdminApplication {
    $stripeState=(new StripeIntegration($this->db,$this->plans,null,$stripeMode))->state();
   }
   if($admin && $section==='clients'){
-   $clients=$this->db->run("SELECT u.*,c.banned_at,c.reason,c.manual_plan,c.access_sync,c.quota_sync,s.status AS subscription_status,s.renewal_at,ist.used_bytes AS immich_used_bytes,ist.photos AS immich_photos,ist.videos AS immich_videos,ist.synced_at AS immich_synced_at,ist.available AS immich_available,r.status AS reset_status,r.step AS reset_step FROM users u LEFT JOIN account_controls c ON c.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id LEFT JOIN test_account_resets r ON r.user_id=u.id LEFT JOIN immich_statistics ist ON ist.user_id=u.id AND ist.storage_user_id=u.storage_user_id AND ist.config_hash=? WHERE (?='' OR instr(lower(u.email),lower(?))>0 OR instr(lower(u.name),lower(?))>0) AND (CAST(? AS INTEGER)=0 OR c.quota_sync<>'ready' OR c.access_sync<>'ready') ORDER BY u.created_at DESC LIMIT 100",[(new ImmichStatistics($this->db))->fingerprint(),$search,$search,$search,(int)$attentionOnly])->fetchAll();
+   $clients=$this->db->run("SELECT u.*,c.banned_at,c.reason,c.manual_plan,c.access_sync,c.quota_sync,s.status AS subscription_status,s.renewal_at,ist.used_bytes AS immich_used_bytes,ist.photos AS immich_photos,ist.videos AS immich_videos,ist.synced_at AS immich_synced_at,ist.available AS immich_available,r.status AS reset_status,r.step AS reset_step FROM users u LEFT JOIN account_controls c ON c.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id LEFT JOIN test_account_resets r ON r.user_id=u.id LEFT JOIN immich_statistics ist ON ist.user_id=u.id AND ist.storage_user_id=u.storage_user_id AND ist.config_hash=? WHERE u.is_deleted=CAST(? AS INTEGER) AND (?='' OR instr(lower(u.email),lower(?))>0 OR instr(lower(u.name),lower(?))>0) AND (CAST(? AS INTEGER)=0 OR c.quota_sync<>'ready' OR c.access_sync<>'ready') ORDER BY u.created_at DESC LIMIT 100",[(new ImmichStatistics($this->db))->fingerprint(),(int)$archivedOnly,$search,$search,$search,(int)$attentionOnly])->fetchAll();
   }
   if($admin && $section==='changes'){
    $changes=$this->db->run("SELECT p.*,u.email FROM plan_changes p JOIN users u ON u.id=p.user_id WHERE (CAST(? AS INTEGER)=0 OR p.status IN ('creating','paid','applying','retry','review')) ORDER BY p.created_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll();
@@ -200,6 +213,7 @@ final class AdminApplication {
    $dashboard=in_array($section,['dashboard','operations'],true)?(new AdminDashboard($this->db))->snapshot():[];
    $subscriptionRows=$section==='subscriptions'?$this->db->run("SELECT s.*,u.email FROM subscriptions s JOIN users u ON u.id=s.user_id WHERE (CAST(? AS INTEGER)=0 OR s.status IN ('past_due','unpaid','incomplete')) ORDER BY s.renewal_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll():[];
    $fiscalRows=$section==='invoices'?$this->db->run("SELECT f.id,f.stripe_invoice_id,f.amount,f.currency,f.stripe_mode,f.status,f.error_message,f.oblio_series,f.oblio_number,f.created_at,u.email FROM fiscal_invoices f JOIN users u ON u.id=f.user_id WHERE (CAST(? AS INTEGER)=0 OR f.status IN ('pending','processing','failed')) ORDER BY f.created_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll():[];
+   $unbilledPayments=$section==='invoices'?$this->db->run("SELECT p.*,u.email FROM (SELECT id,user_id,amount,currency,stripe_mode,created_at FROM invoices UNION ALL SELECT invoice_id,user_id,amount,currency,stripe_mode,paid_at FROM plan_changes c WHERE invoice_id IS NOT NULL AND paid_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM invoices i WHERE i.id=c.invoice_id)) p JOIN users u ON u.id=p.user_id LEFT JOIN fiscal_invoices f ON f.stripe_invoice_id=p.id WHERE p.amount>0 AND f.id IS NULL ORDER BY p.created_at DESC LIMIT 100")->fetchAll():[];
    $fiscalDiagnostics=$section==='invoices'?(new OblioInvoiceService($this->db,new MailerService($this->db)))->diagnostics():[];
    $mailRows=$section==='operations'?$this->db->run('SELECT recipient,kind,attempts,created_at FROM outbox WHERE sent_at IS NULL ORDER BY created_at LIMIT 30')->fetchAll():[];
    $eventRows=$section==='operations'?$this->db->run("SELECT id,type,status,created_at FROM billing_events WHERE status<>'complete' ORDER BY created_at LIMIT 30")->fetchAll():[];

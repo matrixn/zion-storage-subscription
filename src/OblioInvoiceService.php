@@ -150,6 +150,7 @@ final class OblioInvoiceService
         try {
             $row = $this->db->one('SELECT * FROM fiscal_invoices WHERE id=?', [$id]);
             if (!$row) return false;
+            if($this->db->one("SELECT user_id FROM test_account_resets WHERE user_id=? AND status='pending'",[$row['user_id']]))return false;
             if (in_array($row['status'], ['issued','cancelled','simulated','no_charge'], true)) return true;
             $this->db->run("UPDATE fiscal_invoices SET status='processing',attempts=attempts+1,updated_at=? WHERE id=?", [time(),$id]);
             try {
@@ -174,7 +175,7 @@ final class OblioInvoiceService
                     return true;
                 }
                 if (!$this->config['enabled']) throw new OblioException('provider_disabled');
-                if (($source['invoice']['livemode'] ?? false) === false && !$this->config['allow_test_payments']) throw new OblioException('real_document_for_test_payment_blocked');
+                if (($source['invoice']['livemode'] ?? false) === false && !$this->config['allow_test_payments'] && !($source['manual_test_authorized']??false)) throw new OblioException('real_document_for_test_payment_blocked');
                 if (!Security::limit($this->db,'oblio:create:'.$payload['cif'],30,100)) throw new OblioException('provider_rate_limit');
                 $document = $this->client->createInvoice($payload);
                 if (empty($document['series']) || !isset($document['number'])) throw new OblioException('provider_missing_document');
@@ -203,6 +204,28 @@ final class OblioInvoiceService
                 return false;
             }
         } finally { flock($lock, LOCK_UN); fclose($lock); }
+    }
+
+    /** Explicit per-document authorization, including Stripe TEST; automatic policy stays unchanged. */
+    public function generateManually(string $id,string $admin): bool
+    {
+        if(!$this->config['enabled'])throw new \DomainException('Activează emiterea reală în configurarea Oblio înainte de generare.');
+        $lock=fopen(dirname(__DIR__).'/storage/fiscal-'.hash('sha256',$id).'.lock','c');flock($lock,LOCK_EX);
+        try{
+            $row=$this->db->one('SELECT * FROM fiscal_invoices WHERE id=?',[$id]);
+            if(!$row)throw new \DomainException('Factura nu există.');
+            if($row['status']==='issued')return true;
+            if(in_array($row['status'],['cancelled','no_charge'],true) || $row['amount']<=0)throw new \DomainException('Documentul nu poate fi generat pentru această plată.');
+            if($this->db->one("SELECT user_id FROM test_account_resets WHERE user_id=? AND status='pending'",[$row['user_id']]))throw new \DomainException('Clientul are o resetare TEST în curs.');
+            $source=EncryptedPayload::decode($row['source_snapshot']);
+            $simulated=$source['simulated']??false;
+            $source['simulated']=false;$source['manual_test_authorized']=true;$source['manual_authorized_at']=time();
+            $this->db->transaction(function()use($id,$row,$source,$simulated,$admin){
+                $this->db->run("UPDATE fiscal_invoices SET source_snapshot=?,request_snapshot=CASE WHEN ? THEN NULL ELSE request_snapshot END,status='pending',simulation_reference=NULL,error_message=NULL,next_attempt_at=NULL,updated_at=? WHERE id=?",[EncryptedPayload::encode($source),(int)$simulated,time(),$id]);
+                $this->db->run('INSERT INTO admin_audit(admin_id,user_id,action,detail,created_at) VALUES(?,?,?,?,?)',[$admin,$row['user_id'],'fiscal_manual_generate',$row['stripe_invoice_id'].'; mode='.$row['stripe_mode'].'; real issuance explicitly requested',time()]);
+            });
+        }finally{flock($lock,LOCK_UN);fclose($lock);}
+        return $this->process($id);
     }
 
     /** Invoked only by an actual CLI worker; connection checks do not mark activity. */

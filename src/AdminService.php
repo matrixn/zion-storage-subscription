@@ -43,6 +43,17 @@ final class AdminService {
   $this->mail->deliverVerification($id);
   return $id;
  }
+ public function archive(string $uid,bool $archive,string $reason,string $admin): void {
+  $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
+  if(!$u || $u['stripe_mode']!=='live')throw new \DomainException('Arhivarea este disponibilă pentru clienții LIVE.');
+  $this->changes->serialized($uid,function()use($uid,$archive,$reason,$admin){
+   $this->db->transaction(function()use($uid,$archive,$reason,$admin){
+    $this->db->run('UPDATE users SET is_deleted=?,archived_at=?,updated_at=? WHERE id=?',[(int)$archive,$archive?time():null,time(),$uid]);
+    $this->changes->audit($admin,$uid,$archive?'archive_customer':'restore_customer',$reason);
+   });
+  });
+  if($archive)$this->ban($uid,true,$reason,$admin);
+ }
  public function ban(string $uid,bool $ban,string $reason,string $admin): void {
   $this->changes->serialized($uid,function()use($uid,$ban,$reason,$admin){
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);if(!$u)throw new \DomainException('Client inexistent.');
@@ -59,6 +70,7 @@ final class AdminService {
      $this->db->run('UPDATE account_controls SET access_sync=?,updated_at=? WHERE user_id=?',[$sync,time(),$uid]);
     }catch(\Throwable $e){$this->db->run("UPDATE account_controls SET access_sync='retry',updated_at=? WHERE user_id=?",[time(),$uid]);throw new \DomainException('Ban local activ. Immich nu a confirmat limitarea cotei; reîncearcă suspendarea.');}
    }else{
+    if($u['is_deleted'])throw new \DomainException('Restaurează mai întâi clientul arhivat.');
     if($this->db->one("SELECT 1 FROM test_account_resets WHERE user_id=? AND status='pending'",[$uid]))throw new \DomainException('Contul are o resetare TEST în curs. Reîncearcă resetarea înainte de a modifica accesul.');
     if(empty($old['banned_at']))throw new \DomainException('Contul nu este suspendat.');
     $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$uid]);

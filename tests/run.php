@@ -118,3 +118,5 @@ require __DIR__.'/immich-statistics.php';
 require __DIR__.'/legal.php';
 
 require __DIR__.'/listmonk.php';
+
+require __DIR__.'/manual-billing-archive.php';

@@ -54,6 +54,15 @@ class OblioClient
         return $this->document($this->transport('POST', '/docs/invoice', $payload, $this->authenticate()));
     }
 
+    /** Explicit TEST reset only; Oblio permits deletion of the last invoice in a series. */
+    public function deleteInvoice(string $cif,string $series,string $number,string $key): array
+    {
+        $result=$this->transport('DELETE','/docs/invoice',['cif'=>$cif,'seriesName'=>$series,'number'=>$number,'deleteCollect'=>1,'idempotencyKey'=>$key],$this->authenticate(),false);
+        $data=$result['data']??[];
+        if(($data['seriesName']??'')!==$series || ltrim((string)($data['number']??''),'0')!==ltrim($number,'0'))throw new OblioException('provider_delete_not_confirmed');
+        return $data;
+    }
+
     public function getInvoice(string $cif, string $series, string $number): array
     {
         return $this->document($this->transport('GET', '/docs/invoice', ['cif'=>$cif,'seriesName'=>$series,'number'=>$number], $this->authenticate()));

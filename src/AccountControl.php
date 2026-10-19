@@ -3,7 +3,7 @@ namespace Zion;
 final class AccountControl {
  public function __construct(private Database $db) {}
  public function get(string $id): array { return $this->db->one('SELECT * FROM account_controls WHERE user_id=?',[$id])??[]; }
- public function banned(string $id): bool { return !empty($this->get($id)['banned_at']); }
+ public function banned(string $id): bool { return !empty($this->get($id)['banned_at']) || (bool)$this->db->one('SELECT id FROM users WHERE id=? AND is_deleted=1',[$id]); }
  public function manual(string $id): ?string { return $this->get($id)['manual_plan']??null; }
  public static function gatewayConfigured(): bool { return env('STORAGE_GATEWAY_ENFORCED')==='true' && strlen(env('STORAGE_GATEWAY_KEY'))>=32; }
  public static function seedAdmin(Database $db): bool {
