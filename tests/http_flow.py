@@ -124,7 +124,7 @@ with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
         link=mail_link();_,html=request(link)
         verification=re.search(r'name="token" value="([^"]+)"',html).group(1)
         status,html=request("/fr/verification-email",dict(_csrf=csrf(html),token=verification))
-        check(status==200 and "Paiement" in html,"HTTP paid verification reaches localized checkout")
+        check(status==200 and "Votre compte est confirmé" in html and "Continuer avec le paiement de 1,99 EUR" in html and "votre espace sera activé après confirmation du paiement" in html,"HTTP paid verification shows confirmed account and exact payment total")
         check('TVA non collectée' in html,'non-VAT operator Checkout disclosure matches zero-tax default')
         _,html=request("/fr/coordonnees-facturation")
         check("paid-billing@example.com" in html and 'name="robots" content="noindex,nofollow"' in html,"HTTP private billing page renders local profile and noindex")

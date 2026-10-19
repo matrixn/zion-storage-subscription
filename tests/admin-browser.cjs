@@ -130,7 +130,7 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
  const [receiptDownload]=await Promise.all([page.waitForEvent('download'),page.locator('[data-receipt-download]').click()]);check(receiptDownload.suggestedFilename()==='zion-storage-withdrawal.txt','withdrawal receipt can be downloaded as durable text');
  await page.goto(origin+'/admin?section=legal-requests');check((await page.locator('main').innerText()).includes('Withdrawal Browser'),'operator can find received withdrawal in admin');
  const customer=await browser.newContext();const flow=await customer.newPage();flow.on('pageerror',e=>errors.push(e.message));
- await flow.goto(verify);await flow.locator('button[type=submit],form button').first().click();
+ await flow.goto(verify);await flow.waitForURL('**/ro/activare');
  await flow.getByRole('link',{name:'Mai mult spațiu'}).click();
  check((await flow.locator('h1').textContent()).includes('Mai mult spațiu'),'customer can find upgrade');
  for(const width of [320,390,768,1440]){
@@ -144,6 +144,20 @@ let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
    check(await flow.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'upgrade no page overflow');
   }
   await flow.goto(origin+'/ro/upgrade');await flow.screenshot({path:path.join(artifacts,'upgrade-'+width+'.png'),fullPage:true});
+ }
+ for(const [locale,register,checkout,interval,amount,title] of [['ro','inregistrare','plata','month','2,41','Contul tău este confirmat'],['en','register','checkout','year','26.49','Your account is confirmed'],['fr','inscription','paiement','month','2,41','Votre compte est confirmé'],['de','registrieren','zahlung','year','26,49','Dein Konto ist bestätigt']]){
+  await flow.goto(origin+'/'+locale+'/'+register);const signupCsrf=await flow.locator('input[name=_csrf]').first().inputValue();
+  const email='confirmation-'+locale+'@example.com';
+  const signup=await flow.request.post(origin+'/'+locale+'/'+register,{form:{_csrf:signupCsrf,name:'Confirmation Browser',email,password:'confirmation-browser-password',confirm:'confirmation-browser-password',locale,plan:'120gb',billing_interval:interval,terms:'1',privacy:'1','billing[type]':'individual','billing[name]':'Confirmation Browser','billing[billing_email]':email,'billing[country]':'RO','billing[county]':'Bucuresti','billing[city]':'Bucuresti','billing[address]':'Strada Test 1','billing[postal_code]':'010101'}});
+  check(signup.status()===200,'paid confirmation fixture registers '+locale);
+  await page.goto(origin+'/admin?section=clients&q='+email);
+  await page.locator('tr').filter({hasText:email}).getByRole('button',{name:'Vezi linkul de activare',exact:true}).click();
+  const confirmation=await page.getByRole('textbox',{name:'Link de activare',exact:true}).inputValue();
+  await flow.goto(confirmation);await flow.waitForURL('**/'+locale+'/'+checkout);
+  check(await flow.locator('h1').innerText()===title,'email link automatically confirms account '+locale);
+  check((await flow.locator('[data-confirmed-payment]').innerText()).includes(amount+' EUR'),'payment button shows exact gross '+interval+' amount '+locale);
+  check((await flow.locator('.confirmed-period').innerText()).trim().length>0,'confirmed plan shows billing interval');
+  for(const width of [320,390,1440]){await flow.setViewportSize({width,height:1000});check(await flow.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'confirmed payment fits viewport '+locale+width);if(locale==='ro'&&width!==320)await flow.screenshot({path:path.join(artifacts,'confirmed-payment-'+width+'.png'),fullPage:true});}
  }
  await flow.goto(origin+'/admin');check(await flow.getByRole('heading',{name:'Autentificare administrator'}).isVisible(),'customer browser has no admin privilege');
  check(errors.length===0,'no browser runtime errors');await browser.close();console.log(checks+' admin/upgrade Chrome assertions passed.');

@@ -3,7 +3,7 @@ return [
  'ro'=>[
   'billing.sandbox_notice'=>'Sandbox: conturile noi folosesc plăți de test.',
   'billing.payment_mode_test'=>'Plată de test · Sandbox','billing.payment_mode_live'=>'Plată reală · LIVE',
-  'benefits.limits.desc'=>'Limite clare. Prețuri lunare și anuale transparente. Fără surprize.','pricing.paid'=>'Abonament lunar sau anual','checkout.desc'=>'Adresa de email este verificată. Continuă către partenerul de plăți pentru a începe abonamentul cu perioada aleasă.',
+  'benefits.limits.desc'=>'Limite clare. Prețuri lunare și anuale transparente. Fără surprize.','pricing.paid'=>'Abonament lunar sau anual','checkout.desc'=>"Adresa ta de email a fost verificată. Continuă cu plata planului ales; spațiul tău se activează după confirmarea plății.",
   'billing.period'=>'Perioada de facturare','billing.month'=>'Lunar','billing.year'=>'Anual','billing.year.interval'=>'/ an','billing.discount'=>'O lună gratuită','billing.annual.caption'=>'12 luni de stocare, plătești 11',
   'pricing.amount'=>'{amount} EUR','pricing.interval'=>'/ lună','pricing.personal'=>'{capacity} · {amount} EUR {interval}',
   'pricing.note'=>'Prețuri în EUR. Lunar: plată în fiecare lună. Anual: suma afișată se încasează integral o dată pe an, cu o lună gratuită. Poți opri reînnoirea din facturare. GB zecimali.',
@@ -15,7 +15,7 @@ return [
  'en'=>[
   'billing.sandbox_notice'=>'Sandbox: new accounts use test payments.',
   'billing.payment_mode_test'=>'Test payment · Sandbox','billing.payment_mode_live'=>'Real payment · LIVE',
-  'benefits.limits.desc'=>'Clear quotas and transparent monthly or yearly prices.','pricing.paid'=>'Monthly or yearly subscription','checkout.desc'=>'Your email is verified. Continue to our secure payment partner to start your subscription with your selected billing period.',
+  'benefits.limits.desc'=>'Clear quotas and transparent monthly or yearly prices.','pricing.paid'=>'Monthly or yearly subscription','checkout.desc'=>"Your email address has been verified. Continue with payment for your selected plan; your storage activates after payment is confirmed.",
   'billing.period'=>'Billing period','billing.month'=>'Monthly','billing.year'=>'Yearly','billing.year.interval'=>'/ year','billing.discount'=>'One month free','billing.annual.caption'=>'12 months of storage, pay for 11',
   'pricing.amount'=>'EUR {amount}','pricing.interval'=>'/ month','pricing.personal'=>'{capacity} · EUR {amount} {interval}',
   'pricing.note'=>'Prices in EUR. Monthly: charged each month. Yearly: the full displayed amount is charged once a year, with one month free. Manage renewals in billing. Decimal GB.',
@@ -27,7 +27,7 @@ return [
  'fr'=>[
   'billing.sandbox_notice'=>'Sandbox : paiements de test pour les nouveaux comptes.',
   'billing.payment_mode_test'=>'Paiement de test · Sandbox','billing.payment_mode_live'=>'Paiement réel · LIVE',
-  'benefits.limits.desc'=>'Des quotas clairs et des tarifs mensuels ou annuels transparents.','pricing.paid'=>'Abonnement mensuel ou annuel','checkout.desc'=>'Votre adresse e-mail est vérifiée. Continuez vers notre partenaire de paiement pour démarrer votre abonnement selon la période choisie.',
+  'benefits.limits.desc'=>'Des quotas clairs et des tarifs mensuels ou annuels transparents.','pricing.paid'=>'Abonnement mensuel ou annuel','checkout.desc'=>"Votre adresse e-mail a été vérifiée. Procédez au paiement de votre formule ; votre espace sera activé après confirmation du paiement.",
   'billing.period'=>'Période de facturation','billing.month'=>'Mensuelle','billing.year'=>'Annuelle','billing.year.interval'=>'/ an','billing.discount'=>'Un mois offert','billing.annual.caption'=>'12 mois de stockage, payez-en 11',
   'pricing.amount'=>'{amount} EUR','pricing.interval'=>'/ mois','pricing.personal'=>'{capacity} · {amount} EUR {interval}',
   'pricing.note'=>'Prix en EUR. Mensuel : paiement chaque mois. Annuel : le montant total affiché est prélevé une fois par an, avec un mois offert. Gérez les renouvellements dans la facturation. Go décimaux.',
@@ -39,7 +39,7 @@ return [
  'de'=>[
   'billing.sandbox_notice'=>'Sandbox: Neue Konten verwenden Testzahlungen.',
   'billing.payment_mode_test'=>'Testzahlung · Sandbox','billing.payment_mode_live'=>'Echte Zahlung · LIVE',
-  'benefits.limits.desc'=>'Klare Grenzen und transparente Monats- oder Jahrespreise.','pricing.paid'=>'Monatliches oder jährliches Abonnement','checkout.desc'=>'Deine E-Mail-Adresse ist bestätigt. Fahre zu unserem Zahlungspartner fort, um dein Abonnement mit dem gewählten Abrechnungszeitraum zu starten.',
+  'benefits.limits.desc'=>'Klare Grenzen und transparente Monats- oder Jahrespreise.','pricing.paid'=>'Monatliches oder jährliches Abonnement','checkout.desc'=>"Deine E-Mail-Adresse wurde bestätigt. Bezahle jetzt deinen gewählten Tarif; dein Speicher wird nach bestätigter Zahlung aktiviert.",
   'billing.period'=>'Abrechnungszeitraum','billing.month'=>'Monatlich','billing.year'=>'Jährlich','billing.year.interval'=>'/ Jahr','billing.discount'=>'Ein Monat gratis','billing.annual.caption'=>'12 Monate Speicher, nur 11 bezahlen',
   'pricing.amount'=>'{amount} EUR','pricing.interval'=>'/ Monat','pricing.personal'=>'{capacity} · {amount} EUR {interval}',
   'pricing.note'=>'Preise in EUR. Monatlich: Zahlung jeden Monat. Jährlich: Der angezeigte Gesamtbetrag wird einmal jährlich berechnet, mit einem Gratismonat. Verlängerungen in der Abrechnung verwalten. Dezimale GB.',

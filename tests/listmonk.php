@@ -34,6 +34,8 @@ $listClient->failure='';check($listMail->deliver()===1,'Listmonk retry delivers 
 $listPayload=end($listClient->calls)[2];
 check($listPayload['subscriber_mode']==='external' && $listPayload['subscriber_emails']===['customer@example.com'] && $listPayload['template_id']===7,'Listmonk uses external recipients and configured template without subscriber creation');
 check($listPayload['data']['locale']==='ro' && str_contains($listPayload['data']['html'],'fixture-action-secret') && str_contains($listPayload['altbody'],'fixture-action-secret'),'localized Listmonk HTML and plaintext preserve activation action');
+check(str_contains($listPayload['data']['html'],'bgcolor="#c4f582"') && str_contains($listPayload['data']['html'],'Confirmă adresa de email'),'confirmation email has branded lime button and localized action');
+check(substr_count($listPayload['data']['html'],'href="https://storage.example/verify?token=fixture-action-secret"')===2 && str_contains($listPayload['data']['html'],'>https://storage.example/verify?token=fixture-action-secret</a>'),'confirmation email includes same URL as button and full copyable fallback link');
 check($listDb->one('SELECT payload FROM outbox')['payload']==='{}' && $listDb->one('SELECT attempts FROM outbox')['attempts']===2,'accepted email clears sensitive pending payload and records retries');
 foreach(['semantic','malformed','timeout'] as $failure){$listClient->failure=$failure;try{$listClient->send('test@example.com','Test','<p>Test</p>','Test','en','test');check(false,'bad Listmonk response accepted');}catch(DomainException $e){check(true,'Listmonk rejects '.$failure.' response');}}
 $listLogs=Zion\ApiLog::page(['provider'=>'listmonk']);$listRaw=json_encode($listLogs);

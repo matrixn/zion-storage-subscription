@@ -14,7 +14,7 @@
 <?php foreach(Zion\TranslationService::LOCALES as $l): ?><link rel="alternate" hreflang="<?= $l ?>" href="<?= e(base_url().$url($canonicalPage,$l).$legalQuery) ?>"><?php endforeach ?>
 <link rel="alternate" hreflang="x-default" href="<?= e(base_url().$url($canonicalPage,'en').$legalQuery) ?>">
 <?php if(!in_array($page,['home','how','register','contact'])): ?><meta name="robots" content="noindex,nofollow"><?php endif ?>
-<link rel="stylesheet" href="/assets/site.css"><script src="/assets/site.js" defer></script>
+<link rel="stylesheet" href="/assets/site.css?v=confirmation-2"><script src="/assets/site.js?v=confirmation-2" defer></script>
 <?php if($page==='legal'): ?><link rel="stylesheet" href="/assets/legal.css?v=headings-2"><?php endif ?>
 <?php if($page==='home'): ?><link rel="stylesheet" href="/assets/pricing.css"><link rel="stylesheet" href="/assets/hero-carousel.css"><script src="/assets/hero-carousel.js" defer></script><?php endif ?>
 <link rel="preload" href="/assets/fonts/Unbounded-Medium.ttf" as="font" type="font/ttf" crossorigin>

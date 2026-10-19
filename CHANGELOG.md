@@ -2,6 +2,10 @@
 
 ## 2026-10-19
 
+- Updated transactional emails with a branded charcoal layout, lime confirmation button and a full selectable fallback URL below it, with localized instructions in RO/EN/FR/DE and unchanged plaintext links.
+
+- Clarified verification-to-payment onboarding in all four languages: browser confirmation uses a CSRF-protected POST automatically, followed by an explicit account-confirmed screen with plan, billing interval and a payment button showing the gross EUR total. Opening the email link via GET alone still does not consume the token or start a payment.
+
 - Fixed signup/resend Listmonk confirmations waiting indefinitely for a mail worker: send the current confirmation immediately after account persistence, retain failed deliveries for retry and discard invalidated/expired links. Added CLI worker activity, queue diagnostics and a protected manual queue action to the Listmonk admin page.
 
 - Applied the self-hosted Unbounded heading font across all public pages, including the homepage, carousel and pricing. Adjusted heading sizes for responsive layouts and versioned the stylesheet URLs; body text and admin typography stay unchanged.
