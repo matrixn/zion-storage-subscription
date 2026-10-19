@@ -25,7 +25,7 @@ if($cmd==='oblio:retry'){
  $result=(new Zion\OblioInvoiceService($db,$mail))->retryPending(in_array('--due',$argv,true));
  echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;exit($result['pending']>0?1:0);
 }
-if($cmd==='mail:work'){echo 'Delivered: '.$mail->deliver().PHP_EOL;exit;}
+if($cmd==='mail:work'){echo 'Delivered: '.$mail->work().PHP_EOL;exit;}
 if($cmd==='activation:retry'){
  $result=(new Zion\AccountService($db,new Zion\Plans($db),$mail,new Zion\StorageProvisioningService()))->retryAutomatic();
  echo json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;exit;

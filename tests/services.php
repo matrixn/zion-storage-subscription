@@ -61,5 +61,6 @@ foreach(Zion\TranslationService::LOCALES as $l)foreach(['activated','payment','s
 }
 $mail->deliver();
 check((int)$db->one('SELECT COUNT(*) AS n FROM outbox WHERE sent_at IS NULL')['n']===0,'all localized queued email templates render');
-check($db->one("SELECT payload FROM outbox WHERE recipient='checkout@example.com'")['payload']==='{}','delivered payload scrubbed');
+check(!$db->one("SELECT payload FROM outbox WHERE recipient='checkout@example.com'"),'consumed confirmation payload removed without resending link');
+check($db->one("SELECT payload FROM outbox WHERE dedupe_key='render-en-activated'")['payload']==='{}','delivered payload scrubbed');
 echo "\n$count total assertions passed, including SDK/adapter/email fixtures.\n";

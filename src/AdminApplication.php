@@ -21,7 +21,7 @@ final class AdminApplication {
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
   $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
-  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',str_starts_with($action,'listmonk_')=>'listmonk',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
@@ -57,6 +57,12 @@ final class AdminApplication {
      $this->db->run("UPDATE withdrawal_requests SET status='resolved',resolved_at=?,notes=? WHERE id=? AND status='new'",[time(),$note,$id]);
      $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin['id'],'withdrawal_resolve',$id,time()]);
      $_SESSION['admin_notice']='Cererea a fost marcată soluționată. Această acțiune nu execută plăți sau operațiuni Stripe.';$this->redirect();
+    }
+    if($action==='mail_retry'){
+     if(!Security::limit($this->db,'mail-retry:'.$admin['id'],3,900))throw new \DomainException('Prea multe reluări ale cozii. Reîncearcă mai târziu.');
+     $mail=new MailerService($this->db);$accepted=$mail->deliver(5,null,true);$pending=(int)$mail->diagnostics()['pending']['total'];
+     $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin['id'],'mail_retry','accepted='.$accepted.'; pending='.$pending,time()]);
+     $_SESSION['admin_notice']='Mesaje acceptate la trimitere: '.$accepted.'. În așteptare: '.$pending.'. Linkurile expirate sunt eliminate; clientul poate folosi „Retrimite” pentru un link nou. Verifică jurnalul API pentru erori.';$this->redirect();
     }
     if(in_array($action,['listmonk_save','listmonk_check','listmonk_test'],true)){
      $settings=new IntegrationSettings($this->db);
@@ -164,6 +170,7 @@ final class AdminApplication {
     $apiEntries=ApiLog::page($apiFilters,max(1,(int)($_GET['page']??1)));
    }
    $integrations=new IntegrationSettings($this->db);$stripeSettings=$integrations->stripe($section==='integrations'?$stripeMode:$stripeActiveMode);$oblioSettings=$integrations->oblio();$stripeProfiles=$integrations->stripeProfiles();
+   $mailDiagnostics=(new MailerService($this->db))->diagnostics();
    $listmonkSettings=$integrations->listmonk();$listmonkSaved=$integrations->saved('listmonk')!==null;
    $immichSettings=$integrations->immich();$immichSaved=$integrations->saved('immich')!==null;
    $immichOverview=(new ImmichStatistics($this->db))->overview();

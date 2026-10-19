@@ -2,6 +2,8 @@
 
 ## 2026-10-19
 
+- Fixed signup/resend Listmonk confirmations waiting indefinitely for a mail worker: send the current confirmation immediately after account persistence, retain failed deliveries for retry and discard invalidated/expired links. Added CLI worker activity, queue diagnostics and a protected manual queue action to the Listmonk admin page.
+
 - Applied the self-hosted Unbounded heading font across all public pages, including the homepage, carousel and pricing. Adjusted heading sizes for responsive layouts and versioned the stylesheet URLs; body text and admin typography stay unchanged.
 
 - Added encrypted Listmonk transactional email configuration in admin, saved token previews, template/connection checks, explicit test emails, redacted API diagnostics and a Docker mail worker. Saved settings override LISTMONK environment values; existing localized outbox messages remain pending on upstream errors.

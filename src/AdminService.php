@@ -40,6 +40,7 @@ final class AdminService {
    $this->changes->audit($admin,$id,'create_customer','Plan manual: '.$plan.'; verificare email necesară');
   });
   (new AccountService($this->db,$this->plans,$this->mail,$this->storage))->issueVerification($id);
+  $this->mail->deliverVerification($id);
   return $id;
  }
  public function ban(string $uid,bool $ban,string $reason,string $admin): void {

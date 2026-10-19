@@ -75,7 +75,8 @@ final class Application {
    }
    if(!Security::captcha((string)($_POST['cf-turnstile-response']??''))){$this->fail('error.captcha');return;}
    // Same response for existing accounts. No session privilege is granted before verification.
-   $this->accounts->register($d);
+   $id=$this->accounts->register($d);
+   if($id)$this->mail->deliverVerification($id);
    $this->render('message',['message'=>'register.sent']);return;
   }
   if($this->page==='verify') {
@@ -98,6 +99,7 @@ final class Application {
       $this->mail->queue($u['email'],$u['locale'],'verify',['url'=>base_url().Router::path($u['locale'],'verify').'?token='.$token],'access:'.hash('sha256',$token));
      });
     }
+    if($u)$this->mail->deliverVerification($u['id']);
    }
    $this->render('message',['message'=>'resend.sent']);return;
   }

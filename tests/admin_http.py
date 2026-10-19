@@ -80,12 +80,31 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(status==200 and 'șablonul tranzacțional sunt confirmate' in lm_body,'Listmonk authenticated template check works over real fixture HTTP')
             status,lm_body,_=request(admin,'/admin',{'_csrf':csrf(lm_body),'action':'listmonk_test','test_email':'listmonk-test@example.com'})
             check(status==200 and len(Backend.listmonk_messages)==1 and Backend.listmonk_messages[0]['subscriber_emails']==['listmonk-test@example.com'],'explicit admin test sends Listmonk transaction to chosen recipient')
-            queue_script='require "src/bootstrap.php"; $d=new Zion\\Database(); $m=new Zion\\MailerService($d); foreach(["ro","en","fr","de"] as $l)$m->queue("queue-".$l."@example.com",$l,"verify",["url"=>"https://storage.example/verify?token=fixture-queue-action"],"listmonk-queue-".$l); echo $m->deliver();'
+            queue_script='require "src/bootstrap.php"; $d=new Zion\\Database(); $m=new Zion\\MailerService($d); foreach(["ro","en","fr","de"] as $l)$m->queue("queue-".$l."@example.com",$l,"verify",["url"=>"https://storage.example/verify?token=fixture-queue-action"],"listmonk-queue-".$l); echo $m->work();'
             queue_result=subprocess.run(['php','-r',queue_script],cwd=ROOT,env=env,check=True,capture_output=True,text=True)
             check(queue_result.stdout.strip()=='4' and len(Backend.listmonk_messages)==5,'CLI worker delivers all four localized outbox messages through real Listmonk fixture HTTP')
             check({m['data']['locale'] for m in Backend.listmonk_messages[1:]}=={'ro','en','fr','de'} and all('fixture-queue-action' in m['data']['html'] and 'fixture-queue-action' in m['altbody'] for m in Backend.listmonk_messages[1:]),'transactional messages preserve locale and action links in HTML and plaintext')
+            signup_html=request(customer,'/en/register')[1]
+            signup_data={'_csrf':csrf(signup_html),'name':'Immediate Mail','email':'immediate-mail@example.com','password':'fixture-mail-password','confirm':'fixture-mail-password','locale':'en','plan':'free','terms':'1','privacy':'1'}
+            status,signup_html,_=request(customer,'/en/register',signup_data)
+            check(status==200 and len(Backend.listmonk_messages)==6 and Backend.listmonk_messages[-1]['subscriber_emails']==['immediate-mail@example.com'],'signup sends actual verification email immediately without running worker')
+            activation_body=Backend.listmonk_messages[-1]['altbody']
+            activation_token=re.search(r'token=([a-f0-9]{64})',activation_body).group(1)
+            verify_path='/en/verify-email?token='+activation_token
+            check('name="token"' in request(customer,verify_path)[1],'immediately sent signup email contains usable verification link')
+            resend_html=request(customer,'/en/resend')[1]
+            status,_,_=request(customer,'/en/resend',{'_csrf':csrf(resend_html),'email':'immediate-mail@example.com'})
+            check(status==200 and len(Backend.listmonk_messages)==7 and activation_token not in Backend.listmonk_messages[-1]['altbody'],'public resend immediately sends replacement confirmation instead of waiting for worker')
+            check(request(admin,'/admin',{'action':'mail_retry'})[0]==419,'manual mail queue processing requires admin CSRF')
+            subprocess.run(['php','-r','require "src/bootstrap.php"; (new Zion\\MailerService(new Zion\\Database()))->queue("manual-retry@example.com","en","activated",[],"manual-mail-fixture");'],cwd=ROOT,env=env,check=True,capture_output=True)
+            lm_body=request(admin,'/admin?section=listmonk')[1]
+            status,lm_body,_=request(admin,'/admin',{'_csrf':csrf(lm_body),'action':'mail_retry'})
+            check(status==200 and Backend.listmonk_messages[-1]['subscriber_emails']==['manual-retry@example.com'],'administrator can process pending email without Docker worker')
+            worker_before=json.loads(sqlite3.connect(temp+'/app.sqlite').execute("SELECT value FROM integration_settings WHERE key='mail:worker'").fetchone()[0])
+            check('finished_at' in worker_before,'CLI mail command records completed worker activity')
             api_body=request(admin,'/admin?section=api-log&provider=listmonk')[1]
             check('/api/tx' in api_body and 'fixture-listmonk-api-token-123456' not in api_body and 'listmonk-test@example.com' not in api_body,'Listmonk calls are filterable in redacted API journal')
+            subprocess.run(['php','-r','require "src/bootstrap.php"; $clean=new Zion\\Database(); $clean->run("DELETE FROM email_verifications WHERE user_id IN (SELECT id FROM users WHERE email=?)",["immediate-mail@example.com"]); $clean->run("DELETE FROM users WHERE email=?",["immediate-mail@example.com"]);'],cwd=ROOT,env=env,check=True,capture_output=True) # Keep later fixed dashboard fixtures independent.
             request(admin,'/admin',dict(lm_input,enabled='0',_csrf=csrf(lm_body))) # Restore log transport for other isolated fixtures.
             tax_body=request(admin,'/admin?section=tax')[1]
             check('name="vat_rate"' in tax_body and 'value="21"' in tax_body and '2,41 EUR' in tax_body,'admin tax settings default to 21 percent and preview gross total')
@@ -112,7 +131,7 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(status==422,'catalog rejects invalid Price ID before network request')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'create','name':'Admin Test Client','email':'admin-client@example.com','password':'secure-admin-client-password','plan':'250gb','locale':'ro'})
             check(status==200 and 'Client creat' in body,'admin creates customer with selected manual plan')
-            db=sqlite3.connect(temp+'/app.sqlite');db.row_factory=sqlite3.Row;u=dict(db.execute('SELECT * FROM users').fetchone())
+            db=sqlite3.connect(temp+'/app.sqlite');db.row_factory=sqlite3.Row;u=dict(db.execute("SELECT * FROM users WHERE email='admin-client@example.com'").fetchone())
             check(u['selected_plan_id']=='250gb' and not u['email_verified_at'] and not u['terms_at'],'manual client must verify email and accept terms')
             check(db.execute('SELECT COUNT(*) FROM subscriptions').fetchone()[0]==0,'manual grant does not create a paid subscription')
             db.close()

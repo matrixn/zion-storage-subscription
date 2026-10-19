@@ -40,6 +40,20 @@ $listLogs=Zion\ApiLog::page(['provider'=>'listmonk']);$listRaw=json_encode($list
 check($listLogs['total']>=6 && !str_contains($listRaw,'fixture-listmonk-token-abcdef123456') && !str_contains($listRaw,'customer@example.com') && !str_contains($listRaw,'fixture-action-secret'),'Listmonk API journal records outcomes without tokens, recipients or action links');
 $listRaw=json_encode($listDb->run('SELECT * FROM integration_settings')->fetchAll()).json_encode($listDb->run('SELECT * FROM admin_audit')->fetchAll());
 check(!str_contains($listRaw,'fixture-listmonk-token-abcdef123456'),'Listmonk credentials are encrypted at rest and absent from audit');
+$listClient->failure='';
+$listUser=str_repeat('c',32);$listDb->run('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',[$listUser,'Confirm Client','confirm@example.com','unused','en','free',time(),time(),time(),time()]);
+$listHash=hash('sha256','current-confirmation');
+$listDb->run('INSERT INTO email_verifications(token_hash,user_id,expires_at) VALUES(?,?,?)',[$listHash,$listUser,time()+3600]);
+$listMail->queue('confirm@example.com','en','verify',['url'=>'https://storage.example/verify?token=current'],'verify:'.$listHash);
+$listBefore=count($listClient->calls);$listClient->failure='http';
+check($listMail->deliverVerification($listUser)===0 && count($listClient->calls)===$listBefore+1,'immediate signup dispatch retains failed confirmation for retry');
+$listClient->failure='';check($listMail->deliverVerification($listUser)===1 && $listMail->deliverVerification($listUser)===0,'targeted confirmation dispatch sends once and never repeats accepted email');
+$listDb->run('UPDATE email_verifications SET expires_at=? WHERE token_hash=?',[time()-1,$listHash]);
+$listMail->queue('confirm@example.com','en','verify',['url'=>'https://storage.example/verify?token=expired'],'access:'.$listHash);
+$listBefore=count($listClient->calls);$listMail->deliver();
+check(count($listClient->calls)===$listBefore && !$listDb->one('SELECT id FROM outbox WHERE dedupe_key=?',['access:'.$listHash]),'worker discards expired confirmation without sending dead activation link');
+check(!$listMail->diagnostics()['worker_recent'],'web sends and manual flush do not create a worker heartbeat');
+$listMail->work();check($listMail->diagnostics()['worker_recent'] && !empty($listMail->diagnostics()['worker']['finished_at']),'actual mail worker records recent completed activity');
 $listInput['enabled']='0';$listInput['clear_api_token']='1';$listSettings->save('listmonk',$listInput,$listAdmin);
 check(!$listSettings->listmonk()['enabled'] && $listSettings->listmonk()['api_token']==='','disabled saved Listmonk profile never restores environment token');
 foreach(['URL','API_USER','API_TOKEN','TEMPLATE_ID','FROM_EMAIL'] as $suffix){putenv('LISTMONK_'.$suffix.'=');$_ENV['LISTMONK_'.$suffix]='';}

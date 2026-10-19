@@ -14,14 +14,48 @@ final class MailerService {
  public function queue(string $to,string $locale,string $kind,array $data,string $key): void {
   $this->db->run('INSERT OR IGNORE INTO outbox(dedupe_key,recipient,locale,kind,payload,created_at) VALUES(?,?,?,?,?,?)',[$key,$to,$locale,$kind,self::encode($data),time()]);
  }
- public function deliver(): int {
+ /** Send only this customer's current confirmation, after the account transaction commits. */
+ public function deliverVerification(string $userId): int {
+  try{
+  if(!(new IntegrationSettings($this->db))->listmonk()['enabled'])return 0;
+  $row=$this->db->one("SELECT o.id FROM outbox o JOIN users u ON u.email=o.recipient JOIN email_verifications v ON v.user_id=u.id WHERE u.id=? AND o.kind='verify' AND o.sent_at IS NULL AND v.used_at IS NULL AND v.expires_at>? AND o.dedupe_key IN ('verify:'||v.token_hash,'access:'||v.token_hash) ORDER BY o.id DESC LIMIT 1",[$userId,time()]);
+  return $row?$this->deliver(1,(int)$row['id'],true):0;
+  }catch(\Throwable $e){
+   ApiLog::record('listmonk','POST','/outbox',0,microtime(true),['failed'=>true,'code'=>'confirmation_dispatch_pending','message'=>'Confirmarea a rămas în coadă; verifică configurația, APP_KEY și permisiunile storage/mail.lock.','context'=>['stage'=>'outbox']]);return 0;
+  }
+ }
+ public function diagnostics(): array {
+  $pending=$this->db->one('SELECT COUNT(*) total,COALESCE(SUM(attempts=0),0) unattempted,COALESCE(SUM(attempts>0),0) failed,MIN(created_at) oldest FROM outbox WHERE sent_at IS NULL');
+  $row=$this->db->one("SELECT value FROM integration_settings WHERE key='mail:worker'");
+  $worker=$row?json_decode($row['value'],true):[];
+  return ['pending'=>$pending,'worker'=>$worker?:[],'worker_recent'=>(int)($worker['started_at']??0)>time()-180];
+ }
+ /** Heartbeat belongs only to the actual CLI worker, never connection tests or web sends. */
+ public function work(): int {
+  $this->workerState(['started_at'=>time(),'finished_at'=>null]);
+  $count=$this->deliver();
+  $this->workerState(['started_at'=>time(),'finished_at'=>time(),'accepted'=>$count]);
+  return $count;
+ }
+ private function workerState(array $state): void {
+  $this->db->run("INSERT INTO integration_settings(key,value) VALUES('mail:worker',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[json_encode($state,JSON_THROW_ON_ERROR)]);
+ }
+ public function deliver(int $limit=50,?int $onlyId=null,bool $nonBlocking=false): int {
   $count=0;
-  foreach($this->db->run('SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT 50')->fetchAll() as $row) {
-   $lock=fopen(dirname(__DIR__).'/storage/mail.lock','c'); flock($lock,LOCK_EX);
+  $limit=max(1,min(50,$limit));
+  $rows=$onlyId===null?$this->db->run('SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT '.$limit)->fetchAll():$this->db->run('SELECT * FROM outbox WHERE sent_at IS NULL AND id=?',[$onlyId])->fetchAll();
+  foreach($rows as $row) {
+   $lock=fopen(dirname(__DIR__).'/storage/mail.lock','c');
+   if(!$lock)throw new \RuntimeException('mail_lock_unavailable');
+   if(!flock($lock,LOCK_EX|($nonBlocking?LOCK_NB:0))){fclose($lock);break;}
    try {
     $current=$this->db->one('SELECT * FROM outbox WHERE id=?',[$row['id']]);
     if(!$current || $current['sent_at'])continue;
     $row=$current;
+    if($row['kind']==='verify' && preg_match('/^(?:verify|access):([a-f0-9]{64})$/D',$row['dedupe_key'],$match) && !$this->db->one('SELECT token_hash FROM email_verifications WHERE token_hash=? AND used_at IS NULL AND expires_at>?',[$match[1],time()])){
+     // Expired/replaced/consumed links cannot activate an account. Remove their encrypted payloads.
+     $this->db->run('DELETE FROM outbox WHERE id=? AND sent_at IS NULL',[$row['id']]);continue;
+    }
     $this->db->run('UPDATE outbox SET attempts=attempts+1 WHERE id=?',[$row['id']]);
     $tr=new TranslationService($row['locale']); $data=self::decode($row['payload']);
     $subject=$tr->get('email.'.$row['kind'].'.subject');
@@ -51,7 +85,7 @@ final class MailerService {
       $this->db->run("UPDATE fiscal_invoices SET notification_sent_at=?,completed_at=?,updated_at=? WHERE id=? AND status='issued'",[time(),time(),time(),$data['fiscal_invoice_id']]);
      }
     }); $count++;
-   } catch(\Throwable $e) { error_log('Mail delivery pending; outbox_id='.$row['id']); }
+   } catch(\Throwable $e) { error_log('Mail delivery pending; outbox_id='.$row['id']);if($nonBlocking)break; }
    finally { flock($lock,LOCK_UN); fclose($lock); }
   } return $count;
  }
