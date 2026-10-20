@@ -47,3 +47,30 @@ Equivalent user crontab (adjust paths; no sudo/root needed):
 Only install one scheduler for a deployment. The CLI is not an unauthenticated public HTTP endpoint. No host crontab or Synology scheduler is changed by local development; enabling the compose service provides the included automatic schedule. After saving API credentials, manual sync can populate the dashboard immediately. This schedule only collects statistics and does not change plans, quotas, files or subscriptions.
 
 Reference: [Immich official OpenAPI](https://github.com/immich-app/immich/blob/main/open-api/immich-openapi-specs.json). Validate against the installed version and grant the required administrator permission.
+
+## Initial preferences for new accounts
+
+The installed server reported **Immich 3.3.3** on 20 October 2026. New accounts created by the portal now receive explicit account preferences before storage activation is marked successful:
+
+| Preference | Initial value |
+| --- | --- |
+| Google Cast | Disabled |
+| People and its sidebar entry | Disabled |
+| Memories | Enabled |
+| Other account preferences | Standard Immich values |
+
+These are starting preferences, not enforced restrictions; customers can change them in Immich. Existing activated customers are not retroactively updated. No albums, permissions, uploads, quota or billing settings are changed by this initialization. Maps remain governed by the existing server/browser configuration.
+
+Immich's theme and language onboarding steps use **device/browser-local** preferences. They are not fields in this version's account preferences API. The portal does not fabricate language/theme payloads, modify Immich's frontend, or attempt to write cross-origin localStorage. Customers retain Immich's normal browser defaults and can adjust them in Immich settings. Mobile backup albums/OS permissions also require customer action.
+
+Provisioning creates or reconciles only the exact matching portal storage label/email, then uses the already available registration password to open a transient user session. The user ID/email and non-admin role are verified before using user endpoints. No administrator API key is attached to login or user-session calls. Preferences are updated and their response values checked before `PUT /users/me/onboarding` is sent. Only then can the existing portal activation finish. The transient session is logged out, without invalidating other devices. Tokens stay in request memory and are redacted from API diagnostics, including error messages that echo a raw token.
+
+An outage or invalid confirmation leaves activation retryable through the existing encrypted-credential/backoff mechanism. A remote account is not created twice. If remote onboarding is already complete on a retry, preferences are left alone. No background job sweeps existing accounts or resets customer choices. A failed logout is surfaced through the API journal and retry path; it does not persist the bearer token locally.
+
+**Separate server setting:** the read-only diagnostic found `machineLearning.enabled=true`, `machineLearning.facialRecognition.enabled=true`, and `map.enabled=true`. Disabling the per-user People preference does **not** disable server-side face analysis. This implementation does not change those global settings or delete existing face metadata. Global recognition configuration requires a separate operator decision.
+
+Contracts checked against the official tagged source: [user API and onboarding](https://github.com/immich-app/immich/blob/v3.3.3/server/src/controllers/user.controller.ts), [preference schema](https://github.com/immich-app/immich/blob/v3.3.3/server/src/dtos/user-preferences.dto.ts), [onboarding steps](https://github.com/immich-app/immich/blob/v3.3.3/web/src/routes/auth/onboarding/+page.svelte), [user privacy](https://github.com/immich-app/immich/blob/v3.3.3/web/src/routes/auth/onboarding/OnboardingUserPrivacy.svelte).
+
+Validation: PHP lint, 626 backend assertions and 60 isolated HTTP assertions passed. Coverage includes setup order, identity/admin mismatch, preference failure/invalid response, retries without duplicate creation, preserving completed preferences, logout and transport credential separation/redaction. Protocol tests use local fixtures; no production customer was created, logged into or reconfigured during validation. A controlled real-device signup remains an operator acceptance check.
+
+Release through the existing NAS `/volume1/docker/zion-storage-subscription/update.sh` after Git publication. Revert the application commit and run the same script to stop applying this profile to future creations. Rollback does not erase preferences or onboarding already saved for accounts created under this version, and does not change their files or subscriptions.

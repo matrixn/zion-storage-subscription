@@ -11,15 +11,33 @@ def check(condition,label):
 class Backend(http.server.BaseHTTPRequestHandler):
     records=[]
     creates=0
+    onboarded=False
+    preferences={}
+    logouts=0
+    token="fixture-immich-session-token-not-real"
     def log_message(self,*args): pass
     def respond(self,obj,status=200):
         self.send_response(status);self.send_header("Content-Type","application/json");self.end_headers();self.wfile.write(json.dumps(obj).encode())
     def do_GET(self):
+        if self.path=="/api/users/me/preferences":
+            assert self.headers.get("Authorization")=="Bearer "+self.token and not self.headers.get("x-api-key")
+            return self.respond(dict(message="invalid session "+self.token),403)
+        if self.path=="/api/users/me/onboarding":
+            assert self.headers.get("Authorization")=="Bearer "+self.token and not self.headers.get("x-api-key")
+            return self.respond(dict(isOnboarded=Backend.onboarded))
         if self.headers.get("x-api-key")!="fixture-storage-key": return self.respond({},403)
         if "?" in self.path: return self.respond(self.records)
         return self.respond(self.records[0] if self.records else {})
     def do_POST(self):
-        body=json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        body=json.loads(self.rfile.read(int(self.headers.get("Content-Length",0))) or b'{}')
+        if self.path=="/api/auth/login":
+            assert not self.headers.get("x-api-key") and not self.headers.get("Authorization")
+            assert body["email"]=="http-fixture@example.com" and body["password"]=="secure-http-test-password"
+            return self.respond(dict(accessToken=self.token,userId=self.records[0]["id"],userEmail=body["email"],isAdmin=False))
+        if self.path=="/api/auth/logout":
+            assert self.headers.get("Authorization")=="Bearer "+self.token and not self.headers.get("x-api-key")
+            Backend.logouts+=1
+            return self.respond(dict(successful=True))
         if self.headers.get("x-api-key")!="fixture-storage-key": return self.respond({},403)
         assert body.pop("password")=="secure-http-test-password"
         assert body["isAdmin"] is False and body["notify"] is False
@@ -28,6 +46,15 @@ class Backend(http.server.BaseHTTPRequestHandler):
         self.records.append(body);self.respond(body,201)
     def do_PUT(self):
         body=json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path.startswith("/api/users/me/"):
+            assert self.headers.get("Authorization")=="Bearer "+self.token and not self.headers.get("x-api-key")
+            if self.path=="/api/users/me/preferences":
+                Backend.preferences.update(body)
+                return self.respond(Backend.preferences)
+            if self.path=="/api/users/me/onboarding":
+                assert Backend.preferences.get("cast",{}).get("gCastEnabled") is False
+                Backend.onboarded=body["isOnboarded"]
+                return self.respond(dict(isOnboarded=Backend.onboarded))
         self.records[0].update(body);self.respond(self.records[0])
 with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
     backend=http.server.ThreadingHTTPServer(("127.0.0.1",0),Backend)
@@ -76,6 +103,8 @@ with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
         status,html=request("/en/complete",dict(_csrf=csrf(html),automatic="1"))
         check(status==200 and "Your Zion Storage account is ready!" in html,"HTTP automatic activation without password through actual cURL adapter")
         check(Backend.creates==1 and Backend.records[0]["quotaSizeInBytes"]==10_000_000_000,"HTTP free quota and single account")
+        check(Backend.onboarded and Backend.preferences==dict(cast=dict(gCastEnabled=False),people=dict(enabled=False,sidebarWeb=False),memories=dict(enabled=True)),"HTTP real adapter configures account before completing Immich onboarding")
+        check(Backend.logouts==1,"HTTP transient provisioning session is revoked")
         status,html=request("/en/complete",dict(_csrf=csrf(request("/en/register")[1]),password="secure-http-test-password"))
         check(Backend.creates==1,"HTTP activation replay idempotent")
         status,_=request("/en/verify-email",dict(_csrf=csrf(request("/en/register")[1]),token=verification))
@@ -108,6 +137,13 @@ with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
         cli("bin/console.php","mail:work")
         check(connection.execute("SELECT COUNT(*) FROM outbox WHERE sent_at IS NULL").fetchone()[0]==0,"HTTP worker delivers local email previews")
         check("secure-http-test-password" not in Path(temp+"/server.log").read_text(),"HTTP server logs exclude passwords")
+        probe='require "src/bootstrap.php";$s=new class extends Zion\\StorageProvisioningService {public function probe():void{$this->userRequest("GET","/users/me/preferences",null,"fixture-immich-session-token-not-real");}};try{$s->probe();exit(2);}catch(Zion\\StorageApiException $e){if($e->httpStatus!==403)exit(3);}'
+        cli("-r",probe)
+        diagnostic=sqlite3.connect(temp+"/api-communication.sqlite")
+        messages=str(diagnostic.execute("SELECT endpoint,message,context FROM api_log").fetchall())
+        check(Backend.token not in messages and "secure-http-test-password" not in messages and "fixture-storage-key" not in messages,"HTTP API journal excludes session tokens and credentials")
+        check("invalid session [redacted]" in messages,"HTTP API error echoing raw user token is redacted")
+        diagnostic.close()
 
         check(connection.execute("SELECT COUNT(*) FROM fiscal_invoices").fetchone()[0]==0,"HTTP free signup has no fiscal document")
         _,html=request("/en/register")

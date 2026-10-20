@@ -36,6 +36,14 @@ check($saved['price_id']==='price_120_year' && $saved['billing_interval']==='yea
 
 final class AdapterFixture extends Zion\StorageProvisioningService {
  public array $calls=[];public array $records=[];
+ private bool $onboarded=false;
+ protected function userRequest(string $method,string $path,?array $body,?string $token):array {
+  if($path==='/auth/login')return ['accessToken'=>'fixture-user-session-token','userId'=>'adapter-id','userEmail'=>'adapter@example.com','isAdmin'=>false];
+  if($path==='/auth/logout')return ['successful'=>true];
+  if($path==='/users/me/preferences')return $body;
+  if($path==='/users/me/onboarding'){if($method==='PUT')$this->onboarded=$body['isOnboarded'];return ['isOnboarded'=>$this->onboarded];}
+  throw new RuntimeException('Unexpected user API request');
+ }
  protected function request(string $method,string $path,?array $body=null):array {
   $this->calls[]=[$method,$path,$body];
   if($method==='GET' && str_starts_with($path,'/admin/users?'))return $this->records;
