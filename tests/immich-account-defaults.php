@@ -1,6 +1,7 @@
 <?php
 /** Only protocol fixtures: never creates an account in the real Immich server. */
 final class ImmichDefaultsFixture extends Zion\StorageProvisioningService {
+ public function __construct(?Zion\Database $db=null){$db??=new Zion\Database(':memory:');$db->migrate();parent::__construct($db);}
  public array $adminCalls=[],$userCalls=[],$records=[];
  public bool $onboarded=false,$adminSession=false,$wrongIdentity=false,$wrongPreferences=false,$failLogout=false;
  public string $failPath='';

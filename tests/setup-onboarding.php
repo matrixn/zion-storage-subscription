@@ -16,4 +16,7 @@ foreach(['ready','pending','provisioning','failed','password','inactive','banned
  if($state==='banned')$db->run('INSERT INTO account_controls(user_id,banned_at,updated_at) VALUES(?,?,?)',[$id,$now,$now]);
  session_id(bin2hex(random_bytes(24)));session_start();$_SESSION=['uid'=>$id,'auth_until'=>$state==='expired'?$now-1:$now+3600];$sessions[$state]=session_id();session_write_close();
 }
+$adminId=bin2hex(random_bytes(16));
+$db->run('INSERT INTO administrators(id,email,password_hash,created_at) VALUES(?,?,?,?)',[$adminId,'preview-admin@example.test','fixture-cli-only',$now]);
+session_name('zion_admin_session');session_id(bin2hex(random_bytes(24)));session_start();$_SESSION=['admin_id'=>$adminId,'admin_until'=>$now+3600];$sessions['admin']=session_id();session_write_close();
 echo json_encode($sessions,JSON_THROW_ON_ERROR);

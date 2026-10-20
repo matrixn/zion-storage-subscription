@@ -36,6 +36,7 @@ check($saved['price_id']==='price_120_year' && $saved['billing_interval']==='yea
 
 final class AdapterFixture extends Zion\StorageProvisioningService {
  public array $calls=[];public array $records=[];
+ public function __construct(){ $db=new Zion\Database(':memory:');$db->migrate();parent::__construct($db); }
  private bool $onboarded=false;
  protected function userRequest(string $method,string $path,?array $body,?string $token):array {
   if($path==='/auth/login')return ['accessToken'=>'fixture-user-session-token','userId'=>'adapter-id','userEmail'=>'adapter@example.com','isAdmin'=>false];

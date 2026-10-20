@@ -1,4 +1,5 @@
 <?php $state=$immichOverview['state'];$connection=$state['connection']??[]; ?>
+<div class="quick-links"><a href="/admin?section=immich-general">Configurare generală Immich și preferințe conturi noi ↗</a></div>
 <section><h2>Conexiune Immich</h2><p>Configurează API-ul folosit pentru activări, cote, suspendare și statistici. După salvare, valorile Immich din .env nu mai sunt folosite.</p>
 <form method="post"><input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><input type="hidden" name="action" value="immich_save">
 <label>URL API Immich<input type="url" name="url" value="<?= e($immichSettings['url']) ?>" placeholder="https://photos.example.ro/api" maxlength="1000"></label><p class="micro">Adresa serverului tău, cu /api la final. Dacă introduci doar adresa serverului, /api se adaugă automat. În producție este necesar HTTPS.</p>

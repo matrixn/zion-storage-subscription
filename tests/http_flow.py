@@ -15,10 +15,18 @@ class Backend(http.server.BaseHTTPRequestHandler):
     preferences={}
     logouts=0
     token="fixture-immich-session-token-not-real"
+    config=dict(machineLearning=dict(enabled=True,facialRecognition=dict(enabled=False,modelName="preserved-model"),clip=dict(enabled=True)),map=dict(enabled=True),oauth=dict(clientSecret="fixture-admin-config-secret"),passwordLogin=dict(enabled=True))
+    config_reads=0
+    config_writes=0
+    deny_config=False
     def log_message(self,*args): pass
     def respond(self,obj,status=200):
         self.send_response(status);self.send_header("Content-Type","application/json");self.end_headers();self.wfile.write(json.dumps(obj).encode())
     def do_GET(self):
+        if self.path=="/api/system-config":
+            Backend.config_reads+=1
+            if self.headers.get("x-api-key")!="fixture-storage-key" or Backend.deny_config: return self.respond({},403)
+            return self.respond(Backend.config)
         if self.path=="/api/users/me/preferences":
             assert self.headers.get("Authorization")=="Bearer "+self.token and not self.headers.get("x-api-key")
             return self.respond(dict(message="invalid session "+self.token),403)
@@ -46,6 +54,11 @@ class Backend(http.server.BaseHTTPRequestHandler):
         self.records.append(body);self.respond(body,201)
     def do_PUT(self):
         body=json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path=="/api/system-config":
+            if self.headers.get("x-api-key")!="fixture-storage-key" or Backend.deny_config: return self.respond({},403)
+            Backend.config_writes+=1
+            Backend.config=body
+            return self.respond(Backend.config)
         if self.path.startswith("/api/users/me/"):
             assert self.headers.get("Authorization")=="Bearer "+self.token and not self.headers.get("x-api-key")
             if self.path=="/api/users/me/preferences":
@@ -183,6 +196,39 @@ with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
         result=json.loads(cli("bin/retry-oblio-invoices.php"))
         check(result["processed"]==0,"HTTP CLI retry skips simulated and issued documents")
 
+        cli("-r",'require "src/bootstrap.php";$db=new Zion\\Database();$db->run("INSERT INTO administrators(id,email,password_hash,created_at) VALUES(?,?,?,?)",[str_repeat("a",32),"admin-http@example.test",password_hash("isolated-admin-password",PASSWORD_ARGON2ID),time()]);')
+        _,admin_page=request('/admin?section=immich-general')
+        check('name="action" value="login"' in admin_page and 'name="revision"' not in admin_page and Backend.config_reads==0,'anonymous admin page never fetches or reveals Immich configuration')
+        status,_=request('/admin?section=immich-general',dict(_csrf=csrf(admin_page),action='immich_general_defaults',**{'defaults[cast]':'1','defaults[people]':'1','defaults[memories]':'0'}))
+        check(status==422 and Backend.config_writes==0,'unauthenticated actions cannot change defaults or global settings')
+        _,admin_page=request('/admin?section=immich-general')
+        status,_=request('/admin',dict(_csrf=csrf(admin_page),action='login',email='admin-http@example.test',password='isolated-admin-password'))
+        check(status==200,'isolated administrator authentication')
+        status,admin_page=request('/admin?section=immich-general')
+        check(status==200 and 'Funcțiile serverului Immich' in admin_page and 'Preferințe implicite' in admin_page,'dedicated Immich configuration page renders both scopes')
+        check('fixture-admin-config-secret' not in admin_page and 'preserved-model' not in admin_page and 'fixture-storage-key' not in admin_page,'general settings HTML never contains unfiltered server configuration or credentials')
+        revision=lambda page: re.search(r'name="revision" value="([a-f0-9]{64})"',page).group(1)
+        old_revision=revision(admin_page)
+        flags={'features[machine_learning]':'1','features[facial_recognition]':'1','features[smart_search]':'0','features[map]':'1'}
+        status,_=request('/admin?section=immich-general',dict(action='immich_general_server',revision=old_revision,**flags))
+        check(status==419 and Backend.config_writes==0,'global Immich changes require CSRF')
+        status,admin_page=request('/admin?section=immich-general',dict(_csrf=csrf(admin_page),action='immich_general_server',revision=old_revision,**flags))
+        check(status==200 and Backend.config_writes==1 and Backend.config['machineLearning']['facialRecognition']['enabled'] is True,'administrator enables global recognition via actual adapter')
+        check(Backend.config['oauth']['clientSecret']=='fixture-admin-config-secret' and Backend.config['map']['enabled'] is True and Backend.config['passwordLogin']['enabled'] is True,'global update preserves secrets, maps and authentication')
+        status,admin_page=request('/admin?section=immich-general',dict(_csrf=csrf(admin_page),action='immich_general_server',revision=old_revision,**flags))
+        check(status==422 and Backend.config_writes==1 and 's-a schimbat' in admin_page,'stale general-settings form is rejected without writing Immich')
+        flags['features[facial_recognition]']='0'
+        status,admin_page=request('/admin?section=immich-general',dict(_csrf=csrf(admin_page),action='immich_general_server',revision=revision(admin_page),**flags))
+        check(status==200 and Backend.config_writes==2 and Backend.config['machineLearning']['facialRecognition']['enabled'] is False,'administrator can turn global recognition off again')
+        status,admin_page=request('/admin?section=immich-general',dict(_csrf=csrf(admin_page),action='immich_general_defaults',**{'defaults[cast]':'1','defaults[people]':'1','defaults[memories]':'0'}))
+        profile=json.loads(connection.execute("SELECT value FROM integration_settings WHERE key='immich:account-defaults:v1'").fetchone()[0])
+        check(status==200 and profile==dict(cast=True,people=True,memories=False) and Backend.config_writes==2,'administrator saves future-account defaults independently from global server state')
+        Backend.deny_config=True
+        status,admin_page=request('/admin?section=immich-general')
+        check(status==200 and 'systemConfig.read' in admin_page and 'name="revision"' not in admin_page,'API permission failure shows safe guidance without a usable global save form')
+        status,_=request('/admin?section=immich-general',dict(_csrf=csrf(admin_page),action='immich_general_defaults',**{'defaults[cast]':'0','defaults[people]':'0','defaults[memories]':'1'}))
+        check(status==200 and Backend.config_writes==2,'local defaults remain configurable during an Immich API outage')
+        Backend.deny_config=False
         print(str(checks)+" HTTP assertions passed.")
     finally:
         server.terminate();server.wait(timeout=5);backend.shutdown();log.close()

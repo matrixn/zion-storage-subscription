@@ -26,6 +26,9 @@ class StorageProvisioningService {
   return json_decode($raw,true,512,JSON_THROW_ON_ERROR)?:[];
  }
  public function statistics(): array {return $this->request('GET','/server/statistics');}
+ /** Server-side configuration only: callers must never expose this response to HTML/logs. */
+ public function configuration(): array {return $this->request('GET','/system-config');}
+ public function updateConfiguration(array $config): array {return $this->request('PUT','/system-config',$config);}
  public function createUser(array $user,string $password,int $quota): string {
   $label='zs-'.$user['id'];
   // Reconcile timeouts after remote creation without adopting unrelated accounts.
@@ -52,7 +55,7 @@ class StorageProvisioningService {
    if(($onboarding['isOnboarded']??null)!==false)throw new \RuntimeException('storage_invalid_onboarding');
    // Account preferences supported by Immich 3.3.3. Language/theme are device-local.
    // people.enabled controls the UI, not the server's facial-recognition processing.
-   $defaults=['cast'=>['gCastEnabled'=>false],'people'=>['enabled'=>false,'sidebarWeb'=>false],'memories'=>['enabled'=>true]];
+   $defaults=(new ImmichConfiguration($this->db??new Database(),$this))->preferences();
    $preferences=$this->userRequest('PUT','/users/me/preferences',$defaults,$token);
    foreach($defaults as $group=>$values)foreach($values as $key=>$value)if(($preferences[$group][$key]??null)!==$value)throw new \RuntimeException('storage_preferences_not_confirmed');
    $result=$this->userRequest('PUT','/users/me/onboarding',['isOnboarded'=>true],$token);

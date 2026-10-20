@@ -19,9 +19,9 @@ final class AdminApplication {
   if(production())header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
   $path=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
-  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
+  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','immich-general'=>'Immich · Configurare generală','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
-  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',in_array($action,['fiscal_retry','fiscal_generate'],true)=>'invoices',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset','archive','restore'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',in_array($action,['fiscal_retry','fiscal_generate'],true)=>'invoices',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',str_starts_with($action,'immich_general_')=>'immich-general',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset','archive','restore'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
@@ -100,6 +100,22 @@ final class AdminApplication {
       }
       $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin['id'],$action,'accepted',time()]);$_SESSION['admin_notice']=$message;
      }
+     $this->redirect();
+    }
+    if(in_array($action,['immich_general_defaults','immich_general_server'],true)){
+     $this->section='immich-general';
+     if(!Security::limit($this->db,'immich-configuration:'.$admin['id'],12,900))throw new \DomainException('Prea multe salvări Immich. Reîncearcă mai târziu.');
+     $configuration=new ImmichConfiguration($this->db);
+     try{
+      if($action==='immich_general_defaults'){
+       $configuration->saveAccountDefaults(is_array($_POST['defaults']??null)?$_POST['defaults']:[],$admin['id']);
+       $_SESSION['admin_notice']='Preferințele au fost salvate pentru conturile noi. Conturile deja activate își păstrează alegerile.';
+      }else{
+       $configuration->saveServer(is_array($_POST['features']??null)?$_POST['features']:[],is_string($_POST['revision']??null)?$_POST['revision']:'',$admin['id']);
+       $_SESSION['admin_notice']='Configurația serverului Immich a fost verificată. Clienții deschiși pot necesita reîncărcarea aplicației.';
+      }
+     }catch(\DomainException $e){throw $e;}
+     catch(\Throwable $e){throw new \DomainException(ImmichConfiguration::error($e));}
      $this->redirect();
     }
     if(in_array($action,['immich_save','immich_check','immich_sync'],true)){
@@ -196,6 +212,10 @@ final class AdminApplication {
    $listmonkSettings=$integrations->listmonk();$listmonkSaved=$integrations->saved('listmonk')!==null;
    $immichSettings=$integrations->immich();$immichSaved=$integrations->saved('immich')!==null;
    $immichOverview=(new ImmichStatistics($this->db))->overview();
+   if($section==='immich-general'){
+    $configuration=new ImmichConfiguration($this->db);$immichDefaults=$configuration->accountDefaults();$immichServer=null;$immichGeneralError=null;
+    try{$immichServer=$configuration->server();}catch(\Throwable $e){$immichGeneralError=ImmichConfiguration::error($e);}
+   }
    $stripeSaved=$integrations->saved('stripe')!==null;$oblioSaved=$integrations->saved('oblio')!==null;
    $stripeState=(new StripeIntegration($this->db,$this->plans,null,$stripeMode))->state();
   }

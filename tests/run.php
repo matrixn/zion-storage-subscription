@@ -122,3 +122,4 @@ require __DIR__.'/listmonk.php';
 require __DIR__.'/manual-billing-archive.php';
 require __DIR__.'/mobile-onboarding.php';
 require __DIR__.'/immich-account-defaults.php';
+require __DIR__.'/immich-configuration.php';
