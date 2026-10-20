@@ -167,6 +167,7 @@ final class Application {
   $activationDue=$automaticActivation && !(bool)$this->db->one('SELECT user_id FROM activation_credentials WHERE user_id=? AND next_attempt_at>?',[$user['id'],time()]);
   $stripeMode=(new IntegrationSettings($this->db))->stripe()['mode'];
   $banned=$user?(new AccountControl($this->db))->banned($user['id']):false;
+  $onboarding=in_array($view,['status','activate'],true)?(new MobileOnboarding($this->db))->view($user,$eligible,$banned,(bool)$automaticActivation):null;
   $upgradeOffers=$user && $this->billing instanceof StripeService?$this->billing->changes()->offers($user):[];
   $latestChange=$user?$this->db->one('SELECT * FROM plan_changes WHERE user_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',[$user['id']]):null;
   $profile=$user?(new BillingProfileService($this->db))->get($user['id']):null;
@@ -175,7 +176,7 @@ final class Application {
   $receipt=$data['receipt']??null;
   $error=$data['error']??null;$message=$data['message']??null;
   $selected=(string)($_GET['plan']??$_POST['plan']??'free'); if(!$this->plans->get($selected))$selected='free';
-  $canonicalPage=in_array($page,['home','how','register','contact','legal'],true)?$page:'home';
+  $canonicalPage=in_array($page,['home','how','register','contact','legal','status'],true)?$page:($page==='activate'?'status':'home');
   $legalQuery=$page==='legal'?'?document='.(in_array($_GET['document']??'',['privacy','terms','cookies'],true)?$_GET['document']:'privacy'):((($_GET['request']??$_POST['request_type']??'')==='withdrawal')?'?request=withdrawal':'');
   $title=$t(match($page){'home'=>'hero.title','how'=>'how.title','register'=>'register.title','contact'=>'contact.title','legal'=>'legal.'.(in_array($_GET['document']??'',['privacy','terms','cookies'],true)?$_GET['document']:'privacy'),default=>'status.title'});
   $description=$t(match($page){'home'=>'hero.description','how'=>'how.description','register'=>'register.desc','contact'=>'contact.desc',default=>'footer.tag'});

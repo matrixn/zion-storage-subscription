@@ -66,9 +66,7 @@ if(form){
 }
 
 // Only a CSRF-protected POST creates storage access; GET polling only reads local state.
-const activation=document.querySelector('[data-auto-activation]');
-if(activation)setTimeout(()=>activation.requestSubmit(),300);
-else if(document.querySelector('[data-status-poll]'))setTimeout(()=>location.reload(),5000);
+// Activation page timers live in onboarding.js with a bounded refresh budget.
 
 document.querySelector('[data-receipt-download]')?.addEventListener('click',()=>{const receipt=document.querySelector('[data-legal-receipt]');if(!receipt)return;const url=URL.createObjectURL(new Blob([receipt.textContent],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='zion-storage-withdrawal.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 
