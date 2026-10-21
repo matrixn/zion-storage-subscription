@@ -14,7 +14,7 @@ final class StripeIntegration {
  }
  private static function fingerprint(array $settings,bool $webhook=false): string {return hash('sha256',$settings['mode'].'|'.$settings['secret_key'].($webhook?'|'.$settings['webhook_secret']:''));}
  private function manifest(): string {
-  return hash('sha256',json_encode(array_map(static fn($p)=>[$p['slug'],$p['name'],$p['monthly_price'],$p['yearly_price'],$p['currency'],$p['price_amount'],$p['fx']['rate_date']??null],$this->plans->all('month',$this->settings['mode'])),JSON_THROW_ON_ERROR));
+  return hash('sha256',json_encode(array_map(static fn($p)=>[$p['slug'],$p['name'],$p['storage_bytes'],$p['monthly_price'],$p['yearly_price'],$p['currency'],$p['price_amount'],$p['fx']['rate_date']??null],$this->plans->all('month',$this->settings['mode'])),JSON_THROW_ON_ERROR));
  }
  private function store(string $key,array $value): void {
   $this->db->run('INSERT INTO integration_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',['stripe:'.$key.':'.$this->settings['mode'],json_encode($value,JSON_THROW_ON_ERROR)]);

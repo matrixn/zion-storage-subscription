@@ -29,6 +29,21 @@ final class Plans {
   $r=$this->db->one('SELECT * FROM billing_prices WHERE price_id=?',[$id]);if(!$r)return null;
   $p=$this->get($r['plan'],$r['interval'],$r['stripe_mode']);if(!$p)return null;
   $fx=$r['fx_snapshot']?json_decode($r['fx_snapshot'],true):null;
+  $p=self::withCapacity($p,$r['storage_bytes']??$p['storage_bytes']);
   return array_replace($p,['fx'=>$fx,'eur_amount'=>$r['eur_amount']??($r['currency']==='eur'?$r['amount']:$p['eur_amount']),'fx_managed'=>$r['currency']==='ron' && $fx!==null,'stripe_price_id'=>$id,'gross_amount'=>BillingTax::total($r['amount']??$p['price_amount'],$p['tax_bps']),'price_amount'=>$r['amount']??$p['price_amount'],'currency'=>$r['currency'],'billing_interval'=>$r['interval'],'legacy'=>$r['status']==='legacy']);
  }
+ public static function withCapacity(array $p,int $bytes): array {
+  $p['storage_bytes']=$bytes;$p['capacity']=PlanSettings::capacity($bytes);
+  $p['invoice_name_ro']=$p['slug']==='free'?'':($p['billing_interval']==='year'?'Abonament anual Zion Storage ':'Abonament Zion Storage ').$p['name'].' '.$p['capacity'];
+  return $p;
+ }
+ public function forUser(array $u): ?array {
+  $p=$this->get($u['selected_plan_id'],$u['billing_interval']??'month',$u['stripe_mode']??null);if(!$p)return null;
+  if($u['selected_plan_id']!=='free' && !(new AccountControl($this->db))->manual($u['id'])){
+   $s=$this->db->one('SELECT stripe_price_id FROM subscriptions WHERE user_id=?',[$u['id']]);
+   if($s && ($historical=$this->byPrice($s['stripe_price_id']??'')))return $historical;
+  }
+  return self::withCapacity($p,$u['storage_quota_bytes']>0?$u['storage_quota_bytes']:$p['storage_bytes']);
+ }
+
 }

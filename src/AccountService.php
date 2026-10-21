@@ -16,6 +16,7 @@ final class AccountService {
     $this->rememberPassword($id,$data['password']);
     if($data['plan']!=='free' && isset($data['billing'])) (new BillingProfileService($this->db))->save($id,$data['billing']);
     $plan=$this->plans->get($data['plan'],$interval);
+    if($data['plan']==='free')$this->db->run('UPDATE users SET storage_quota_bytes=? WHERE id=?',[$plan['storage_bytes'],$id]);
     foreach($this->db->run('SELECT email FROM administrators')->fetchAll() as $administrator){
      $recipient=strtolower($administrator['email']);
      $this->mail->queue($recipient,'ro','admin_signup',['name'=>$data['name'],'email'=>strtolower($data['email']),'plan'=>$plan['name'],'capacity'=>$plan['capacity'],'interval'=>$interval==='year'?'Anual':'Lunar','created'=>(new \DateTimeImmutable('now',new \DateTimeZone('Europe/Bucharest')))->format('d.m.Y H:i'),'url'=>base_url().'/admin?section=clients&q='.rawurlencode(strtolower($data['email']))],'admin-signup:'.$id.':'.hash('sha256',$recipient));
@@ -110,7 +111,7 @@ final class AccountService {
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$id]);
    if(!$u || !$this->eligible($u) || !$u['terms_at'] || !$u['privacy_at'] || !password_verify($password,$u['password_hash'])) return false;
    if($u['storage_user_id']){$this->db->run('DELETE FROM activation_credentials WHERE user_id=?',[$id]);return true;}
-   $p=$this->plans->get($u['selected_plan_id']); if(!$p) return false;
+   $p=$this->plans->forUser($u); if(!$p) return false;
    $this->db->run("INSERT INTO provisioning_events(user_id,action,status,created_at) VALUES(?,'create','started',?)",[$id,time()]);
    $external=$this->storage->createUser($u,$password,$p['storage_bytes']);
    $this->storage->enableUser($external,$p['storage_bytes']);

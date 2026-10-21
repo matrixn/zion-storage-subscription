@@ -20,7 +20,7 @@ class BnrRates {
   return $row;
  }
  public static function signature(array $plan,string $uid): string {
-  return hash_hmac('sha256',json_encode([$uid,$plan['slug'],$plan['billing_interval'],$plan['stripe_mode'],$plan['eur_amount'],$plan['price_amount'],$plan['tax_bps'],$plan['fx']['rate_date']??null,$plan['fx']['eur_ron']??null],JSON_THROW_ON_ERROR),env('APP_KEY'));
+  return hash_hmac('sha256',json_encode([$uid,$plan['slug'],$plan['billing_interval'],$plan['stripe_mode'],$plan['eur_amount'],$plan['storage_bytes'],$plan['price_amount'],$plan['tax_bps'],$plan['fx']['rate_date']??null,$plan['fx']['eur_ron']??null],JSON_THROW_ON_ERROR),env('APP_KEY'));
  }
  public static function metadata(array $plan): array {return ['zion_fx_policy'=>'bnr_v1','zion_eur_amount'=>(string)$plan['eur_amount'],'zion_fx_rate'=>(string)$plan['fx']['eur_ron'],'zion_fx_date'=>$plan['fx']['rate_date']];}
  public function quote(int $eurMinor,?string $date=null): array {

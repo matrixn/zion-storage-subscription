@@ -134,3 +134,5 @@ require __DIR__.'/pricing-revision.php';
 require __DIR__.'/bnr-ron.php';
 
 require __DIR__.'/plan-settings.php';
+
+require __DIR__.'/plan-capacity.php';

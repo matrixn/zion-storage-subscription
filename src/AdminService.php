@@ -36,6 +36,7 @@ final class AdminService {
   $this->db->transaction(function()use($id,$name,$email,$password,$plan,$locale,$admin){
    // The customer must personally accept the terms before storage activation.
    $this->db->run('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,0,0,?,?)',[$id,$name,$email,password_hash($password,PASSWORD_ARGON2ID),$locale,$plan,time(),time()]);
+   $this->db->run('UPDATE users SET storage_quota_bytes=? WHERE id=?',[$this->plans->get($plan)['storage_bytes'],$id]);
    $this->db->run('INSERT INTO account_controls(user_id,manual_plan,updated_at) VALUES(?,?,?)',[$id,$plan,time()]);
    $this->changes->audit($admin,$id,'create_customer','Plan manual: '.$plan.'; verificare email necesară');
   });
@@ -76,7 +77,7 @@ final class AdminService {
     $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$uid]);
     $entitled=$u['email_verified_at'] && ($u['selected_plan_id']==='free' || $control->manual($uid)===$u['selected_plan_id'] || ($s && $s['status']==='active' && $s['paid_confirmed']));
     if($u['storage_user_id']){
-     if($entitled)$this->storage->enableUser($u['storage_user_id'],$this->plans->get($u['selected_plan_id'])['storage_bytes']);
+     if($entitled)$this->storage->enableUser($u['storage_user_id'],$this->plans->forUser($u)['storage_bytes']);
      else $this->storage->disableUser($u['storage_user_id']);
     }
     $this->db->transaction(function()use($uid,$u,$entitled,$reason,$admin){
@@ -91,7 +92,7 @@ final class AdminService {
   $this->changes->serialized($uid,function()use($uid,$admin){
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);if(!$u)throw new \DomainException('Client inexistent.');
    $eligible=(new AccountService($this->db,$this->plans,$this->mail,$this->storage))->eligible($u);
-   $p=$this->plans->get($u['selected_plan_id']);
+   $p=$this->plans->forUser($u);
    if($u['storage_user_id']){
     if($eligible)$this->storage->enableUser($u['storage_user_id'],$p['storage_bytes']);else $this->storage->disableUser($u['storage_user_id']);
    }

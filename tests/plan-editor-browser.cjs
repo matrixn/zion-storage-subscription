@@ -14,16 +14,18 @@ function check(ok,label){if(!ok)throw Error(label);checks++;console.log('PASS '+
  check(await page.locator('[data-plan-editor]').count()===4,'all existing packages editable');
  check(await page.locator('[data-plan-editor]').first().locator('[name=monthly_price]').getAttribute('readonly')!==null,'free package price remains read-only');
  const personal=page.locator('[data-plan-editor]').nth(1);
- await personal.locator('[name=name]').fill('Essential Prime');await personal.locator('[name=monthly_price]').fill('4,59');
+ await personal.locator('[name=name]').fill('Essential Prime');await personal.locator('[name=storage_gb]').fill('150');await personal.locator('[name=monthly_price]').fill('4,59');
  check((await personal.locator('[data-plan-annual]').innerText()).includes('50,49'),'annual preview updates immediately at eleven monthly prices');
  await personal.getByRole('button').click();await page.waitForLoadState('networkidle');
  check((await page.locator('[role=status]').innerText()).includes('Pachet salvat.'),'save confirms persistence independently from unavailable test Stripe transport');
  await page.reload();check(await page.locator('[data-plan-editor]').nth(1).locator('[name=name]').inputValue()==='Essential Prime','saved name survives reload');
+ check(await page.locator('[data-plan-editor]').nth(1).locator('[name=storage_gb]').inputValue()==='150','saved GB capacity survives reload');
  const denied=await ctx.request.post(origin+'/admin?section=plans',{form:{action:'plan_save',plan:'120gb',name:'Forged',monthly_price:'1.00'}});
  check(denied.status()===419,'edit action protected by administrator CSRF');
  for(const locale of ['ro','en','fr','de']){
   await page.goto(origin+'/'+locale+'/');
   check((await page.locator('.plan-name').allTextContents()).includes('Essential Prime'),'saved name appears publicly in '+locale);
+  check((await page.locator('.plan h3').nth(1).innerText())==='150 GB','saved capacity appears publicly in '+locale);
   check((await page.locator('.price-amount').nth(1).innerText()).includes(locale==='en'?'4.59':'4,59'),'updated monthly price in '+locale);
   await page.locator('[data-billing-switch] [value=year]').click();
   check((await page.locator('.price-amount').nth(1).innerText()).includes(locale==='en'?'50.49':'50,49'),'annual price stays eleven months in '+locale);

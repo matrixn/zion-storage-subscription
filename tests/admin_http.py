@@ -94,11 +94,11 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(request(admin,'/admin?section=plans',{'action':'plan_save','plan':'120gb','name':'Essential','monthly_price':'5.49'})[0]==419,'plan edits require administrator CSRF')
             status,plan_html,_=request(admin,'/admin?section=plans',{'_csrf':csrf(plan_html),'action':'plan_save','plan':'120gb','name':'<b>Invalid</b>','monthly_price':'5.49'})
             check(status==422 and '&lt;b&gt;Invalid&lt;/b&gt;' in plan_html,'invalid plan names rejected and safely escaped in editable draft')
-            status,plan_html,_=request(admin,'/admin?section=plans',{'_csrf':csrf(plan_html),'action':'plan_save','plan':'120gb','name':'Essential','monthly_price':'5,49'})
+            status,plan_html,_=request(admin,'/admin?section=plans',{'_csrf':csrf(plan_html),'action':'plan_save','plan':'120gb','name':'Essential','monthly_price':'5,49','storage_gb':'150'})
             check(status==200 and 'Pachet salvat.' in plan_html and '60,39 EUR' in plan_html,'admin saves plan with comma-decimal amount and automatic annual price')
             public_html=request(customer,'/en/')[1]
-            check('Essential' in public_html and 'EUR 5.49' in public_html,'saved plan changes immediately appear on public pricing')
-            status,plan_html,_=request(admin,'/admin?section=plans',{'_csrf':csrf(plan_html),'action':'plan_save','plan':'120gb','name':'Personal','monthly_price':'3.99'})
+            check('Essential' in public_html and 'EUR 5.49' in public_html and '150 GB' in public_html,'saved plan changes immediately appear on public pricing')
+            status,plan_html,_=request(admin,'/admin?section=plans',{'_csrf':csrf(plan_html),'action':'plan_save','plan':'120gb','name':'Personal','monthly_price':'3.99','storage_gb':'120'})
             check(status==200,'restore isolated catalog fixture for subsequent tests')
 
             lm_body=request(admin,'/admin?section=listmonk')[1]

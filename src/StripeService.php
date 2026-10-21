@@ -33,8 +33,8 @@ class StripeService implements BillingService {
    $old=$this->db->one('SELECT * FROM checkout_sessions WHERE user_id=? AND expires_at>?',[$u['id'],time()+60]);
    if($old && ($old['fx_snapshot']?json_decode($old['fx_snapshot'],true)['eur_ron']??null:null)===$p['fx']['eur_ron'] && ($old['fx_snapshot']?json_decode($old['fx_snapshot'],true)['rate_date']??null:null)===$p['fx']['rate_date'] && $old['price_id']===$p['stripe_price_id'] && $old['billing_interval']===$interval && $old['stripe_mode']===$this->settings['mode'] && $old['tax_bps']===$p['tax_bps'])return $old['url'];
    if($old)throw new \DomainException('checkout.pending_quote');
-   $mapping=$this->db->one('SELECT currency,amount FROM billing_prices WHERE price_id=?',[$p['stripe_price_id']]);
-   if(!$mapping || $mapping['currency']!=='ron' || $mapping['amount']!==$p['price_amount']){
+   $mapping=$this->db->one('SELECT currency,amount,storage_bytes FROM billing_prices WHERE price_id=?',[$p['stripe_price_id']]);
+   if(!$mapping || $mapping['currency']!=='ron' || $mapping['amount']!==$p['price_amount'] || ($mapping['storage_bytes']!==null && $mapping['storage_bytes']!==$p['storage_bytes'])){
     $admin=$this->db->one('SELECT id FROM administrators ORDER BY created_at LIMIT 1')['id']??null;
     if(!$admin)throw new \DomainException('upgrade.unconfigured');
     $this->catalog()->synchronize($p['slug'],$interval,$admin);
@@ -298,7 +298,7 @@ class StripeService implements BillingService {
    // must never delay Stripe's webhook acknowledgement or change payment status.
    $this->trace('storage');
    if(!$oldSubscription && !$manual && $u['storage_user_id'] && !(new AccountControl($this->db))->banned($uid)) {
-    if($paid) $this->storage->enableUser($u['storage_user_id'],$p['storage_bytes']);
+    if($paid){$this->storage->enableUser($u['storage_user_id'],$p['storage_bytes']);$this->db->run('UPDATE users SET storage_quota_bytes=? WHERE id=?',[$p['storage_bytes'],$uid]);}
     else $this->storage->disableUser($u['storage_user_id']);
     $this->db->run('UPDATE users SET status=?,updated_at=? WHERE id=?',[$paid?'active':'restricted',time(),$uid]);
    }

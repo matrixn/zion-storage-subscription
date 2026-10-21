@@ -20,8 +20,8 @@ class SubscriptionChanges {
  private function currentPlan(string $slug,string $interval,string $mode): array {
   $p=$this->plans->get($slug,$interval,$mode);
   if(!$p || !$p['fx'])throw new \DomainException('upgrade.unconfigured');
-  $mapping=$this->db->one('SELECT currency,amount FROM billing_prices WHERE price_id=?',[$p['stripe_price_id']]);
-  if(!$mapping || $mapping['currency']!=='ron' || $mapping['amount']!==$p['price_amount']){
+  $mapping=$this->db->one('SELECT currency,amount,storage_bytes FROM billing_prices WHERE price_id=?',[$p['stripe_price_id']]);
+  if(!$mapping || $mapping['currency']!=='ron' || $mapping['amount']!==$p['price_amount'] || ($mapping['storage_bytes']!==null && $mapping['storage_bytes']!==$p['storage_bytes'])){
    $admin=$this->db->one('SELECT id FROM administrators ORDER BY created_at LIMIT 1')['id']??null;
    if(!$admin)throw new \DomainException('upgrade.unconfigured');
    (new BillingCatalog($this->db,$this->plans,$this->stripe,$mode))->synchronize($slug,$interval,$admin);
@@ -40,7 +40,7 @@ class SubscriptionChanges {
   if(!$from || $s['currency']!=='ron' || !$from['fx_managed'])return [];
   if(!$origin || !$from || $from['slug']==='free' || $now>$origin['purchased_at']+5*86400 || $now>=$origin['original_period_end'])return [];
   $offers=[];
-  foreach($this->plans->all($interval,$s['stripe_mode']) as $p) if($p['storage_bytes']>$from['storage_bytes'] && $p['eur_amount']>$from['eur_amount'] && $p['fx']) {
+  foreach($this->plans->all($interval,$s['stripe_mode']) as $p) if($p['slug']!==$from['slug'] && $p['storage_bytes']>$from['storage_bytes'] && $p['eur_amount']>$from['eur_amount'] && $p['fx']) {
    $offers[]=['plan'=>$p,'eur_amount'=>$p['eur_amount']-$from['eur_amount'],'base_amount'=>BnrRates::convert($p['eur_amount']-$from['eur_amount'],$p['fx']['eur_ron']),'amount'=>BillingTax::total(BnrRates::convert($p['eur_amount']-$from['eur_amount'],$p['fx']['eur_ron']),$p['tax_bps']),'deadline'=>$origin['purchased_at']+5*86400,'renewal_at'=>$s['renewal_at']];
   }
   return $offers;
@@ -177,7 +177,7 @@ class SubscriptionChanges {
    $expected=$r['tax_rate_id']?[$r['tax_rate_id']]:[];
    if($actual!==$expected || (string)($s['metadata']['zion_vat_bps']??'')!==(string)$r['tax_bps'] || (!$expected && !empty($s['default_tax_rates'])))throw new \RuntimeException('subscription_tax_sync_requires_review');
   }
-  $p=$this->plans->get($r['to_plan'],$r['billing_interval'],$r['stripe_mode']);$u=$this->db->one('SELECT * FROM users WHERE id=?',[$r['user_id']]);
+  $p=$this->plans->byPrice($r['to_price'])??$this->plans->get($r['to_plan'],$r['billing_interval'],$r['stripe_mode']);$u=$this->db->one('SELECT * FROM users WHERE id=?',[$r['user_id']]);
   // Persist billing identity before provisioning. A failed quota update remains retryable.
   $this->db->transaction(function()use($r,$p){
    $this->db->run('UPDATE users SET selected_plan_id=?,updated_at=? WHERE id=?',[$p['slug'],time(),$r['user_id']]);
@@ -226,9 +226,9 @@ class SubscriptionChanges {
    }else{
     if($this->db->one('SELECT user_id FROM checkout_sessions WHERE user_id=? AND expires_at>?',[$uid,time()]))throw new \DomainException('Există o plată inițială deschisă. Așteaptă expirarea sau confirmarea ei înainte de acordarea manuală a planului.');
     // Manual entitlement is deliberately separate from a paid Stripe subscription.
-    $this->db->transaction(function()use($uid,$target,$admin,$reason){
+    $this->db->transaction(function()use($uid,$target,$admin,$reason,$p){
      $this->db->run("INSERT INTO account_controls(user_id,manual_plan,quota_sync,updated_at) VALUES(?,?,'pending',?) ON CONFLICT(user_id) DO UPDATE SET manual_plan=excluded.manual_plan,quota_sync='pending',updated_at=excluded.updated_at",[$uid,$target,time()]);
-     $this->db->run('UPDATE users SET selected_plan_id=?,updated_at=? WHERE id=?',[$target,time(),$uid]);
+     $this->db->run('UPDATE users SET selected_plan_id=?,storage_quota_bytes=?,updated_at=? WHERE id=?',[$target,$p['storage_bytes'],time(),$uid]);
      $this->audit($admin,$uid,'manual_plan',$target.'; '.$reason);
     });
     if($u['storage_user_id'] && !(new AccountControl($this->db))->banned($uid))$this->storage->enableUser($u['storage_user_id'],$p['storage_bytes']);

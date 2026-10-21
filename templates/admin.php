@@ -3,7 +3,7 @@ $adminUrl=static fn(string $target):string=>'/admin?section='.$target;
 $formatDate=static fn(?int $timestamp):string=>$timestamp?(new DateTimeImmutable('@'.$timestamp))->setTimezone(new DateTimeZone('Europe/Bucharest'))->format('d.m.Y H:i'):'—';
 $money=static fn(int $minor,string $currency):string=>number_format($minor/100,2,',',' ').' '.strtoupper($currency);
 ?>
-<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title><?= e($admin?$sections[$section]:'Autentificare') ?> · Zion Admin</title><link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png"><link rel="stylesheet" href="/assets/admin.css?v=plan-editor-1"><script src="/assets/admin.js?v=plan-editor-1" defer></script></head><body class="<?= $admin?'admin-shell'.($section==='immich-general'?' immich-general-page':''):'login-page' ?>">
+<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title><?= e($admin?$sections[$section]:'Autentificare') ?> · Zion Admin</title><link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png"><link rel="stylesheet" href="/assets/admin.css?v=plan-capacity-1"><script src="/assets/admin.js?v=plan-capacity-1" defer></script></head><body class="<?= $admin?'admin-shell'.($section==='immich-general'?' immich-general-page':''):'login-page' ?>">
 <a class="skip-link" href="#admin-content">Sari la conținut</a>
 <?php if($admin): ?>
 <input type="checkbox" id="admin-menu" class="menu-toggle"><label for="admin-menu" class="menu-trigger">☰ Meniu administrare</label>

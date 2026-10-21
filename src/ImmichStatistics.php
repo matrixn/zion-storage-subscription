@@ -79,9 +79,9 @@ final class ImmichStatistics {
   $hash=$this->fingerprint();$state=$this->state();
   $totals=$this->db->one('SELECT COUNT(*) clients,COALESCE(SUM(s.used_bytes),0) used_bytes,COALESCE(SUM(s.photos),0) photos,COALESCE(SUM(s.videos),0) videos FROM immich_statistics s JOIN users u ON u.id=s.user_id AND u.storage_user_id=s.storage_user_id WHERE s.config_hash=? AND s.available=1',[$hash]);
   $linked=(int)$this->db->one('SELECT COUNT(*) n FROM users WHERE storage_user_id IS NOT NULL')['n'];
-  $top=$this->db->run('SELECT u.id,u.name,u.email,u.selected_plan_id,s.* FROM immich_statistics s JOIN users u ON u.id=s.user_id AND u.storage_user_id=s.storage_user_id WHERE s.config_hash=? AND s.available=1 ORDER BY s.used_bytes DESC,u.id LIMIT 10',[$hash])->fetchAll();
+  $top=$this->db->run('SELECT u.id,u.name,u.email,u.selected_plan_id,u.storage_quota_bytes,s.* FROM immich_statistics s JOIN users u ON u.id=s.user_id AND u.storage_user_id=s.storage_user_id WHERE s.config_hash=? AND s.available=1 ORDER BY s.used_bytes DESC,u.id LIMIT 10',[$hash])->fetchAll();
   $plans=new Plans($this->db);
-  foreach($top as &$u){$plan=$plans->get($u['selected_plan_id']);$u['plan_quota_bytes']=$plan['storage_bytes']??0;$u['percent']=$u['plan_quota_bytes']?round($u['used_bytes']/$u['plan_quota_bytes']*100,1):0;}unset($u);
+  foreach($top as &$u){$plan=$plans->forUser($u);$u['plan_quota_bytes']=$plan['storage_bytes']??0;$u['percent']=$u['plan_quota_bytes']?round($u['used_bytes']/$u['plan_quota_bytes']*100,1):0;}unset($u);
   return ['state'=>$state,'totals'=>$totals,'linked'=>$linked,'top'=>$top,'stale'=>!isset($state['last_success_at']) || $state['last_success_at']<time()-600 || ($state['status']??'')!=='ok'];
  }
  public static function gb(int $bytes): string {return number_format($bytes/1_000_000_000,2,',',' ').' GB';}

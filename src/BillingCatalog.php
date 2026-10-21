@@ -20,11 +20,11 @@ final class BillingCatalog {
  private function persist(array $price,array $p,string $admin): void {
   $this->db->transaction(function()use($price,$p,$admin){
    $existing=$this->db->one('SELECT * FROM billing_prices WHERE price_id=?',[$price['id']]);
-   if($existing && ($existing['stripe_mode']!==$this->mode || $existing['plan']!==$p['slug'] || $existing['currency']!==$p['currency'] || $existing['interval']!==$p['billing_interval'] || ($existing['amount']!==null && $existing['amount']!==$p['price_amount'])))throw new \DomainException('Acest Price ID are deja o asociere istorică diferită.');
+   if($existing && ($existing['stripe_mode']!==$this->mode || $existing['plan']!==$p['slug'] || $existing['currency']!==$p['currency'] || $existing['interval']!==$p['billing_interval'] || (($existing['storage_bytes']!==null && $existing['storage_bytes']!==$p['storage_bytes']) || ($existing['amount']!==null && $existing['amount']!==$p['price_amount']))))throw new \DomainException('Acest Price ID are deja o asociere istorică diferită.');
    $this->db->run("UPDATE billing_prices SET status='legacy',updated_at=? WHERE plan=? AND interval=? AND stripe_mode=? AND status='active'",[time(),$p['slug'],$p['billing_interval'],$this->mode]);
    $product=is_array($price['product'])?$price['product']['id']:$price['product'];
    $this->db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,product_id,status,created_at,updated_at,stripe_mode) VALUES(?,?,?,?,?,?,'active',?,?,?) ON CONFLICT(price_id) DO UPDATE SET status='active',amount=excluded.amount,product_id=excluded.product_id,updated_at=excluded.updated_at",[$price['id'],$p['slug'],$p['billing_interval'],$p['currency'],$p['price_amount'],$product,time(),time(),$this->mode]);
-   $this->db->run('UPDATE billing_prices SET eur_amount=?,fx_snapshot=? WHERE price_id=?',[$p['eur_amount'],json_encode($p['fx'],JSON_THROW_ON_ERROR),$price['id']]);
+   $this->db->run('UPDATE billing_prices SET eur_amount=?,fx_snapshot=?,storage_bytes=COALESCE(storage_bytes,?) WHERE price_id=?',[$p['eur_amount'],json_encode($p['fx'],JSON_THROW_ON_ERROR),$p['storage_bytes'],$price['id']]);
    $this->audit($admin,$this->mode.' / '.$p['slug'].' / '.$p['billing_interval'].' / '.$price['id'].' / '.$p['price_amount'].' RON minor units');
    $this->db->run('DELETE FROM integration_settings WHERE key=?',['catalog_disabled:'.$this->mode.':'.$p['slug'].':'.$p['billing_interval']]);
    $this->db->run('DELETE FROM integration_settings WHERE key=?',['stripe:sync:'.$this->mode]);
@@ -63,12 +63,13 @@ final class BillingCatalog {
    if($this->plans->get($slug,$interval,$this->mode)['stripe_price_id'] && !$replace)throw new \DomainException('Există deja un Price activ pentru această opțiune.');
     // Stable Stripe Product IDs also survive a lost response or local restore.
     $id='zs_'.$p['currency'].'_'.$slug;
+    foreach(require dirname(__DIR__).'/config/plans.php' as $default)if($default['slug']===$slug && $default['storage_bytes']!==$p['storage_bytes'])$id.='_b'.$p['storage_bytes'];
     try{$product=$this->stripe->products->retrieve($id);}
-    catch(\Stripe\Exception\InvalidRequestException $e){if($e->getStripeCode()!=='resource_missing')throw $e;$product=$this->stripe->products->create(['id'=>$id,'name'=>'Zion Storage '.$p['name'].' '.$p['capacity'],'metadata'=>['zion_plan'=>$slug]],['idempotency_key'=>'zion-product-'.$this->mode.'-'.$p['currency'].'-'.$slug]);}
+    catch(\Stripe\Exception\InvalidRequestException $e){if($e->getStripeCode()!=='resource_missing')throw $e;$product=$this->stripe->products->create(['id'=>$id,'name'=>'Zion Storage '.$p['name'].' '.$p['capacity'],'metadata'=>['zion_plan'=>$slug,'zion_storage_bytes'=>(string)$p['storage_bytes']]],['idempotency_key'=>'zion-product-'.$this->mode.'-'.$id]);}
     if($product->livemode!==($this->mode==='live') || ($product->metadata->zion_plan??'')!==$slug || !$product->active)throw new \DomainException('Produs Stripe incompatibil.');
     if($product->name!=='Zion Storage '.$p['name'].' '.$p['capacity'])$this->stripe->products->update($id,['name'=>'Zion Storage '.$p['name'].' '.$p['capacity']]);
     $this->db->run('INSERT INTO stripe_catalog_products(plan,product_id,updated_at,stripe_mode) VALUES(?,?,?,?) ON CONFLICT(plan,stripe_mode) DO UPDATE SET product_id=excluded.product_id,updated_at=excluded.updated_at',[$slug,$product->id,time(),$this->mode]);$row=['product_id'=>$product->id];
-   $lookup='zs_'.$p['currency'].'_'.$slug.'_'.$interval.'_'.$p['price_amount'].'_eur'.$p['eur_amount'];
+   $lookup='zs_'.$p['currency'].'_'.$slug.'_'.$interval.'_'.$p['price_amount'].'_eur'.$p['eur_amount'].'_b'.$p['storage_bytes'];
    $found=$this->stripe->prices->all(['lookup_keys'=>[$lookup],'limit'=>2])->data;
    $price=$found[0]??$this->stripe->prices->create(['product'=>$row['product_id'],'currency'=>$p['currency'],'unit_amount'=>$p['price_amount'],'tax_behavior'=>'exclusive','recurring'=>['interval'=>$interval],'lookup_key'=>$lookup,'metadata'=>['zion_plan'=>$slug]],['idempotency_key'=>'zion-price-'.$this->mode.'-'.$lookup]);
    $array=$price->toArray();
@@ -90,6 +91,8 @@ final class BillingCatalog {
   if(!$p || $slug==='free')throw new \DomainException('Plan invalid.');
   if($p['stripe_price_id']){
    try{
+    $mapping=$this->db->one('SELECT storage_bytes FROM billing_prices WHERE price_id=?',[$p['stripe_price_id']]);
+    if($mapping['storage_bytes']!==null && $mapping['storage_bytes']!==$p['storage_bytes'])throw new \DomainException('Capacitatea necesită o versiune nouă de preț.');
     $price=$this->stripe->prices->retrieve($p['stripe_price_id'])->toArray();self::validatePrice($price,$p);
     $product=$this->stripe->products->retrieve(is_array($price['product'])?$price['product']['id']:$price['product']);
     if($product->livemode!==($this->mode==='live') || !$product->active)throw new \DomainException('Produs Stripe inactiv sau incompatibil.');
