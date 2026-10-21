@@ -18,6 +18,14 @@ The fixed official source is https://curs.bnr.ro/nbrfxrates10days.xml. The admin
 
 The worker refreshes the source at most every 30 minutes and Checkout checks again. The admin refresh button also synchronizes both configured Stripe profiles. Each Price stores its EUR reference and conversion snapshot; historical IDs remain recognizable. Keep the full SQLite database in backups.
 
+## Edit package names and EUR prices
+
+Open **Configurare → Pachete și prețuri** (/admin?section=plans). Every existing package can be renamed. Paid monthly EUR references accept a comma or point and up to two decimal places, from 1.00 to 9999.99 EUR. Free remains zero. Annual references are always monthly × 11; there is no independent annual-price override. Capacity, slug and recommendation remain unchanged.
+
+Edits are stored in plan_settings and audited with before/after values. Saving updates public pages immediately and synchronizes both configured Stripe profiles without changing the active mode. Name changes update existing Stripe Products even when their Prices already match; amount changes create/reuse immutable Prices and retain historical mappings. Disabled options remain disabled. If BNR/Stripe is unavailable, the edit remains saved and the notice explains the pending sync; use Catalog Stripe / Curs BNR to retry.
+
+Existing subscriptions retain the EUR amount frozen in their Price/subscription contract. Renewal FX conversions use that amount, not the edited public reference. Issued invoices retain their snapshots. Previously displayed checkout quotes must be reconfirmed when the amount changes.
+
 ## Renewals and upgrades
 
 Run php bin/console.php operations:work every minute (the provided Compose worker does this automatically). On Synology's existing web-only installation, the scheduled command must execute it inside zion_storage_web as www-data. Monitor /admin?section=exchange and the API journal.

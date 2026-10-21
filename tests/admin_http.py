@@ -88,6 +88,19 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             check(status==200 and 'Totul, dintr-o privire.' in body,'administrator logs in to dashboard with installed env credentials')
             check('name="secret_key"' not in body and 'name="password"' not in body,'dashboard separates configuration and customer forms')
             check(request(admin,'/admin?section=unknown')[0]==404,'unknown admin section is rejected')
+            check('data-plan-editor' not in request(customer,'/admin?section=plans')[1],'plan editor requires administrator authentication')
+            plan_html=request(admin,'/admin?section=plans')[1]
+            check(plan_html.count('data-plan-editor')==4 and 'Pachete și prețuri' in plan_html,'plan editor provides all four existing packages')
+            check(request(admin,'/admin?section=plans',{'action':'plan_save','plan':'120gb','name':'Essential','monthly_price':'5.49'})[0]==419,'plan edits require administrator CSRF')
+            status,plan_html,_=request(admin,'/admin?section=plans',{'_csrf':csrf(plan_html),'action':'plan_save','plan':'120gb','name':'<b>Invalid</b>','monthly_price':'5.49'})
+            check(status==422 and '&lt;b&gt;Invalid&lt;/b&gt;' in plan_html,'invalid plan names rejected and safely escaped in editable draft')
+            status,plan_html,_=request(admin,'/admin?section=plans',{'_csrf':csrf(plan_html),'action':'plan_save','plan':'120gb','name':'Essential','monthly_price':'5,49'})
+            check(status==200 and 'Pachet salvat.' in plan_html and '60,39 EUR' in plan_html,'admin saves plan with comma-decimal amount and automatic annual price')
+            public_html=request(customer,'/en/')[1]
+            check('Essential' in public_html and 'EUR 5.49' in public_html,'saved plan changes immediately appear on public pricing')
+            status,plan_html,_=request(admin,'/admin?section=plans',{'_csrf':csrf(plan_html),'action':'plan_save','plan':'120gb','name':'Personal','monthly_price':'3.99'})
+            check(status==200,'restore isolated catalog fixture for subsequent tests')
+
             lm_body=request(admin,'/admin?section=listmonk')[1]
             check('LISTMONK_API_TOKEN' in lm_body and 'type="text" name="api_token"' in lm_body,'dedicated Listmonk settings render token as masked text input')
             check(request(customer,'/admin?section=listmonk')[1].find('name="api_token"')==-1,'Listmonk credentials require admin authentication')

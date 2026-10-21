@@ -1,0 +1,17 @@
+<section><p class="eyebrow">CATALOG / EUR</p><h2>Denumiri și prețuri pachete</h2><p>Editează prețul de referință în EUR. Prețul anual se calculează automat la 11 luni, cu o lună gratuită. Echivalentul RON folosește cursul BNR configurat.</p><p class="micro">Denumirile se actualizează pe site și în Stripe pentru ambele medii. Prețurile noi se aplică achizițiilor noi; abonamentele existente păstrează prețul EUR contractat și data de reînnoire. Facturile emise rămân neschimbate.</p><div class="quick-links"><a href="/admin?section=catalog">Starea catalogului Stripe ↗</a><a href="/admin?section=exchange">Curs BNR / RON ↗</a></div></section>
+<div class="plan-editor-grid">
+<?php foreach($plans as $p):
+ $draft=($error && ($_POST['plan']??'')===$p['slug'])?$_POST:[];
+ $name=is_string($draft['name']??null)?$draft['name']:$p['name'];
+ $amount=is_string($draft['monthly_price']??null)?$draft['monthly_price']:number_format($p['monthly_price']/100,2,'.','');
+?>
+<section class="plan-editor"><p class="eyebrow"><?= e($p['capacity']) ?> · <?= e($p['slug']) ?></p><h2><?= e($p['name']) ?></h2><form method="post" data-plan-editor>
+<input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><input type="hidden" name="action" value="plan_save"><input type="hidden" name="plan" value="<?= e($p['slug']) ?>">
+<label>Denumirea pachetului<input name="name" value="<?= e($name) ?>" minlength="2" maxlength="60" required></label>
+<label>Preț lunar · EUR<input name="monthly_price" type="text" inputmode="decimal" value="<?= e($amount) ?>" pattern="[0-9]+([.,][0-9]{1,2})?" maxlength="7" required <?= $p['slug']==='free'?'readonly':'' ?> aria-describedby="price-help-<?= e($p['slug']) ?>"></label>
+<p id="price-help-<?= e($p['slug']) ?>" class="micro"><?= $p['slug']==='free'?'Pachetul gratuit rămâne gratuit.':'Folosește punct sau virgulă: de exemplu 3,99. Prețul anual rămâne 11 × prețul lunar.' ?></p>
+<p class="plan-annual-preview">Anual: <strong><output data-plan-annual><?= e(number_format($p['yearly_price']/100,2,',','')) ?> EUR</output></strong><small> · <?= $p['slug']==='free'?'gratuit permanent':'o lună gratuită' ?></small></p>
+<p class="micro">La cursul curent: <?= $p['ron_monthly']===null?'RON indisponibil':e($money($p['ron_monthly'],'ron').' / lună · '.$money($p['ron_yearly'],'ron').' / an') ?></p>
+<button>Salvează și sincronizează</button></form></section>
+<?php endforeach ?>
+</div>

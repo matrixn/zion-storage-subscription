@@ -20,9 +20,9 @@ final class AdminApplication {
   if(production())header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
   $path=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
-  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','client'=>'Detalii client','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','exchange'=>'Curs BNR / RON','immich'=>'API Immich','immich-general'=>'Immich · Configurare generală','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
+  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','client'=>'Detalii client','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','plans'=>'Pachete și prețuri','tax'=>'TVA produse','exchange'=>'Curs BNR / RON','immich'=>'API Immich','immich-general'=>'Immich · Configurare generală','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
-  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',in_array($action,['fiscal_retry','fiscal_generate'],true)=>'invoices',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',str_starts_with($action,'immich_general_')=>'immich-general',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='bnr_update'=>'exchange',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset','archive','restore'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
+  $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',in_array($action,['fiscal_retry','fiscal_generate'],true)=>'invoices',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',str_starts_with($action,'immich_general_')=>'immich-general',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='plan_save'=>'plans',$action==='bnr_update'=>'exchange',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset','archive','restore'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
@@ -77,6 +77,20 @@ final class AdminApplication {
       $message='Am regenerat linkul, valabil încă 3 zile. '.MailerService::dispatchNotice($mail->dispatch('onboarding:'.$link['token_hash']));
      }
      $_SESSION['admin_notice']=$message;$this->redirect();
+    }
+    if($action==='plan_save'){
+     $this->section='plans';
+     if(!Security::limit($this->db,'plan-save:'.$admin['id'],12,900))throw new \DomainException('Prea multe salvări. Reîncearcă mai târziu.');
+     (new PlanSettings($this->db))->save((string)($_POST['plan']??''),$_POST,$admin['id']);
+     $results=[];$settings=new IntegrationSettings($this->db);
+     try{
+      (new BnrRates($this->db))->refresh();
+      foreach(['test','live'] as $mode)if($settings->stripe($mode)['secret_key']){
+       $result=(new StripeIntegration($this->db,$this->plans,null,$mode))->synchronize($admin['id']);
+       $results[]=strtoupper($mode).': '.$result['message'];
+      }
+     }catch(\Throwable $e){$results[]='Sincronizarea este în așteptare. Verifică sursa BNR și jurnalul API, apoi reia sincronizarea din Catalog Stripe.';}
+     $_SESSION['admin_notice']='Pachet salvat. Prețul anual este de 11 ori prețul lunar. '.implode(' ',$results);$this->redirect();
     }
     if($action==='bnr_update'){
      if(!Security::limit($this->db,'bnr-update:'.$admin['id'],4,900))throw new \DomainException('Prea multe actualizări BNR. Reîncearcă mai târziu.');

@@ -93,7 +93,10 @@ final class BillingCatalog {
     $price=$this->stripe->prices->retrieve($p['stripe_price_id'])->toArray();self::validatePrice($price,$p);
     $product=$this->stripe->products->retrieve(is_array($price['product'])?$price['product']['id']:$price['product']);
     if($product->livemode!==($this->mode==='live') || !$product->active)throw new \DomainException('Produs Stripe inactiv sau incompatibil.');
-    $this->assertCurrentKey();return 'verified';
+    $this->assertCurrentKey();
+    $name='Zion Storage '.$p['name'].' '.$p['capacity'];
+    if($product->name!==$name)$this->stripe->products->update($product->id,['name'=>$name]);
+    return 'verified';
    }catch(\Stripe\Exception\InvalidRequestException $e){if($e->getStripeCode()!=='resource_missing')throw $e;}
    catch(\DomainException $e){/* Replace stale mappings, retaining their historical identity. */}
   }

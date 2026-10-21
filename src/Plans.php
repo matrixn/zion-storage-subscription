@@ -4,7 +4,7 @@ final class Plans {
  public function __construct(private ?Database $db=null) { $this->db??=new Database(); }
  public function all(string $interval='month',?string $mode=null): array {
   if(!in_array($interval,['month','year'],true))throw new \InvalidArgumentException('invalid_billing_interval');
-  $plans=require dirname(__DIR__).'/config/plans.php';
+  $plans=(new PlanSettings($this->db))->all();
   $mode=(new IntegrationSettings($this->db))->stripe($mode)['mode'];
   $taxBps=(new BillingTax($this->db))->basisPoints();
   $vat=(new IntegrationSettings($this->db))->oblio()['vat_rate'];
