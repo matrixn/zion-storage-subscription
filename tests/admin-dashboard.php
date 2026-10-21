@@ -1,5 +1,5 @@
 <?php
-$db=new Zion\Database(':memory:');$db->migrate();$metrics=new Zion\AdminDashboard($db);$now=time();
+$db=new Zion\Database(':memory:');$db->migrate();testFx($db);$metrics=new Zion\AdminDashboard($db);$now=time();
 $empty=$metrics->snapshot($now);
 check($empty['clients']['total']===0 && $empty['revenue']===[] && $empty['renewals']===[],'empty dashboard has no invented metrics');
 foreach(['banned','pending','active'] as $i=>$id)$db->run("INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,email_verified_at,status,storage_quota_bytes,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,'fixture','ro','120gb',?,?,120000000000,1,1,?,?)",[$id,$id,$id.'@example.com',$i===1?null:$now,$i===1?'pending':'active',$i===2?$now-40*86400:$now,$now]);

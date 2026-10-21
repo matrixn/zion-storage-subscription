@@ -6,6 +6,7 @@ $cmd=$argv[1]??'help';
 if($cmd==='immich:sync'){
  $result=(new Zion\ImmichStatistics($db))->synchronize(in_array('--due',$argv,true));echo json_encode($result,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).PHP_EOL;exit($result['status']==='error'?1:0);
 }
+if($cmd==='fx:update'){echo json_encode((new Zion\BnrRates($db))->refresh(true),JSON_THROW_ON_ERROR).PHP_EOL;exit;}
 if($cmd==='key'){echo bin2hex(random_bytes(32)).PHP_EOL;exit;}
 if(in_array($cmd,['migrate','install'],true)){$db->migrate();$seeded=Zion\AccountControl::seedAdmin($db);echo "Database ready\n".($seeded?"Admin configured (existing passwords preserved)\n":"Set ADMIN_EMAIL and ADMIN_PASSWORD, then run install to create the administrator\n");exit;}
 $mail=new Zion\MailerService($db);
@@ -27,9 +28,12 @@ if($cmd==='changes:retry'){
  echo json_encode(['processed'=>$processed,'failed'=>$failed],JSON_THROW_ON_ERROR).PHP_EOL;exit($failed?1:0);
 }
 if($cmd==='operations:work'){
+ $ron=[];$settings=new Zion\IntegrationSettings($db);
+ foreach(['test','live'] as $mode){$key=$settings->stripe($mode)['secret_key'];if($key)try{$ron[$mode]=(new Zion\RonRenewals($db,new Stripe\StripeClient($key),$mode))->work();}catch(Throwable $e){$ron[$mode]=['error'=>'ron_worker_failed'];}}
+
  try{$fiscal=(new Zion\OblioInvoiceService($db,$mail))->work();}
  catch(Throwable $e){$fiscal=['error'=>'fiscal_worker_failed'];error_log('Fiscal worker requires retry');}
- $sent=$mail->work();echo json_encode(['fiscal'=>$fiscal,'mail_accepted'=>$sent],JSON_THROW_ON_ERROR).PHP_EOL;exit(isset($fiscal['error'])?1:0);
+ $sent=$mail->work();echo json_encode(['ron'=>$ron,'fiscal'=>$fiscal,'mail_accepted'=>$sent],JSON_THROW_ON_ERROR).PHP_EOL;exit(isset($fiscal['error'])?1:0);
 }
 if($cmd==='oblio:retry'){
  $result=(new Zion\OblioInvoiceService($db,$mail))->retryPending(in_array('--due',$argv,true));
@@ -75,4 +79,4 @@ $queries=[
  ,'fiscal-invoices'=>'SELECT id,user_id,stripe_invoice_id,stripe_subscription_id,oblio_invoice_id,oblio_series,oblio_number,amount,currency,status,error_message,attempts,issued_at,notification_sent_at,completed_at FROM fiscal_invoices ORDER BY created_at DESC LIMIT 100'
 ];
 if(isset($queries[$cmd])){echo json_encode($db->run($queries[$cmd])->fetchAll(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE).PHP_EOL;exit;}
-echo "Commands: free-quota:sync, operations:work, immich:sync [--due], key, install, migrate, activation:retry, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";
+echo "Commands: fx:update, free-quota:sync, operations:work, immich:sync [--due], key, install, migrate, activation:retry, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";

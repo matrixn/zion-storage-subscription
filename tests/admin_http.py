@@ -67,6 +67,7 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
     backend=http.server.ThreadingHTTPServer(('127.0.0.1',0),Backend);threading.Thread(target=backend.serve_forever,daemon=True).start()
     env=os.environ.copy();env.update(LISTMONK_URL='',APP_ENV='test',APP_URL='http://localhost:8093',DB_PATH=temp+'/app.sqlite',APP_KEY='fixture-key-'*8,ADMIN_EMAIL='admin-fixture@example.com',ADMIN_PASSWORD='fixture-admin-password',MAIL_TRANSPORT='log',MAIL_LOG_DIRECTORY=temp+'/mail',OBLIO_ENABLED='false',STORAGE_API_URL='http://127.0.0.1:'+str(backend.server_port)+'/api',STORAGE_API_KEY='fixture-key',STORAGE_GATEWAY_KEY='fixture-gateway-key-'*3,STORAGE_GATEWAY_ENFORCED='false',STRIPE_SECRET_KEY='sk_test_unconfigured')
     subprocess.run(['php','bin/console.php','install'],cwd=ROOT,env=env,check=True,capture_output=True)
+    subprocess.run(['php','tests/seed-fx.php'],cwd=ROOT,env=env,check=True,capture_output=True)
     subprocess.run(['php','-r','require "src/bootstrap.php"; (new Zion\\Database())->run("INSERT INTO integration_settings(key,value) VALUES(?,?)",["billing:vat_bps","2100"]);'],cwd=ROOT,env=env,check=True,capture_output=True) # Exercise explicit 21% configuration; operator default is 0.
     with open(temp+'/server.log','w+') as log:
         server=subprocess.Popen(['php','-S','0.0.0.0:8093','-t','public','public/router.php'],cwd=ROOT,env=env,stdout=log,stderr=log)
@@ -130,16 +131,16 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             operations_result=subprocess.run(['php','bin/console.php','operations:work'],cwd=ROOT,env=env,check=True,capture_output=True,text=True)
             check('fiscal' in json.loads(operations_result.stdout) and 'mail_accepted' in json.loads(operations_result.stdout),'single CLI command processes fiscal queue and email queue')
             tax_body=request(admin,'/admin?section=tax')[1]
-            check('name="vat_rate"' in tax_body and 'value="21"' in tax_body and '4,83 EUR' in tax_body,'admin tax settings default to 21 percent and preview gross total')
+            check('name="vat_rate"' in tax_body and 'value="21"' in tax_body and '4,83 RON' in tax_body,'admin tax settings default to 21 percent and preview gross total')
             check(request(admin,'/admin',{'action':'tax_save','vat_rate':'19'})[0]==419,'VAT updates require admin CSRF')
             status,tax_body,_=request(admin,'/admin',{'_csrf':csrf(tax_body),'action':'tax_save','vat_rate':'19'})
-            check(status==200 and 'value="19"' in tax_body and '4,75 EUR' in tax_body,'admin can change global exclusive VAT')
+            check(status==200 and 'value="19"' in tax_body and '4,75 RON' in tax_body,'admin can change global exclusive VAT')
             status,tax_body,_=request(admin,'/admin',{'_csrf':csrf(tax_body),'action':'tax_save','vat_rate':'101'})
             check(status==422 and 'value="19"' in tax_body,'invalid VAT does not replace saved rate')
             request(admin,'/admin',{'_csrf':csrf(tax_body),'action':'tax_save','vat_rate':'21'})
             for loc in ['ro','en','fr','de']:
                 html=request(customer,'/'+loc+'/')[1]
-                check('4,83' in html or '4.83' in html,'localized public pricing discloses VAT and gross total '+loc)
+                check('plan-ron' in html and 'plan-tax' not in html and ('3,99 RON' in html or 'RON 3.99' in html),'localized public pricing shows RON equivalent without tax labels '+loc)
             immich_body=request(admin,'/admin?section=immich')[1]
             check('Testează conexiunea Immich' in immich_body and 'Sincronizează acum statisticile' in immich_body,'Immich has dedicated configuration and diagnostic page')
             check(request(admin,'/admin',{'action':'immich_save','url':'https://invalid.example/api','api_key':'invalid'})[0]==419,'Immich settings require administrative CSRF')

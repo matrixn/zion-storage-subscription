@@ -8,7 +8,7 @@ final class DebugStripeFixture extends Zion\StripeService {
 $oldApiLog=$_ENV['API_LOG_PATH']??null;$oldGet=$_GET;
 $debugPath=sys_get_temp_dir().'/zion-webhook-'.bin2hex(random_bytes(8)).'.sqlite';$_ENV['API_LOG_PATH']=$debugPath;$_GET=['mode'=>'test'];
 try{
- $db=new Zion\Database(':memory:');$db->migrate();seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();
+ $db=new Zion\Database(':memory:');$db->migrate();testFx($db);seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();
  $admin='webhook-admin';$db->run('INSERT INTO administrators VALUES(?,?,?,?)',[$admin,'webhook-admin@example.com','fixture-hash',time()]);
  $settings=new Zion\IntegrationSettings($db);$settings->save('stripe',['credential_mode'=>'test','secret_key'=>'sk_test_fixture','webhook_secret'=>'whsec_debugFixture'],$admin);
  $accounts=new Zion\AccountService($db,$plans,$mail,$store);
@@ -31,7 +31,7 @@ try{
  check(Zion\ApiLog::page(['event'=>'evt_debugWrongMode'])['rows'][0]['error_code']==='webhook_mode_mismatch','webhook diagnostics distinguish endpoint and payload modes');$_GET=['mode'=>'test'];
  try{$billing->receive('{broken','');check(false,'malformed payload');}catch(JsonException $e){}
  check(Zion\ApiLog::page(['status'=>'error'])['rows'][0]['error_code']==='invalid_json','malformed webhook is logged without recording raw payload');
- $start=time()-300;$invoice=['id'=>'in_debug','object'=>'invoice','livemode'=>false,'subscription'=>'sub_debug','customer'=>'cus_debug','status'=>'paid','amount_paid'=>199,'currency'=>'eur','created'=>$start,'billing_reason'=>'subscription_create','status_transitions'=>['paid_at'=>$start],'lines'=>['has_more'=>false,'data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>$start,'end'=>$start+30*86400]]]]];
+ $start=time()-300;$invoice=['id'=>'in_debug','object'=>'invoice','livemode'=>false,'subscription'=>'sub_debug','customer'=>'cus_debug','status'=>'paid','amount_paid'=>199,'currency'=>'ron','created'=>$start,'billing_reason'=>'subscription_create','status_transitions'=>['paid_at'=>$start],'lines'=>['has_more'=>false,'data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>$start,'end'=>$start+30*86400]]]]];
  $billing->invoice=$invoice;$billing->snapshot=['id'=>'sub_debug','object'=>'subscription','livemode'=>false,'customer'=>'cus_debug','status'=>'active','metadata'=>['user_id'=>str_repeat('f',32),'plan'=>'120gb','billing_interval'=>'month'],'items'=>['data'=>[['id'=>'si_debug','price'=>['id'=>'price_120'],'current_period_end'=>$start+30*86400]]],'latest_invoice'=>$invoice];
  $paidEvent=['id'=>'evt_debugPaid','object'=>'event','livemode'=>false,'type'=>'invoice.paid','data'=>['object'=>$invoice]];$billing->events[$paidEvent['id']]=$paidEvent;
  try{$send($paidEvent);check(false,'unknown billing user');}catch(RuntimeException $e){}

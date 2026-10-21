@@ -1,6 +1,6 @@
 <?php
 // Fixture-only transport: no real provider or email delivery.
-$listDb=new Zion\Database(':memory:');$listDb->migrate();
+$listDb=new Zion\Database(':memory:');$listDb->migrate();testFx($listDb);
 $listSettings=new Zion\IntegrationSettings($listDb);
 $_ENV['ADMIN_EMAIL']='listmonk-admin@example.com';$_ENV['ADMIN_PASSWORD']='listmonk-test-password';
 Zion\AccountControl::seedAdmin($listDb);$listAdmin=$listDb->one('SELECT id FROM administrators')['id'];$_ENV['ADMIN_EMAIL']='';$_ENV['ADMIN_PASSWORD']='';

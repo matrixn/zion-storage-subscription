@@ -1,13 +1,13 @@
 <?php
-$revisionDb=new Zion\Database(':memory:');$revisionDb->migrate();seedCatalog($revisionDb);
+$revisionDb=new Zion\Database(':memory:');$revisionDb->migrate();testFx($revisionDb);seedCatalog($revisionDb);
 $revisionPlans=new Zion\Plans($revisionDb);$revisionHttp=new CatalogHttp();
 $revisionAdmin=bin2hex(random_bytes(16));$revisionUser=bin2hex(random_bytes(16));
 $revisionDb->run('INSERT INTO administrators(id,email,password_hash,created_at) VALUES(?,?,?,?)',[$revisionAdmin,'revision-admin@example.test','unused',time()]);
 $revisionDb->run('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',[$revisionUser,'Historic customer','historic-price@example.test','unused','ro','120gb',time(),time(),time(),time()]);
-$revisionDb->run("UPDATE billing_prices SET amount=199 WHERE price_id='price_120'");
+$revisionDb->run("UPDATE billing_prices SET amount=199,currency='eur',eur_amount=NULL,fx_snapshot=NULL WHERE price_id='price_120'");
 $revisionDb->run("INSERT INTO subscriptions(user_id,stripe_customer_id,stripe_subscription_id,stripe_price_id,status,plan,paid_confirmed) VALUES(?,'cus_historic','sub_historic','price_120','active','120gb',1)",[$revisionUser]);
 $revisionBefore=$revisionDb->one('SELECT * FROM subscriptions');
-$revisionHttp->prices['price_120']=array_replace((new ChangesHttp())->price('price_120'),['unit_amount'=>199]);
+$revisionHttp->prices['price_120']=array_replace((new ChangesHttp())->price('price_120'),['unit_amount'=>199,'currency'=>'eur']);
 Stripe\ApiRequestor::setHttpClient($revisionHttp);
 $revisionKey=(new Zion\IntegrationSettings($revisionDb))->stripe('test')['secret_key'];
 $revisionCatalog=new Zion\BillingCatalog($revisionDb,$revisionPlans,new Stripe\StripeClient($revisionKey),'test');

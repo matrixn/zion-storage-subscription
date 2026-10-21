@@ -48,7 +48,7 @@ final class Application {
   if($method==='POST') {
    if(!Security::checkCsrf()){$this->fail('error.csrf',419);return;}
    if(!Security::limit($this->db,'post:'.$this->page.':'.Security::clientIp(),$this->page==='contact'?5:((($_POST['automatic']??'')==='1' && $this->page==='activate')?20:15),900)){$this->fail('error.rate',429);return;}
-   try{$this->post();}catch(\Throwable $e){error_log('Request failed; page='.$this->page);$this->fail($this->page==='activate'?'status.retry':'error.generic',503);}
+   try{$this->post();}catch(\DomainException $e){if($e->getMessage()==='checkout.quote_changed'){$this->fail('checkout.quote_changed');return;}$this->fail('error.generic',503);}catch(\Throwable $e){error_log('Request failed; page='.$this->page);$this->fail($this->page==='activate'?'status.retry':'error.generic',503);}
    return;
   }
   if($method!=='GET' && $method!=='HEAD'){http_response_code(405);return;}
@@ -142,8 +142,8 @@ final class Application {
      if($r['user_id']!==$u['id']){$this->fail('error.validation',403);return;}
      $this->billing->changes()->cancel($id);$this->redirect(Router::path($this->locale,'upgrade'));
     }
-    $this->redirect($this->billing->changes()->checkout($u,(string)($_POST['plan']??'')));
-   }catch(\DomainException $e){$key=$e->getMessage();$this->fail(in_array($key,['upgrade.unavailable','upgrade.pending','upgrade.closing','upgrade.unconfigured','billing.required'],true)?$key:'error.generic');}
+    $this->redirect($this->billing->changes()->checkout($u,(string)($_POST['plan']??''),(string)($_POST['price_quote']??'')));
+   }catch(\DomainException $e){$key=$e->getMessage();$this->fail(in_array($key,['checkout.quote_changed','upgrade.unavailable','upgrade.pending','upgrade.closing','upgrade.unconfigured','billing.required'],true)?$key:'error.generic');}
    return;
   }
   if($this->page==='billing-profile') {
@@ -153,8 +153,8 @@ final class Application {
   }
   if($this->page==='checkout'){
    if(!(new BillingProfileService($this->db))->get($u['id']))$this->redirect(Router::path($this->locale,'billing-profile'));
-   try{$this->redirect($this->billing->checkout($u));}
-   catch(\DomainException $e){$this->fail($e->getMessage()==='checkout.pending_quote'?'checkout.pending_quote':'error.generic');}
+   try{$this->redirect($this->billing instanceof StripeService?$this->billing->checkout($u,(string)($_POST['price_quote']??'')):$this->billing->checkout($u));}
+   catch(\DomainException $e){$this->fail(in_array($e->getMessage(),['checkout.pending_quote','checkout.quote_changed'],true)?$e->getMessage():'error.generic');}
   }
   if($this->page==='portal'){$this->redirect($this->billing->portal($u));}
   if($this->page==='activate') {

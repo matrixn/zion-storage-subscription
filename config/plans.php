@@ -7,7 +7,7 @@ $plans = [
 ];
 return array_map(static function(array $plan): array {
  $plan['yearly_price']=$plan['monthly_price']*11;
- $plan['currency']='eur';
+ $plan['currency']='ron';
  $plan['features']=match($plan['slug']) {
   'free'=>['free_capacity','mobile_backup','original_storage','devices','one_user','free_forever'],
   '120gb'=>['personal_capacity','mobile_backup','original_media','devices','private_library','cancel'],

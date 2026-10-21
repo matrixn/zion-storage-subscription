@@ -32,6 +32,7 @@ final class BillingProfileService
         }
         if (!preg_match('/^[A-Z]{2}$/D', $data['country']) || !filter_var($data['billing_email'], FILTER_VALIDATE_EMAIL) || strlen($data['billing_email']) > 254) throw new \InvalidArgumentException('billing.invalid');
         if (mb_strlen($data['phone']) > 40 || mb_strlen($data['registration_number']) > 80) throw new \InvalidArgumentException('billing.invalid');
+        if($data['country']==='RO')OblioAddress::normalize($data);
         if ($data['type'] === 'company') {
             if ($data['company_name'] === '' || mb_strlen($data['company_name']) > 200 || !preg_match('/^[A-Za-z0-9 .\/-]{2,40}$/D', $data['tax_id'])) throw new \InvalidArgumentException('billing.invalid');
         } else {

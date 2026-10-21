@@ -1,6 +1,6 @@
 <?php
 // Explicit manual issuance must override TEST gating only for the selected document.
-$manualDb=new Zion\Database(':memory:');$manualDb->migrate();seedCatalog($manualDb);
+$manualDb=new Zion\Database(':memory:');$manualDb->migrate();testFx($manualDb);seedCatalog($manualDb);
 $manualAdmin='manual-admin';$manualUid=str_repeat('e',32);
 $manualDb->run('INSERT INTO administrators VALUES(?,?,?,?)',[$manualAdmin,'manual-admin@example.com','fixture',time()]);
 $manualDb->run("INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,email_verified_at,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,'fixture','ro','120gb',?,?,?, ?,?)",[$manualUid,'Manual Client','manual-client@example.com',time(),time(),time(),time(),time()]);

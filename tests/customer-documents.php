@@ -1,6 +1,6 @@
 <?php
 // Run from tests/run.php: providers are fixtures and cannot reach the network.
-$cdDb=new Zion\Database(':memory:');$cdDb->migrate();
+$cdDb=new Zion\Database(':memory:');$cdDb->migrate();testFx($cdDb);
 $cdUid=bin2hex(random_bytes(16));$cdAdmin=bin2hex(random_bytes(16));$cdNow=time();
 $cdDb->run('INSERT INTO administrators(id,email,password_hash,created_at) VALUES(?,?,?,?)',[$cdAdmin,'documents-admin@example.test','unused',$cdNow]);
 $cdDb->run('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,email_verified_at,status,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[$cdUid,'Document Customer','documents@example.test','unused','fr','free',$cdNow,'verified',$cdNow,$cdNow,$cdNow,$cdNow]);
@@ -51,9 +51,9 @@ $cdDb->run("INSERT INTO invoices(id,user_id,amount,currency,created_at) VALUES('
 $cdFirstLinks->firstPayment($cdFirst,'in_renewal_guide');
 check($cdFirstLinks->current($cdFirst)['url']===$firstGuide['url'],'renewal payment never extends or replaces onboarding link');
 $cdDb->run('UPDATE users SET storage_user_id=? WHERE id=?',['fixture-linked-free',$cdUid]);
-$cdDb->run("DELETE FROM integration_settings WHERE key='free-quota-5gb-v1'");$cdDb->migrate();
+$cdDb->run("DELETE FROM integration_settings WHERE key='free-quota-5gb-v1'");$cdDb->migrate();testFx($cdDb);
 check($cdDb->one('SELECT quota_sync FROM account_controls WHERE user_id=?',[$cdUid])['quota_sync']==='pending','migration queues existing linked free account for 5 GB synchronization');
-$cdDb->run("UPDATE account_controls SET quota_sync='ready' WHERE user_id=?",[$cdUid]);$cdDb->migrate();
+$cdDb->run("UPDATE account_controls SET quota_sync='ready' WHERE user_id=?",[$cdUid]);$cdDb->migrate();testFx($cdDb);
 check($cdDb->one('SELECT quota_sync FROM account_controls WHERE user_id=?',[$cdUid])['quota_sync']==='ready','repeated database migration never requeues completed quota changes');
 $cdDb->run('UPDATE users SET storage_user_id=NULL WHERE id=?',[$cdUid]);$cdDb->run('DELETE FROM account_controls WHERE user_id=?',[$cdUid]);
 $cdLinks=new Zion\OnboardingLinks($cdDb,$cdMail);$cdLink=$cdLinks->issue($cdUid);$cdToken=explode('#token=',$cdLink['url'])[1];

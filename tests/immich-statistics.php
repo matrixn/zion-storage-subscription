@@ -3,7 +3,7 @@ final class StatisticsFixture extends Zion\StorageProvisioningService {
  public array $data=['usage'=>0,'photos'=>0,'videos'=>0,'usageByUser'=>[]];public bool $fail=false;public int $calls=0;
  public function statistics(): array{$this->calls++;if($this->fail)throw new Zion\StorageApiException(403);return $this->data;}
 }
-$statsDb=new Zion\Database(':memory:');$statsDb->migrate();$statsDb->migrate();
+$statsDb=new Zion\Database(':memory:');$statsDb->migrate();testFx($statsDb);$statsDb->migrate();testFx($statsDb);
 $_ENV['ADMIN_EMAIL']='immich-admin@example.com';$_ENV['ADMIN_PASSWORD']='immich-admin-password';Zion\AccountControl::seedAdmin($statsDb);$statsAdmin=$statsDb->one('SELECT id FROM administrators')['id'];$_ENV['ADMIN_EMAIL']='';$_ENV['ADMIN_PASSWORD']='';
 $settings=new Zion\IntegrationSettings($statsDb);
 $_ENV['STORAGE_API_URL']='https://old.example/api';$_ENV['STORAGE_API_KEY']='environment-key-123456';

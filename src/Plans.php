@@ -8,11 +8,15 @@ final class Plans {
   $mode=(new IntegrationSettings($this->db))->stripe($mode)['mode'];
   $taxBps=(new BillingTax($this->db))->basisPoints();
   $vat=(new IntegrationSettings($this->db))->oblio()['vat_rate'];
+  $fx=(new BnrRates($this->db))->current();
   foreach($plans as &$p){
    $p['stripe_mode']=$mode;
    $p['invoice_vat_rate']=$vat;
    $p['tax_bps']=$taxBps;
-   $p['billing_interval']=$interval;$p['price_amount']=$interval==='year'?$p['yearly_price']:$p['monthly_price'];
+   $p['billing_interval']=$interval;$p['eur_amount']=$interval==='year'?$p['yearly_price']:$p['monthly_price'];
+   $p['fx']=$fx;$p['ron_monthly']=$fx?BnrRates::convert($p['monthly_price'],$fx['eur_ron']):null;$p['ron_yearly']=$fx?BnrRates::convert($p['yearly_price'],$fx['eur_ron']):null;
+   $p['price_amount']=$fx?BnrRates::convert($p['eur_amount'],$fx['eur_ron']):0;
+   $p['fx_managed']=$p['slug']!=='free' && $fx!==null;
    $p['gross_amount']=BillingTax::total($p['price_amount'],$taxBps);
    if($interval==='year'){$p['invoice_name_ro']='Abonament anual Zion Storage '.$p['name'].' '.$p['capacity'];$p['invoice_product_code'].='_YEAR';}
    $row=$this->db->one("SELECT * FROM billing_prices WHERE plan=? AND interval=? AND stripe_mode=? AND status='active'",[$p['slug'],$interval,$mode]);
@@ -24,6 +28,7 @@ final class Plans {
  public function byPrice(string $id): ?array {
   $r=$this->db->one('SELECT * FROM billing_prices WHERE price_id=?',[$id]);if(!$r)return null;
   $p=$this->get($r['plan'],$r['interval'],$r['stripe_mode']);if(!$p)return null;
-  return array_replace($p,['stripe_price_id'=>$id,'price_amount'=>$r['amount']??$p['price_amount'],'currency'=>$r['currency'],'billing_interval'=>$r['interval'],'legacy'=>$r['status']==='legacy']);
+  $fx=$r['fx_snapshot']?json_decode($r['fx_snapshot'],true):null;
+  return array_replace($p,['fx'=>$fx,'eur_amount'=>$r['eur_amount']??($r['currency']==='eur'?$r['amount']:$p['eur_amount']),'fx_managed'=>$r['currency']==='ron' && $fx!==null,'stripe_price_id'=>$id,'gross_amount'=>BillingTax::total($r['amount']??$p['price_amount'],$p['tax_bps']),'price_amount'=>$r['amount']??$p['price_amount'],'currency'=>$r['currency'],'billing_interval'=>$r['interval'],'legacy'=>$r['status']==='legacy']);
  }
 }

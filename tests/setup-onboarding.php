@@ -1,9 +1,10 @@
 <?php
 // CLI-only, isolated fixtures. Never included by public/index.php.
 require dirname(__DIR__).'/src/bootstrap.php';
+require_once __DIR__.'/fixture-fx.php';
 $directory=getenv('ONBOARDING_TEST_DIRECTORY')?:'';
 if(PHP_SAPI!=='cli' || env('APP_ENV')!=='test' || !str_starts_with($directory,sys_get_temp_dir().'/zion-onboarding-') || env('DB_PATH')!==$directory.'/app.sqlite')throw new RuntimeException('Isolated onboarding fixture only');
-$db=new Zion\Database();$db->migrate();
+$db=new Zion\Database();$db->migrate();testFx($db);
 if(!is_dir($directory.'/sessions'))mkdir($directory.'/sessions',0700);
 ini_set('session.save_path',$directory.'/sessions');session_name('zion_session');
 $sessions=[];$now=time();

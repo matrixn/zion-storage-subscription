@@ -45,6 +45,7 @@ final class OblioInvoiceService
         return $this->db->transaction(function()use($invoice,$user,$change,$plan){
             $old=$this->db->one('SELECT id FROM fiscal_invoices WHERE stripe_invoice_id=?',[$invoice['id']]);
             if($old)return $old['id'];
+            if($change['fx_snapshot']??null){$fx=json_decode($change['fx_snapshot'],true);$plan['fx']=$fx;$plan['eur_amount']=$fx['eur_amount'];$plan['price_amount']=$fx['ron_amount'];}
             $plan['invoice_name_ro']='Upgrade '.(($plan['billing_interval']??'month')==='year'?'anual ':'').'Zion Storage '.$change['from_plan'].' → '.$plan['name'].' '.$plan['capacity'];
             $plan['invoice_product_code'].='_UPGRADE';
             if(($change['base_amount']??null)!==null){$plan['invoice_vat_rate']=BillingTax::percentage($change['tax_bps']);$plan['invoice_vat_name']='TVA';}
@@ -65,6 +66,7 @@ final class OblioInvoiceService
             return [$u['start'],$u['end']];
         }
         $lines = $source['invoice']['lines']['data'] ?? [];
+        if(isset($source['plan']['fx']['adjustment_ron'])){try{$lines=RonRenewals::baseLines($source['invoice'],$source['plan']['fx']);}catch(\Throwable $e){if($strict)throw new OblioException('unsupported_invoice_period_or_lines');return [null,null];}}
         $line = count($lines) === 1 ? $lines[0] : null;
         $price = $line['price']['id'] ?? $line['pricing']['price_details']['price'] ?? null;
         $period = $line['period'] ?? [];
@@ -101,6 +103,7 @@ final class OblioInvoiceService
         $profile = $source['profile'];
         if (!$profile) throw new OblioException('billing_profile_missing');
         $profile = BillingProfileService::validate($profile, $source['user']);
+        $address=OblioAddress::normalize($profile);
         $rate = $source['plan']['invoice_vat_rate'];
         if ($rate === '') $rate = $this->config['vat_rate'];
         $vatName = $source['plan']['invoice_vat_name'] ?? $this->config['vat_name'];
@@ -111,19 +114,14 @@ final class OblioInvoiceService
             'name'=>$profile['type'] === 'company' ? $profile['company_name'] : $profile['name'],
             'cif'=>$profile['type'] === 'company' ? $profile['tax_id'] : '',
             'rc'=>$profile['registration_number'], 'code'=>'zs-'.$row['user_id'],
-            'address'=>$profile['address'], 'state'=>$profile['county'], 'city'=>$profile['city'],
-            'country'=>$profile['country'], 'postalCode'=>$profile['postal_code'], 'email'=>$profile['billing_email'],
-            'phone'=>$profile['phone'], 'contact'=>$profile['name'], 'save'=>0, 'autocomplete'=>0,
+            'address'=>$profile['address'], 'state'=>$address['state'], 'city'=>$address['city'],
+            'country'=>$address['country'], 'postalCode'=>$profile['postal_code'], 'email'=>$profile['billing_email'],
+            'phone'=>$profile['phone'], 'contact'=>$profile['name'], 'save'=>1, 'autocomplete'=>0,
         ];
         $paidAt = $source['invoice']['status_transitions']['paid_at'] ?? $source['invoice']['created'] ?? null;
         if (!is_int($paidAt) || $paidAt <= 0) throw new OblioException('payment_date_missing');
         $payload = [
             'cif'=>$this->config['cif'] ?: 'SIMULATION', 'client'=>$client,
-            'clientLocation'=>[
-                'name'=>$client['name'], 'identity'=>'zs-'.$row['user_id'],
-                'country'=>$profile['country'], 'state'=>$profile['county'], 'city'=>$profile['city'],
-                'address'=>$profile['address'], 'postalCode'=>$profile['postal_code'],
-            ],
             'issueDate'=>self::fiscalDate(time()), 'dueDate'=>self::fiscalDate(time()),
             'collectDate'=>self::fiscalDate($paidAt), 'seriesName'=>$this->config['series'] ?: 'SIMULATION',
             'language'=>$this->config['language'], 'precision'=>2, 'currency'=>$row['currency'],
@@ -138,6 +136,7 @@ final class OblioInvoiceService
                 'vatIncluded'=>1, 'productType'=>'Serviciu', 'save'=>0,
             ]],
         ];
+        if($row['currency']==='RON' && !empty($source['plan']['fx']['rate_date']))$payload['mentions']=RonRenewals::note($source['plan']['fx']+['eur_amount'=>$source['plan']['eur_amount'],'ron_amount'=>$source['plan']['price_amount']]);
         if ($this->config['workstation'] !== '') $payload['workStation'] = $this->config['workstation'];
         return $payload;
     }
@@ -219,9 +218,14 @@ final class OblioInvoiceService
             if($this->db->one("SELECT user_id FROM test_account_resets WHERE user_id=? AND status='pending'",[$row['user_id']]))throw new \DomainException('Clientul are o resetare TEST în curs.');
             $source=EncryptedPayload::decode($row['source_snapshot']);
             $simulated=$source['simulated']??false;
+            // A definitive rejection did not issue a document. An explicit admin retry
+            // may correct its buyer data; uncertain transport outcomes keep their frozen request.
+            $rebuild=$simulated || !$row['request_snapshot'] || $row['error_message']==='provider_request_rejected';
+            if($rebuild){$profile=(new BillingProfileService($this->db))->get($row['user_id']);if($profile)$source['profile']=BillingProfileService::validate($profile,$source['user']);}
+
             $source['simulated']=false;$source['manual_test_authorized']=true;$source['manual_authorized_at']=time();
-            $this->db->transaction(function()use($id,$row,$source,$simulated,$admin){
-                $this->db->run("UPDATE fiscal_invoices SET source_snapshot=?,request_snapshot=CASE WHEN ? THEN NULL ELSE request_snapshot END,status='pending',simulation_reference=NULL,error_message=NULL,next_attempt_at=NULL,updated_at=? WHERE id=?",[EncryptedPayload::encode($source),(int)$simulated,time(),$id]);
+            $this->db->transaction(function()use($id,$row,$source,$simulated,$admin,$rebuild){
+                $this->db->run("UPDATE fiscal_invoices SET source_snapshot=?,request_snapshot=CASE WHEN ? THEN NULL ELSE request_snapshot END,status='pending',simulation_reference=NULL,error_message=NULL,next_attempt_at=NULL,updated_at=? WHERE id=?",[EncryptedPayload::encode($source),(int)$rebuild,time(),$id]);
                 $this->db->run('INSERT INTO admin_audit(admin_id,user_id,action,detail,created_at) VALUES(?,?,?,?,?)',[$admin,$row['user_id'],'fiscal_manual_generate',$row['stripe_invoice_id'].'; mode='.$row['stripe_mode'].'; real issuance explicitly requested',time()]);
             });
         }finally{flock($lock,LOCK_UN);fclose($lock);}

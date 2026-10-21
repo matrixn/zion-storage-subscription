@@ -80,6 +80,7 @@ with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
         return result.stdout
     env['MAIL_LOG_DIRECTORY']=temp+'/mail'
     cli("bin/console.php","migrate")
+    cli("tests/seed-fx.php")
     log=open(temp+"/server.log","w")
     server=subprocess.Popen(["php","-S","127.0.0.1:8092","-t","public","public/router.php"],cwd=ROOT,env=env,stdout=log,stderr=log)
     cookies=http.cookiejar.CookieJar()
@@ -173,8 +174,8 @@ with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
         link=mail_link();_,html=request(link)
         verification=re.search(r'name="token" value="([^"]+)"',html).group(1)
         status,html=request("/fr/verification-email",dict(_csrf=csrf(html),token=verification))
-        check(status==200 and "Votre compte est confirmé" in html and "Continuer avec le paiement de 3,99 EUR" in html and "votre espace sera activé après confirmation du paiement" in html,"HTTP paid verification shows confirmed account and exact payment total")
-        check('TVA non collectée' in html,'non-VAT operator Checkout disclosure matches zero-tax default')
+        check(status==200 and "Votre compte est confirmé" in html and "Continuer avec le paiement de 3,99 RON" in html and "votre espace sera activé après confirmation du paiement" in html,"HTTP paid verification shows confirmed account and exact payment total")
+        check('TVA non collectée' not in html and 'BNR' in html and 'paiements sont effectués en RON' in html,'Checkout shows BNR policy in RON without zero-tax text')
         _,html=request("/fr/coordonnees-facturation")
         check("paid-billing@example.com" in html and 'name="robots" content="noindex,nofollow"' in html,"HTTP private billing page renders local profile and noindex")
         company=billing.copy()

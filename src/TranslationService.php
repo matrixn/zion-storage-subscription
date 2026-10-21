@@ -12,6 +12,8 @@ final class TranslationService {
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/carousel.php')[$locale]);
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/billing.php')[$locale]);
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/onboarding.php')[$locale],$extra);
+  foreach(['tax.summary','tax.breakdown','tax.no_vat','upgrade.pay','upgrade.renewal'] as $key)if(isset($this->messages[$key]))$this->messages[$key]=str_replace('EUR','RON',$this->messages[$key]);
+  $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/currency.php')[$locale]);
  }
  public function get(string $key,array $vars=[]): string {
   $s=$this->messages[$key]??throw new \RuntimeException('Missing translation: '.$key);

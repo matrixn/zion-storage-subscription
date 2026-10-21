@@ -24,7 +24,7 @@ final class TaxHttp extends ChangesHttp {
   return $result;
  }
 }
-$taxDb=new Zion\Database(':memory:');$taxDb->migrate();$taxDb->migrate();
+$taxDb=new Zion\Database(':memory:');$taxDb->migrate();testFx($taxDb);$taxDb->migrate();testFx($taxDb);
 $taxSettings=new Zion\BillingTax($taxDb);
 check($taxSettings->basisPoints()===0,'VAT defaults to no collection for the declared non-VAT-registered operator');
 check(Zion\BillingTax::total(399,2100)===483 && Zion\BillingTax::total(4389,2100)===5311,'monthly and annual VAT round to EUR cents without changing base price');
@@ -58,7 +58,7 @@ $taxBilling->checkout($taxSignup('tax-new-rate@example.com'));
 check($taxHttp->taxCreates===3 && $taxHttp->rates[$rateId]['percentage']===21.0,'changing VAT creates a new object without mutating historical rate');
 $taxSettings->save('21',$taxAdmin);
 $u=$taxSignup('tax-upgrade@example.com');$end=time()+29*86400;$bought=time()-3600;
-$invoice=['id'=>'in_tax_original','object'=>'invoice','livemode'=>false,'customer'=>'cus_tax','subscription'=>'sub_tax','status'=>'paid','amount_paid'=>483,'currency'=>'eur','billing_reason'=>'subscription_create','created'=>$bought,'status_transitions'=>['paid_at'=>$bought],'subscription_details'=>['metadata'=>['zion_vat_bps'=>'2100']],'lines'=>['has_more'=>false,'data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>$bought,'end'=>$end]]]]];
+$invoice=['id'=>'in_tax_original','object'=>'invoice','livemode'=>false,'customer'=>'cus_tax','subscription'=>'sub_tax','status'=>'paid','amount_paid'=>483,'currency'=>'ron','billing_reason'=>'subscription_create','created'=>$bought,'status_transitions'=>['paid_at'=>$bought],'subscription_details'=>['metadata'=>['zion_vat_bps'=>'2100']],'lines'=>['has_more'=>false,'data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>$bought,'end'=>$end]]]]];
 $taxHttp->subscription=['id'=>'sub_tax','object'=>'subscription','customer'=>'cus_tax','status'=>'active','metadata'=>['user_id'=>$u['id'],'plan'=>'120gb','zion_vat_bps'=>'2100'],'items'=>['data'=>[['id'=>'si_tax','quantity'=>1,'price'=>$taxHttp->price('price_120'),'current_period_end'=>$end]]],'latest_invoice'=>$invoice];$taxHttp->invoices[$invoice['id']]=$invoice;
 $taxBilling->process(['id'=>'evt_tax_original','type'=>'invoice.paid','data'=>['object'=>$invoice]]);
 $changes=$taxBilling->changes();$changes->checkout($u,'250gb');$change=$taxDb->one('SELECT * FROM plan_changes');

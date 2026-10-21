@@ -6,7 +6,7 @@ document.querySelector('[data-billing-switch]')?.addEventListener('submit',event
   card.querySelector('.price-amount').textContent=card.dataset[interval+'Amount'];
   card.querySelector('.price-interval').textContent=card.dataset[interval+'Interval'];
   card.querySelector('.plan-caption').textContent=card.dataset[interval+'Caption'];
-  const tax=card.querySelector('.plan-tax');if(tax)tax.textContent=tax.dataset[interval+'Tax'];
+  const ron=card.querySelector('.plan-ron');if(ron)ron.textContent=ron.dataset[interval+'Ron'];
   const link=card.querySelector('.button'),target=new URL(link.href);target.searchParams.set('billing_interval',interval);link.href=target.pathname+target.search;
  });
  const target=new URL(location.href);target.searchParams.set('billing_interval',interval);history.replaceState(null,'',target);

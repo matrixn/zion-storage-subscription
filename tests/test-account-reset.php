@@ -28,7 +28,7 @@ final class ResetImmichFixture extends Zion\StorageProvisioningService {
  }
 }
 function resetFixture(): array {
- $db=new Zion\Database(':memory:');$db->migrate();seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new ResetImmichFixture();
+ $db=new Zion\Database(':memory:');$db->migrate();testFx($db);seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new ResetImmichFixture();
  $admin='reset-admin';$db->run('INSERT INTO administrators VALUES(?,?,?,?)',[$admin,'reset-admin@example.com','fixture-hash',time()]);
  $accounts=new Zion\AccountService($db,$plans,$mail,$store);
  $uid=$accounts->register(['name'=>'Reset Client','email'=>'reset-fixture@example.com','password'=>'fixture-reset-password','locale'=>'ro','plan'=>'120gb']);

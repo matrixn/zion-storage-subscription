@@ -1,5 +1,5 @@
 <?php
-$db=new Zion\Database(':memory:');$db->migrate();$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();
+$db=new Zion\Database(':memory:');$db->migrate();testFx($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();
 $admin='activation-admin';$db->run('INSERT INTO administrators VALUES(?,?,?,?)',[$admin,'activation-admin@example.com','unused-fixture-hash',time()]);
 $changes=new Zion\SubscriptionChanges($db,$plans,$mail,$store,new Stripe\StripeClient('sk_test_fixture'),new Zion\OblioInvoiceService($db,$mail));
 $service=new Zion\AdminService($db,$plans,$mail,$store,$changes);

@@ -30,6 +30,7 @@ class OblioClient
         ApiLog::curlResult('oblio',$method,$url,$ch,$body,$started,[$data,$token??'',$this->config['secret']??'']);
         curl_close($ch);
         if (self::missingDocumentResponse($method,$path,(int)$status,$body)) throw new OblioException('provider_document_missing');
+        if ($status === 400 && is_string($body) && is_array(json_decode($body,true))) throw new OblioException('provider_request_rejected');
         if ($body === false || $status < 200 || $status >= 300) throw new OblioException('provider_transport_failed');
         try { $result = json_decode($body, true, 512, JSON_THROW_ON_ERROR); }
         catch (\JsonException $e) { throw new OblioException('provider_invalid_response'); }

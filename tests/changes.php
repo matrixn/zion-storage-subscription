@@ -2,11 +2,12 @@
 // Full SDK + webhook fixtures; all unexpected HTTP is rejected.
 class ChangesHttp implements Stripe\HttpClient\ClientInterface {
  public array $calls=[];public array $subscription=[];public array $invoices=[];public array $sessions=[];public int $updates=0;public bool $loseUpdate=false;
- public function price(string $id): array {$year=str_ends_with($id,'_year');$base=$year?substr($id,0,-5):$id;return ['id'=>$id,'object'=>'price','active'=>true,'livemode'=>false,'product'=>'prod_fixture','currency'=>'eur','unit_amount'=>['price_120'=>399,'price_250'=>719,'price_500'=>1199][$base]*($year?11:1),'recurring'=>['interval'=>$year?'year':'month','interval_count'=>1]];}
+ public function price(string $id): array {$year=str_ends_with($id,'_year');$base=$year?substr($id,0,-5):$id;return ['id'=>$id,'object'=>'price','active'=>true,'livemode'=>false,'product'=>'prod_fixture','currency'=>'ron','unit_amount'=>['price_120'=>399,'price_250'=>719,'price_500'=>1199][$base]*($year?11:1),'recurring'=>['interval'=>$year?'year':'month','interval_count'=>1]];}
  public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null){
   $path=parse_url($url,PHP_URL_PATH);$this->calls[]=[$method,$path,$params];$r=null;
   if(preg_match('~/prices/(price_\d+(?:_year)?)$~',$path,$m))$r=$this->price($m[1]);
   elseif(preg_match('~/subscriptions/[^/]+$~',$path)){
+   if(strtolower($method)==='post' && isset($params['pause_collection'])){$this->subscription['pause_collection']=$params['pause_collection'];return [json_encode($this->subscription),200,[]];}
    if(strtolower($method)==='post'){
     check($params['proration_behavior']==='none' && $params['billing_cycle_anchor']==='unchanged','upgrade never prorates or resets renewal');
     $this->updates++;if(array_key_exists('tax_rates',$params['items'][0]))$this->subscription['items']['data'][0]['tax_rates']=$params['items'][0]['tax_rates'];if(array_key_exists('default_tax_rates',$params))$this->subscription['default_tax_rates']=$params['default_tax_rates'];$this->subscription['items']['data'][0]['price']=$this->price($params['items'][0]['price']);
@@ -17,7 +18,7 @@ class ChangesHttp implements Stripe\HttpClient\ClientInterface {
   }
   elseif(preg_match('~/invoices/([^/]+)$~',$path,$m))$r=$this->invoices[$m[1]]??null;
   elseif(str_ends_with($path,'/checkout/sessions') && strtolower($method)==='post'){
-   $id='cs_upgrade_'.(count($this->sessions)+1);$r=['id'=>$id,'object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/'.$id,'status'=>'open','payment_status'=>'unpaid','livemode'=>false,'currency'=>'eur','customer'=>$params['customer'],'amount_total'=>$params['line_items'][0]['price_data']['unit_amount'],'expires_at'=>$params['expires_at'],'metadata'=>$params['metadata']];$this->sessions[$id]=$r;
+   $id='cs_upgrade_'.(count($this->sessions)+1);$r=['id'=>$id,'object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/'.$id,'status'=>'open','payment_status'=>'unpaid','livemode'=>false,'currency'=>'ron','customer'=>$params['customer'],'amount_total'=>$params['line_items'][0]['price_data']['unit_amount'],'expires_at'=>$params['expires_at'],'metadata'=>$params['metadata']];$this->sessions[$id]=$r;
   }
   elseif(preg_match('~/checkout/sessions/([^/]+)(/expire)?$~',$path,$m)){
    if(isset($m[2]))$this->sessions[$m[1]]['status']='expired';$r=$this->sessions[$m[1]];
@@ -28,12 +29,12 @@ class ChangesHttp implements Stripe\HttpClient\ClientInterface {
  public function pay(string $sessionId,int $paidAt): array {
   $s=&$this->sessions[$sessionId];$s['status']='complete';$s['payment_status']='paid';$id='in_'.$sessionId;
   $s['payment_intent']=['id'=>'pi_'.$sessionId,'status'=>'succeeded','amount_received'=>$s['amount_total'],'metadata'=>$s['metadata'],'latest_charge'=>['id'=>'ch_'.$sessionId,'paid'=>true,'created'=>$paidAt]];
-  $s['invoice']=['id'=>$id,'object'=>'invoice','livemode'=>false,'customer'=>$s['customer'],'status'=>'paid','amount_paid'=>$s['amount_total'],'currency'=>'eur','metadata'=>$s['metadata'],'status_transitions'=>['paid_at'=>$paidAt],'created'=>$paidAt,'payment_intent'=>$s['payment_intent']['id'],'lines'=>['data'=>[['quantity'=>1,'period'=>['start'=>$paidAt,'end'=>$paidAt]]],'has_more'=>false]];
+  $s['invoice']=['id'=>$id,'object'=>'invoice','livemode'=>false,'customer'=>$s['customer'],'status'=>'paid','amount_paid'=>$s['amount_total'],'currency'=>'ron','metadata'=>$s['metadata'],'status_transitions'=>['paid_at'=>$paidAt],'created'=>$paidAt,'payment_intent'=>$s['payment_intent']['id'],'lines'=>['data'=>[['quantity'=>1,'period'=>['start'=>$paidAt,'end'=>$paidAt]]],'has_more'=>false]];
   $this->invoices[$id]=$s['invoice'];return $s;
  }
 }
 $_ENV['STRIPE_PRICE_250GB']='price_250';$_ENV['STRIPE_PRICE_500GB']='price_500';$_ENV['OBLIO_ENABLED']='false';
-$db=new Zion\Database(':memory:');$db->migrate();$db->migrate();seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
+$db=new Zion\Database(':memory:');$db->migrate();testFx($db);$db->migrate();testFx($db);seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
 $_ENV['ADMIN_EMAIL']='admin-fixture@example.com';$_ENV['ADMIN_PASSWORD']='fixture-admin-password';
 check(Zion\AccountControl::seedAdmin($db),'installation seeds administrator');
 $admin=$db->one('SELECT * FROM administrators');check(password_verify('fixture-admin-password',$admin['password_hash']),'admin password hashed');
@@ -42,7 +43,7 @@ check($db->one('SELECT password_hash FROM administrators')['password_hash']===$a
 $_ENV['ADMIN_EMAIL']='';$_ENV['ADMIN_PASSWORD']='';
 $http=new ChangesHttp();Stripe\ApiRequestor::setHttpClient($http);
 [$id,$token]=signup('upgrades@example.com','120gb','ro');$accounts->verify($token);$end=time()+29*86400;$bought=time()-86400;
-$invoice=['id'=>'in_original_upgrade','object'=>'invoice','livemode'=>false,'customer'=>'cus_upgrade','subscription'=>'sub_upgrade','status'=>'paid','amount_paid'=>399,'currency'=>'eur','billing_reason'=>'subscription_create','status_transitions'=>['paid_at'=>$bought],'created'=>$bought,'lines'=>['data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>$bought,'end'=>$end]]],'has_more'=>false]];
+$invoice=['id'=>'in_original_upgrade','object'=>'invoice','livemode'=>false,'customer'=>'cus_upgrade','subscription'=>'sub_upgrade','status'=>'paid','amount_paid'=>399,'currency'=>'ron','billing_reason'=>'subscription_create','status_transitions'=>['paid_at'=>$bought],'created'=>$bought,'lines'=>['data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>$bought,'end'=>$end]]],'has_more'=>false]];
 $http->invoices[$invoice['id']]=$invoice;
 $http->subscription=['id'=>'sub_upgrade','object'=>'subscription','customer'=>'cus_upgrade','status'=>'active','metadata'=>['user_id'=>$id,'plan'=>'120gb'],'items'=>['data'=>[['id'=>'si_upgrade','quantity'=>1,'price'=>$http->price('price_120'),'current_period_end'=>$end]]],'latest_invoice'=>$invoice];
 $billing=new Zion\StripeService($db,$plans,$mail,$store);$changes=$billing->changes();

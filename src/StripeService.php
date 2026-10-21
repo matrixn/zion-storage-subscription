@@ -1,7 +1,7 @@
 <?php
 namespace Zion;
 class StripeService implements BillingService {
- public const WEBHOOK_TYPES=['checkout.session.completed','invoice.paid','invoice.payment_failed','customer.subscription.created','customer.subscription.updated','customer.subscription.deleted'];
+ public const WEBHOOK_TYPES=['invoice.created','invoice.payment_action_required','checkout.session.completed','invoice.paid','invoice.payment_failed','customer.subscription.created','customer.subscription.updated','customer.subscription.deleted'];
  protected array $webhookDebug=[];
  private function trace(string $stage,array $context=[]): void {$this->webhookDebug=array_replace($this->webhookDebug,$context,['stage'=>$stage]);ApiLog::context($this->webhookDebug);}
  protected \Stripe\StripeClient $client;
@@ -14,35 +14,47 @@ class StripeService implements BillingService {
   $this->client=new \Stripe\StripeClient($key);
   $this->fiscal=$fiscal??new OblioInvoiceService($db,$mail);
  }
- public function checkout(array $u): string {
-  if(($u['stripe_mode']??'test')!==$this->settings['mode'])return (new self($this->db,$this->plans,$this->mail,$this->storage,null,$u['stripe_mode']))->checkout($u);
+ public function checkout(array $u,?string $quote=null): string {
+  if(($u['stripe_mode']??'test')!==$this->settings['mode'])return (new self($this->db,$this->plans,$this->mail,$this->storage,null,$u['stripe_mode']))->checkout($u,$quote);
   if((new AccountControl($this->db))->banned($u['id']) || (new AccountControl($this->db))->manual($u['id'])) throw new \RuntimeException('checkout_ineligible');
   if(!$u['email_verified_at'] || $u['selected_plan_id']==='free') throw new \RuntimeException('checkout_ineligible');
   $profile=(new BillingProfileService($this->db))->get($u['id']);
   if(!$profile) throw new \InvalidArgumentException('billing.required');
   BillingProfileService::validate($profile,$u);
+  (new BnrRates($this->db))->refresh();
   $interval=$u['billing_interval']??'month';$p=$this->plans->get($u['selected_plan_id'],$interval,$this->settings['mode']);
-  if(!$p || !$p['stripe_price_id'] || !$this->settings['secret_key']) throw new \RuntimeException('billing_unconfigured');
+  if(!$p || !$p['fx'] || !$this->settings['secret_key']) throw new \RuntimeException('billing_unconfigured');
+  if($quote!==null && !hash_equals(BnrRates::signature($p,$u['id']),$quote))throw new \DomainException('checkout.quote_changed');
   // Serialize session creation so two tabs cannot create separate subscriptions.
   $lock=fopen(dirname(__DIR__).'/storage/checkout-'.$u['id'].'.lock','c'); flock($lock,LOCK_EX);
   try {
    $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
    if($s && $s['stripe_subscription_id'] && !in_array($s['status'],['canceled','incomplete_expired'],true)) throw new \RuntimeException('subscription_exists');
    $old=$this->db->one('SELECT * FROM checkout_sessions WHERE user_id=? AND expires_at>?',[$u['id'],time()+60]);
-   if($old && $old['price_id']===$p['stripe_price_id'] && $old['billing_interval']===$interval && $old['stripe_mode']===$this->settings['mode'] && $old['tax_bps']===$p['tax_bps'])return $old['url'];
+   if($old && ($old['fx_snapshot']?json_decode($old['fx_snapshot'],true)['eur_ron']??null:null)===$p['fx']['eur_ron'] && ($old['fx_snapshot']?json_decode($old['fx_snapshot'],true)['rate_date']??null:null)===$p['fx']['rate_date'] && $old['price_id']===$p['stripe_price_id'] && $old['billing_interval']===$interval && $old['stripe_mode']===$this->settings['mode'] && $old['tax_bps']===$p['tax_bps'])return $old['url'];
    if($old)throw new \DomainException('checkout.pending_quote');
+   $mapping=$this->db->one('SELECT currency,amount FROM billing_prices WHERE price_id=?',[$p['stripe_price_id']]);
+   if(!$mapping || $mapping['currency']!=='ron' || $mapping['amount']!==$p['price_amount']){
+    $admin=$this->db->one('SELECT id FROM administrators ORDER BY created_at LIMIT 1')['id']??null;
+    if(!$admin)throw new \DomainException('upgrade.unconfigured');
+    $this->catalog()->synchronize($p['slug'],$interval,$admin);
+    $p['stripe_price_id']=$this->plans->get($p['slug'],$interval,$this->settings['mode'])['stripe_price_id'];
+   }
+   if(!$p['stripe_price_id'])throw new \DomainException('upgrade.unconfigured');
    BillingCatalog::validatePrice($this->client->prices->retrieve($p['stripe_price_id'])->toArray(),$p);
    $rates=(new BillingTax($this->db))->rates($this->client,$this->settings['mode'],$p['tax_bps']);
    $l=$u['locale']; $epoch=intdiv(time(),1800);
    $session=$this->client->checkout->sessions->create([
-    'mode'=>'subscription','customer_email'=>$u['email'],'client_reference_id'=>$u['id'],'locale'=>$l==='ro'?'ro':$l,
+    'expires_at'=>time()+1860,'mode'=>'subscription','customer_email'=>$u['email'],'client_reference_id'=>$u['id'],'locale'=>$l==='ro'?'ro':$l,
     'line_items'=>[['price'=>$p['stripe_price_id'],'quantity'=>1,'tax_rates'=>$rates]],
     'metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug'],'billing_interval'=>$interval,'stripe_mode'=>$this->settings['mode']],
-    'subscription_data'=>['metadata'=>['zion_vat_bps'=>(string)$p['tax_bps'],'user_id'=>$u['id'],'plan'=>$p['slug'],'billing_interval'=>$interval,'stripe_mode'=>$this->settings['mode']]],
+    'custom_text'=>['submit'=>['message'=>(new TranslationService($l))->get('fx.policy')]],
+    'subscription_data'=>['metadata'=>BnrRates::metadata($p)+['zion_vat_bps'=>(string)$p['tax_bps'],'user_id'=>$u['id'],'plan'=>$p['slug'],'billing_interval'=>$interval,'stripe_mode'=>$this->settings['mode']]],
     'success_url'=>base_url().Router::path($l,'status'),'cancel_url'=>base_url().Router::path($l,'cancel'),
    ],['idempotency_key'=>'checkout-'.$u['id'].'-'.$p['stripe_price_id'].'-vat'.$p['tax_bps'].'-'.$epoch]);
    $this->db->run('INSERT INTO checkout_sessions(user_id,session_id,url,expires_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET session_id=excluded.session_id,url=excluded.url,expires_at=excluded.expires_at',[$u['id'],$session->id,$session->url,$session->expires_at]);
    $this->db->run('UPDATE checkout_sessions SET price_id=?,billing_interval=?,stripe_mode=?,tax_bps=? WHERE user_id=?',[$p['stripe_price_id'],$interval,$this->settings['mode'],$p['tax_bps'],$u['id']]);
+   $this->db->run('UPDATE checkout_sessions SET fx_snapshot=? WHERE user_id=?',[json_encode($p['fx']+['eur_amount'=>$p['eur_amount'],'ron_amount'=>$p['price_amount']],JSON_THROW_ON_ERROR),$u['id']]);
    return $session->url;
   } finally { flock($lock,LOCK_UN); fclose($lock); }
  }
@@ -171,6 +183,17 @@ class StripeService implements BillingService {
   $rates=$lines[0]['tax_rates']??[];
   if(count($rates)===1 && isset($rates[0]['percentage']))$snapshot=(int)round($rates[0]['percentage']*100);
   if($snapshot!==null){$fallback['invoice_vat_rate']=BillingTax::percentage((int)$snapshot);$fallback['invoice_vat_name']='TVA';}
+  if(($invoice['currency']??'')==='ron'){
+   $quote=$this->db->one('SELECT snapshot FROM invoice_fx_quotes WHERE invoice_id=? AND stripe_mode=?',[$invoice['id'],$this->settings['mode']]);
+   $fx=$quote?json_decode($quote['snapshot'],true):null;
+   $meta=$invoice['metadata']??[];
+   if(empty($meta['zion_fx_rate']))$meta=$invoice['parent']['subscription_details']['metadata']??$invoice['subscription_details']['metadata']??[];
+   if(!$fx && ($meta['zion_fx_policy']??'')==='bnr_v1' && preg_match('/^[1-9][0-9]{0,6}$/D',(string)($meta['zion_fx_rate']??'')) && preg_match('/^\d{4}-\d{2}-\d{2}$/D',(string)($meta['zion_fx_date']??''))){
+    $fx=['eur_ron'=>(int)$meta['zion_fx_rate'],'rate_date'=>$meta['zion_fx_date'],'eur_amount'=>(int)$meta['zion_eur_amount'],'source_url'=>BnrRates::SOURCE];
+    $fx['ron_amount']=BnrRates::convert($fx['eur_amount'],$fx['eur_ron']);
+   }
+   if(!empty($fx['rate_date'])){$fallback['fx']=$fx;$fallback['eur_amount']=$fx['eur_amount'];$fallback['price_amount']=$fx['ron_amount'];}
+  }
   return $fallback;
  }
  private function storeInvoice(array $invoice,string $uid): void {
@@ -196,6 +219,8 @@ class StripeService implements BillingService {
    $this->db->run("INSERT INTO billing_events(id,type,status,created_at) VALUES(?,?,'processing',?) ON CONFLICT(id) DO UPDATE SET status='processing'",[$event['id'],$event['type'],time()]);
    $this->db->run('UPDATE billing_events SET stripe_mode=? WHERE id=?',[$this->settings['mode'],$event['id']]);
    $o=$event['data']['object'];
+   $purpose=$o['metadata']['purpose']??$o['parent']['subscription_details']['metadata']['purpose']??$o['subscription_details']['metadata']['purpose']??'';
+   if($purpose==='zion_bnr_api_validation'){$this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);$this->trace('complete',['outcome'=>'isolated_validation']);return;}
    $this->trace('fetch_invoice',['invoice_id'=>$event['type']==='invoice.paid'?($o['id']??''):'','checkout_session_id'=>$event['type']==='checkout.session.completed'?($o['id']??''):'']);
    // A delayed event must invoice its own paid cycle, never the latest subscription invoice.
    $paidInvoice=$event['type']==='invoice.paid'?$this->fetchInvoice($o['id']):null;
@@ -221,12 +246,17 @@ class StripeService implements BillingService {
    $this->trace('fetch_subscription',['subscription_id'=>is_string($id)?$id:'']);
    $s=$this->fetchSubscription($id);
    $uid=$s['metadata']['user_id']??'';
+   if($uid==='' && ($s['metadata']['purpose']??'')==='zion_bnr_api_validation'){$this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);$this->trace('complete',['outcome'=>'isolated_validation']);return;}
    $this->trace('identify_user',['user_id'=>$uid]);
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
    if(!$u) throw new \RuntimeException('unknown_billing_user');
    $this->db->run('UPDATE billing_events SET user_id=? WHERE id=?',[$uid,$event['id']]);
    if($u['stripe_mode']!==$this->settings['mode'] || ($s['livemode']??false)!==($this->settings['mode']==='live'))throw new \RuntimeException('subscription_mode_mismatch');
    $userLock=fopen(dirname(__DIR__).'/storage/provision-'.$uid.'.lock','c');flock($userLock,LOCK_EX);
+   if($event['type']==='invoice.created'){
+    $draft=$this->fetchInvoice($o['id']);(new RonRenewals($this->db,$this->client,$this->settings['mode']))->queue($draft,$s,$uid);
+    $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);$this->trace('complete',['outcome'=>'ron_renewal_queued']);return;
+   }
    $this->changes()->reconcile($s);
    $u=$this->db->one('SELECT * FROM users WHERE id=?',[$uid]);
    $manual=(new AccountControl($this->db))->manual($uid);
@@ -241,6 +271,7 @@ class StripeService implements BillingService {
    if($invoice && ($invoice['livemode']??false)!==($this->settings['mode']==='live'))throw new \RuntimeException('invoice_mode_mismatch');
    if($paidInvoice && ($paidInvoice['livemode']??false)!==($this->settings['mode']==='live'))throw new \RuntimeException('invoice_mode_mismatch');
    $paid=$invoice && ($invoice['status']??'')==='paid' && $s['status']==='active';
+   if($paid && $p['fx_managed'] && ($s['metadata']['zion_fx_policy']??'')==='bnr_v1')$s=(new RonRenewals($this->db,$this->client,$this->settings['mode']))->arm($s,$u,$p);
    $this->trace('persist',['paid_confirmed'=>(bool)$paid,'invoice_id'=>$paidInvoice['id']??$invoice['id']??'']);
    $existing=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$uid]);
    $oldSubscription=false;
@@ -271,13 +302,13 @@ class StripeService implements BillingService {
     else $this->storage->disableUser($u['storage_user_id']);
     $this->db->run('UPDATE users SET status=?,updated_at=? WHERE id=?',[$paid?'active':'restricted',time(),$uid]);
    }
-   if($paid && !$oldSubscription && ($paidInvoice || $invoice))(new OnboardingLinks($this->db,$this->mail))->firstPayment($uid,($paidInvoice??$invoice)['id']);
+   if($paid && !$oldSubscription && ($paidInvoice || $invoice) && (($paidInvoice??$invoice)['billing_reason']??'')==='subscription_create')(new OnboardingLinks($this->db,$this->mail))->firstPayment($uid,($paidInvoice??$invoice)['id']);
    $this->trace('notifications');
    $this->db->transaction(function() use($u,$paidInvoice,$paid,$s,$event,$oldSubscription) {
     if($paidInvoice) $this->mail->queue($u['email'],$u['locale'],'payment',[],'paid:'.$paidInvoice['id']);
     if($paid && !$oldSubscription) $this->mail->queue($u['email'],$u['locale'],'subscription',[],'subscription:'.$s['id']);
     elseif($s['status']==='canceled') $this->mail->queue($u['email'],$u['locale'],'cancelled',[],'cancelled:'.$s['id']);
-    elseif($event['type']==='invoice.payment_failed') $this->mail->queue($u['email'],$u['locale'],'failed',[],'failed:'.$event['id']);
+    elseif(in_array($event['type'],['invoice.payment_failed','invoice.payment_action_required'],true)) $this->mail->queue($u['email'],$u['locale'],'failed',['url'=>base_url().Router::path($u['locale'],'status')],'failed:'.$event['id']);
     $this->db->run("UPDATE billing_events SET status='complete' WHERE id=?",[$event['id']]);
    });
    $this->trace('complete',['outcome'=>'processed']);

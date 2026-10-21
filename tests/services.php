@@ -4,7 +4,7 @@ final class FixtureHttp implements Stripe\HttpClient\ClientInterface {
  public array $calls=[];
  public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null) {
   $this->calls[]=[$method,$url,$params,$headers];
-  if(str_contains($url,'/prices/')){$year=str_ends_with($url,'_year');$r=['id'=>$year?'price_120_year':'price_120','object'=>'price','active'=>true,'livemode'=>false,'currency'=>'eur','unit_amount'=>$year?4389:399,'recurring'=>['interval'=>$year?'year':'month','interval_count'=>1],'product'=>'prod_fixture'];}
+  if(str_contains($url,'/prices/')){$year=str_ends_with($url,'_year');$r=['id'=>$year?'price_120_year':'price_120','object'=>'price','active'=>true,'livemode'=>false,'currency'=>'ron','unit_amount'=>$year?4389:399,'recurring'=>['interval'=>$year?'year':'month','interval_count'=>1],'product'=>'prod_fixture'];}
   elseif(str_contains($url,'checkout/sessions'))$r=['id'=>'cs_fixture','object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/cs_fixture','expires_at'=>time()+3600];
   elseif(str_contains($url,'billing_portal/configurations'))$r=['id'=>'bpc_fixture','object'=>'billing_portal.configuration','active'=>true,'features'=>['subscription_update'=>['enabled'=>false]]];
   else $r=['id'=>'bps_fixture','object'=>'billing_portal.session','url'=>'https://billing.stripe.com/p/session/test'];
@@ -36,7 +36,7 @@ check($saved['price_id']==='price_120_year' && $saved['billing_interval']==='yea
 
 final class AdapterFixture extends Zion\StorageProvisioningService {
  public array $calls=[];public array $records=[];
- public function __construct(){ $db=new Zion\Database(':memory:');$db->migrate();parent::__construct($db); }
+ public function __construct(){ $db=new Zion\Database(':memory:');$db->migrate();testFx($db);parent::__construct($db); }
  private bool $onboarded=false;
  protected function userRequest(string $method,string $path,?array $body,?string $token):array {
   if($path==='/auth/login')return ['accessToken'=>'fixture-user-session-token','userId'=>'adapter-id','userEmail'=>'adapter@example.com','isAdmin'=>false];

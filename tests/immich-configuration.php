@@ -9,7 +9,7 @@ final class ImmichConfigurationFixture extends Zion\StorageProvisioningService {
  }
  public function updateConfiguration(array $config):array{$this->writes++;if(!$this->unconfirmed)$this->config=$config;return $config;}
 }
-$icDb=new Zion\Database(':memory:');$icDb->migrate();$icAdmin=bin2hex(random_bytes(16));
+$icDb=new Zion\Database(':memory:');$icDb->migrate();testFx($icDb);$icAdmin=bin2hex(random_bytes(16));
 $icDb->run('INSERT INTO administrators(id,email,password_hash,created_at) VALUES(?,?,?,?)',[$icAdmin,'config@example.test','fixture-hash',time()]);
 $icTransport=new ImmichConfigurationFixture();$ic=new Zion\ImmichConfiguration($icDb,$icTransport);
 check($ic->accountDefaults()===['cast'=>false,'people'=>false,'memories'=>true],'Immich UI starts with the privacy-oriented new-account profile');

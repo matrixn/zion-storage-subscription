@@ -1,5 +1,5 @@
 <?php
-$onDb=new Zion\Database(':memory:');$onDb->migrate();$onView=new Zion\MobileOnboarding($onDb);
+$onDb=new Zion\Database(':memory:');$onDb->migrate();testFx($onDb);$onView=new Zion\MobileOnboarding($onDb);
 $onId=bin2hex(random_bytes(16));$onNow=time();
 $onDb->run('INSERT INTO users(id,name,email,password_hash,locale,selected_plan_id,email_verified_at,storage_user_id,status,terms_at,privacy_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',[$onId,'Onboarding','onboarding@example.test','fixture-hash','en','120gb',$onNow,null,'verified',$onNow,$onNow,$onNow,$onNow]);
 $onUser=$onDb->one('SELECT * FROM users WHERE id=?',[$onId]);

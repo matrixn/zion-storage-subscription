@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/src/bootstrap.php';
+require_once __DIR__.'/fixture-fx.php';
 $_ENV['APP_ENV']='test';$_ENV['MAIL_TRANSPORT']='log';$_ENV['STRIPE_SECRET_KEY']='sk_test_fake';$_ENV['STRIPE_WEBHOOK_SECRET']='whsec_fixture';
 $_ENV['STRIPE_PRICE_120GB']='price_120'; $_ENV['APP_URL']='http://localhost:8088';
 $_ENV['APP_KEY']=str_repeat('test-key',8);
@@ -32,9 +33,11 @@ function seedCatalog(Zion\Database $db):void {
  if(env('APP_ENV')!=='test' || $db->one('SELECT id FROM users LIMIT 1'))throw new RuntimeException('Fixture requires empty test database');
  $db->run("INSERT INTO integration_settings(key,value) VALUES('billing:vat_bps','0') ON CONFLICT(key) DO UPDATE SET value='0'"); // Historical tax-free fixtures; dedicated VAT tests exercise the default and nonzero rates.
  $db->run('DELETE FROM billing_prices');
- foreach(['120gb'=>['price_120',399],'250gb'=>['price_250',719],'500gb'=>['price_500',1199]] as $slug=>[$id,$amount])foreach(['month'=>1,'year'=>11] as $interval=>$multiple)$db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,product_id,status,created_at,updated_at) VALUES(?,?,?,'eur',?,'prod_fixture','active',?,?)",[$id.($interval==='year'?'_year':''),$slug,$interval,$amount*$multiple,time(),time()]);
+ foreach(['120gb'=>['price_120',399],'250gb'=>['price_250',719],'500gb'=>['price_500',1199]] as $slug=>[$id,$amount])foreach(['month'=>1,'year'=>11] as $interval=>$multiple)$db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,product_id,status,created_at,updated_at) VALUES(?,?,?,'ron',?,'prod_fixture','active',?,?)",[$id.($interval==='year'?'_year':''),$slug,$interval,$amount*$multiple,time(),time()]);
+ $rate=$db->one('SELECT * FROM exchange_rates ORDER BY rate_date DESC LIMIT 1');
+ $db->run('UPDATE billing_prices SET eur_amount=amount,fx_snapshot=?',[json_encode($rate,JSON_THROW_ON_ERROR)]);
 }
-$db=new Zion\Database(':memory:');$db->migrate();seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
+$db=new Zion\Database(':memory:');$db->migrate();testFx($db);seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
 function signup(string $email,string $plan='free',string $locale='en',string $interval='month'):array{
  global $accounts,$db;
  $id=$accounts->register(['name'=>'Test User','email'=>$email,'password'=>'a-long-test-password','locale'=>$locale,'plan'=>$plan,'billing_interval'=>$interval]);
@@ -72,7 +75,7 @@ check($accounts->register(['name'=>'Other','email'=>'FREE@example.com','password
 [$paid,$pt]=signup('paid@example.com','120gb');$accounts->verify($pt);
 check(!$accounts->provision($paid,'a-long-test-password'),'paid user cannot activate before webhook');
 $billing=new TestStripe($db,$plans,$mail,$store);
-$billing->snapshot=['id'=>'sub_test','customer'=>'cus_test','status'=>'active','metadata'=>['user_id'=>$paid,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120'],'current_period_end'=>time()+86400]]],'latest_invoice'=>['id'=>'in_test','status'=>'paid','hosted_invoice_url'=>'https://invoice.stripe.com/i/test','amount_paid'=>799,'currency'=>'eur','created'=>time()]];
+$billing->snapshot=['id'=>'sub_test','customer'=>'cus_test','status'=>'active','metadata'=>['user_id'=>$paid,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120'],'current_period_end'=>time()+86400]]],'latest_invoice'=>['id'=>'in_test','status'=>'paid','hosted_invoice_url'=>'https://invoice.stripe.com/i/test','amount_paid'=>799,'currency'=>'ron','created'=>time()]];
 $event=['id'=>'evt_paid','object'=>'event','livemode'=>false,'type'=>'invoice.paid','data'=>['object'=>['id'=>'in_test','subscription'=>'sub_test']]];
 $billing->invoices['in_test']=$billing->snapshot['latest_invoice']+['livemode'=>false,'customer'=>'cus_test','subscription'=>'sub_test','lines'=>['data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>1792108800,'end'=>1794787200]]],'has_more'=>false]];
 $raw=json_encode($event);$sig='t='.time().',v1='.hash_hmac('sha256',time().'.'.$raw,'whsec_fixture');
@@ -127,3 +130,5 @@ require __DIR__.'/immich-configuration.php';
 require __DIR__.'/customer-documents.php';
 
 require __DIR__.'/pricing-revision.php';
+
+require __DIR__.'/bnr-ron.php';

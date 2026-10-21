@@ -1,6 +1,6 @@
 <?php
 // Conflicting environment values must never bleed into a saved provider.
-$db=new Zion\Database(':memory:');$db->migrate();seedCatalog($db);$settings=new Zion\IntegrationSettings($db);
+$db=new Zion\Database(':memory:');$db->migrate();testFx($db);seedCatalog($db);$settings=new Zion\IntegrationSettings($db);
 $_ENV['ADMIN_EMAIL']='settings-fixture@example.com';$_ENV['ADMIN_PASSWORD']='settings-fixture-password';
 Zion\AccountControl::seedAdmin($db);$admin=$db->one('SELECT id FROM administrators')['id'];$_ENV['ADMIN_EMAIL']='';$_ENV['ADMIN_PASSWORD']='';
 check($settings->stripe()['secret_key']===env('STRIPE_SECRET_KEY'),'unsaved Stripe uses environment for backward compatibility');
@@ -31,7 +31,7 @@ $settings->save('oblio',$input,$admin);
 $oblio=$settings->oblio();
 check(!$oblio['enabled'] && !$oblio['allow_test_payments'] && $oblio['workstation']==='','saved disabled and empty Oblio values override environment');
 check($plans->get('120gb')['invoice_vat_rate']==='0','new fiscal plan snapshots use admin VAT instead of environment VAT');
-$invoice=['id'=>'in_admin_settings','customer'=>'cus_admin_settings','status'=>'paid','livemode'=>false,'amount_paid'=>199,'currency'=>'eur','created'=>time(),'status_transitions'=>['paid_at'=>time()],'lines'=>['data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>time(),'end'=>time()+30*86400]]],'has_more'=>false]];
+$invoice=['id'=>'in_admin_settings','customer'=>'cus_admin_settings','status'=>'paid','livemode'=>false,'amount_paid'=>199,'currency'=>'ron','created'=>time(),'status_transitions'=>['paid_at'=>time()],'lines'=>['data'=>[['price'=>['id'=>'price_120'],'quantity'=>1,'period'=>['start'=>time(),'end'=>time()+30*86400]]],'has_more'=>false]];
 $fiscal=new Zion\OblioInvoiceService($db,$mail);$fid=$fiscal->capture($invoice,$db->one('SELECT * FROM users WHERE id=?',[$id]),['id'=>'sub_settings'],$plans->get('120gb'));
 check($fiscal->process($fid) && $db->one('SELECT status FROM fiscal_invoices WHERE id=?',[$fid])['status']==='simulated','Oblio worker uses saved disabled mode despite enabled environment');
 $payload=Zion\EncryptedPayload::decode($db->one('SELECT request_snapshot FROM fiscal_invoices WHERE id=?',[$fid])['request_snapshot']);

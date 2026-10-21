@@ -10,12 +10,13 @@ final class ModeStripeHttp implements Stripe\HttpClient\ClientInterface {
   if(preg_match('~/subscriptions/([^/]+)$~',$path,$m)){
    if(!isset($this->subscriptions[$mode][$m[1]]))throw new RuntimeException('Fixture mode mismatch');
    $s=&$this->subscriptions[$mode][$m[1]];
+   if($post && isset($params['pause_collection'])){$s['pause_collection']=$params['pause_collection'];return [json_encode($s),200,[]];}
    if($post){if(array_key_exists('tax_rates',$params['items'][0]))$s['items']['data'][0]['tax_rates']=$params['items'][0]['tax_rates'];if(array_key_exists('default_tax_rates',$params))$s['default_tax_rates']=$params['default_tax_rates'];$s['items']['data'][0]['price']=$this->catalogs[$mode]->prices[$params['items'][0]['price']];$s['metadata']=array_replace($s['metadata'],$params['metadata']);check($params['proration_behavior']==='none'&&$params['billing_cycle_anchor']==='unchanged','mode-aware subscription update preserves renewal');if($this->loseUpdate){$this->loseUpdate=false;throw new RuntimeException('fixture-response-lost');}}
    $r=$s;
   }elseif(str_ends_with($path,'/checkout/sessions')&&$post){
    $id='cs_'.$mode.'_'.(count($this->sessions[$mode])+1);
    $amount=$params['line_items'][0]['price_data']['unit_amount']??$this->catalogs[$mode]->prices[$params['line_items'][0]['price']]['unit_amount'];
-   $r=['id'=>$id,'object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/'.$id,'status'=>'open','payment_status'=>'unpaid','livemode'=>$mode==='live','currency'=>'eur','customer'=>$params['customer']??'cus_'.$mode,'amount_total'=>$amount,'expires_at'=>$params['expires_at']??time()+3600,'metadata'=>$params['metadata']];$this->sessions[$mode][$id]=$r;
+   $r=['id'=>$id,'object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/'.$id,'status'=>'open','payment_status'=>'unpaid','livemode'=>$mode==='live','currency'=>'ron','customer'=>$params['customer']??'cus_'.$mode,'amount_total'=>$amount,'expires_at'=>$params['expires_at']??time()+3600,'metadata'=>$params['metadata']];$this->sessions[$mode][$id]=$r;
   }elseif(preg_match('~/checkout/sessions/([^/]+)$~',$path,$m))$r=$this->sessions[$mode][$m[1]]??throw new RuntimeException('Fixture mode mismatch');
   elseif(preg_match('~/invoices/([^/]+)$~',$path,$m))$r=$this->invoices[$mode][$m[1]]??throw new RuntimeException('Fixture mode mismatch');
   elseif(str_contains($path,'billing_portal/configurations'))$r=['id'=>'bpc_'.$mode,'object'=>'billing_portal.configuration','active'=>true,'features'=>['subscription_update'=>['enabled'=>false]]];
@@ -26,10 +27,10 @@ final class ModeStripeHttp implements Stripe\HttpClient\ClientInterface {
  public function pay(string $mode,string $id): array {
   $s=&$this->sessions[$mode][$id];$now=time();$s['status']='complete';$s['payment_status']='paid';
   $s['payment_intent']=['id'=>'pi_'.$id,'status'=>'succeeded','amount_received'=>$s['amount_total'],'metadata'=>$s['metadata'],'latest_charge'=>['id'=>'ch_'.$id,'paid'=>true,'created'=>$now]];
-  $s['invoice']=['id'=>'in_'.$id,'object'=>'invoice','status'=>'paid','livemode'=>$mode==='live','customer'=>$s['customer'],'amount_paid'=>$s['amount_total'],'currency'=>'eur','created'=>$now,'status_transitions'=>['paid_at'=>$now],'metadata'=>$s['metadata'],'lines'=>['has_more'=>false,'data'=>[['quantity'=>1,'period'=>['start'=>$now,'end'=>$now]]]]];$this->invoices[$mode][$s['invoice']['id']]=$s['invoice'];return $s;
+  $s['invoice']=['id'=>'in_'.$id,'object'=>'invoice','status'=>'paid','livemode'=>$mode==='live','customer'=>$s['customer'],'amount_paid'=>$s['amount_total'],'currency'=>'ron','created'=>$now,'status_transitions'=>['paid_at'=>$now],'metadata'=>$s['metadata'],'lines'=>['has_more'=>false,'data'=>[['quantity'=>1,'period'=>['start'=>$now,'end'=>$now]]]]];$this->invoices[$mode][$s['invoice']['id']]=$s['invoice'];return $s;
  }
 }
-$db=new Zion\Database(':memory:');$db->migrate();$db->run("INSERT INTO integration_settings(key,value) VALUES('billing:vat_bps','0')");$db->run('DELETE FROM billing_prices');$settings=new Zion\IntegrationSettings($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
+$db=new Zion\Database(':memory:');$db->migrate();testFx($db);$db->run("INSERT INTO integration_settings(key,value) VALUES('billing:vat_bps','0')");$db->run('DELETE FROM billing_prices');$settings=new Zion\IntegrationSettings($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
 $_ENV['ADMIN_EMAIL']='mode-fixture@example.com';$_ENV['ADMIN_PASSWORD']='mode-fixture-password';Zion\AccountControl::seedAdmin($db);$admin=$db->one('SELECT id FROM administrators')['id'];$_ENV['ADMIN_EMAIL']='';$_ENV['ADMIN_PASSWORD']='';
 $settings->save('stripe',['credential_mode'=>'test','secret_key'=>'sk_test_fake','webhook_secret'=>'whsec_testFixture'],$admin);
 $settings->save('stripe',['credential_mode'=>'live','secret_key'=>'sk_live_fake','webhook_secret'=>'whsec_liveFixture'],$admin);
@@ -57,7 +58,7 @@ $http->catalogs['live']->losePriceResponse=true;$lost=$liveSync->synchronize($ad
 check($lost['status']==='partial','lost response remains explicitly incomplete');
 check($liveSync->synchronize($admin)['status']==='ok' && $http->catalogs['live']->created===6,'lookup keys recover a remotely committed price after response loss');
 check($plans->get('120gb','month','test')['stripe_price_id']!==$plans->get('120gb','month','live')['stripe_price_id'],'TEST and LIVE catalog mappings are isolated');
-$db->migrate();$db->migrate();
+$db->migrate();testFx($db);$db->migrate();testFx($db);
 check((int)$db->one("SELECT COUNT(*) n FROM billing_prices WHERE status='active'")['n']===12,'repeated migrations preserve twelve mode-specific active prices');
 $catalog=new Zion\BillingCatalog($db,$plans,new Stripe\StripeClient('sk_test_fake'),'test');$catalog->disable('120gb','month',$admin);
 check($testSync->synchronize($admin)['status']==='paused' && !$plans->get('120gb','month','test')['stripe_price_id'] && $plans->get('120gb','month','live')['stripe_price_id'],'automatic synchronization respects manual pause in one mode only');
@@ -76,7 +77,7 @@ $yearSession=end($http->sessions['live']);
 check($yearSession['amount_total']===4389 && $yearSession['metadata']['billing_interval']==='year','LIVE annual Checkout charges eleven months using the annual LIVE Price');
 check(str_contains($billing->checkout($db->one('SELECT * FROM users WHERE id=?',[$testId])),'cs_test_'),'old TEST registration cannot become a LIVE charge after switching mode');
 $livePrice=$plans->get('120gb','month','live')['stripe_price_id'];$start=time()-60;$end=time()+29*86400;
-$invoice=['id'=>'in_mode_live','object'=>'invoice','livemode'=>true,'customer'=>'cus_live','subscription'=>'sub_live','status'=>'paid','amount_paid'=>399,'currency'=>'eur','created'=>$start,'billing_reason'=>'subscription_create','status_transitions'=>['paid_at'=>$start],'lines'=>['has_more'=>false,'data'=>[['price'=>['id'=>$livePrice],'quantity'=>1,'period'=>['start'=>$start,'end'=>$end]]]]];
+$invoice=['id'=>'in_mode_live','object'=>'invoice','livemode'=>true,'customer'=>'cus_live','subscription'=>'sub_live','status'=>'paid','amount_paid'=>399,'currency'=>'ron','created'=>$start,'billing_reason'=>'subscription_create','status_transitions'=>['paid_at'=>$start],'lines'=>['has_more'=>false,'data'=>[['price'=>['id'=>$livePrice],'quantity'=>1,'period'=>['start'=>$start,'end'=>$end]]]]];
 $http->invoices['live'][$invoice['id']]=$invoice;
 $http->subscriptions['live']['sub_live']=['id'=>'sub_live','object'=>'subscription','livemode'=>true,'customer'=>'cus_live','status'=>'active','metadata'=>['user_id'=>$liveId,'plan'=>'120gb','billing_interval'=>'month','stripe_mode'=>'live'],'items'=>['data'=>[['id'=>'si_live','quantity'=>1,'price'=>$http->catalogs['live']->prices[$livePrice],'current_period_end'=>$end]]],'latest_invoice'=>$invoice];
 $settings->activateStripe('test',$admin);$billing=new Zion\StripeService($db,$plans,$mail,$store);
@@ -103,7 +104,7 @@ $settings->save('stripe',['credential_mode'=>'test','secret_key'=>'sk_test_rotat
 check((new Zion\StripeIntegration($db,$plans,null,'test'))->state()['connection']===null && (new Zion\StripeIntegration($db,$plans,null,'live'))->state()['connection']['status']==='ok','credential rotation invalidates only that mode diagnostics');
 $spoof=$accounts->register(['name'=>'Mode fixture','email'=>'mode-spoof@example.com','password'=>'mode-fixture-password','locale'=>'en','plan'=>'free','stripe_mode'=>'test']);
 check($db->one('SELECT stripe_mode FROM users WHERE id=?',[$spoof])['stripe_mode']==='live','registration mode is selected by server configuration rather than client input');
-$fresh=new Zion\Database(':memory:');$fresh->migrate();$fresh->run("INSERT INTO administrators(id,email,password_hash,created_at) VALUES('fixture','legacy-mode@example.com','fixture',1)");
+$fresh=new Zion\Database(':memory:');$fresh->migrate();testFx($fresh);$fresh->run("INSERT INTO administrators(id,email,password_hash,created_at) VALUES('fixture','legacy-mode@example.com','fixture',1)");
 $fresh->run('INSERT INTO integration_settings(key,value) VALUES(?,?)',['provider:stripe',Zion\EncryptedPayload::encode(['secret_key'=>'sk_test_fake','webhook_secret'=>'whsec_legacy'])]);
 $freshSettings=new Zion\IntegrationSettings($fresh);
 check($freshSettings->stripe('test')['secret_key']==='sk_test_fake' && $freshSettings->stripe()['mode']==='test','legacy single-profile credentials remain in TEST without activation of LIVE');

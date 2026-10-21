@@ -9,7 +9,7 @@
 <p>Evenimentul este citit prin API-ul Stripe din mediul ales și verificat înainte de procesare. Evenimentele finalizate nu sunt aplicate din nou. Reprocesarea nu creează o plată și nu verifică secretul sau livrarea destinației webhook.</p>
 </details>
 <form method="get" class="search api-log-filters"><input type="hidden" name="section" value="api-log">
-<?php foreach(['provider'=>['Serviciu',['stripe'=>'Stripe','oblio'=>'Oblio','immich'=>'Immich','listmonk'=>'Listmonk','captcha'=>'CAPTCHA']],'status'=>['Rezultat',['error'=>'Erori','ok'=>'Reușite']],'mode'=>['Mediu Stripe',['test'=>'TEST','live'=>'LIVE']],'direction'=>['Direcție',['out'=>'Trimise','in'=>'Primite']]] as $key=>[$label,$options]): ?>
+<?php foreach(['provider'=>['Serviciu',['stripe'=>'Stripe','oblio'=>'Oblio','immich'=>'Immich','listmonk'=>'Listmonk','captcha'=>'CAPTCHA','bnr'=>'BNR']],'status'=>['Rezultat',['error'=>'Erori','ok'=>'Reușite']],'mode'=>['Mediu Stripe',['test'=>'TEST','live'=>'LIVE']],'direction'=>['Direcție',['out'=>'Trimise','in'=>'Primite']]] as $key=>[$label,$options]): ?>
 <label><?= e($label) ?><select name="<?= e($key) ?>"><option value="">Toate</option><?php foreach($options as $value=>$text): ?><option value="<?= e($value) ?>" <?= ($apiFilters[$key]??'')===$value?'selected':'' ?>><?= e($text) ?></option><?php endforeach ?></select></label>
 <?php endforeach ?><label>Event ID / ID livrare<input name="event" maxlength="150" value="<?= e($apiFilters['event']??'') ?>" placeholder="evt_… sau ID livrare"></label><button>Filtrează</button><a href="/admin?section=api-log">Resetează</a></form>
 <?php if(!$apiEntries['available']): ?><p role="alert" class="alert">Jurnalul nu poate fi citit. Verifică permisiunile directorului bazei de date pentru utilizatorul PHP.</p>

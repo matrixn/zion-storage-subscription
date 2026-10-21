@@ -7,7 +7,7 @@
 <p>3 produse și 6 prețuri recurente sunt create sau reutilizate automat în modul selectat: Personal, Plus și Titan, lunar și anual. Nu trebuie să completezi Product ID sau Price ID. Salvarea cheilor nu schimbă modul activ.</p>
 <p><a href="/admin?section=api-log&amp;provider=stripe&amp;mode=<?= $stripeMode ?>&amp;status=error">Vezi erorile Stripe <?= strtoupper($stripeMode) ?> în jurnalul API ↗</a> · Include diagnostice DNS, TLS, timeout și răspunsuri HTTP.</p>
 <?php require __DIR__.'/admin-stripe-status.php'; ?>
-<p>Endpoint webhook <?= strtoupper($stripeMode) ?>: <code><?= e(base_url().'/webhooks/stripe?mode='.$stripeMode) ?></code>. Evenimente: checkout.session.completed, invoice.paid, invoice.payment_failed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted.</p>
+<p>Endpoint webhook <?= strtoupper($stripeMode) ?>: <code><?= e(base_url().'/webhooks/stripe?mode='.$stripeMode) ?></code>. Evenimente: invoice.created, invoice.payment_action_required, checkout.session.completed, invoice.paid, invoice.payment_failed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted.</p>
 <form method="post" class="integration-form">
 <input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><input type="hidden" name="action" value="settings_save"><input type="hidden" name="provider" value="stripe"><input type="hidden" name="credential_mode" value="<?= $stripeMode ?>">
 <?php foreach(['secret_key'=>'Cheie API secretă Stripe (sk_'.$stripeMode.'_ / rk_'.$stripeMode.'_)','webhook_secret'=>'Secret semnare webhook (whsec_)'] as $key=>$label): ?>

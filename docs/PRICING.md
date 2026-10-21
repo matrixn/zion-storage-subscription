@@ -1,4 +1,4 @@
-# EUR pricing and billing catalog
+# EUR reference prices and RON billing
 
 The central catalog in config/plans.php defines Free 5 GB, Personal 120 GB, Plus 250 GB and Titan 500 GB. Titan retains the 500gb identifier and provides one account.
 
@@ -8,26 +8,34 @@ The central catalog in config/plans.php defines Free 5 GB, Personal 120 GB, Plus
 | Plus | 7.19 | 79.09 |
 | Titan | 11.99 | 131.89 |
 
-Annual billing charges the displayed total once per year: twelve months of storage for eleven monthly payments. The home switcher and registration interval selector work with server rendering and JavaScript. Every registration persists its chosen interval; Checkout uses the corresponding server-side Price, never a browser-provided amount. RO/EN/FR/DE are supported.
+Annual billing charges once for twelve months at eleven monthly prices. The public switcher displays EUR reference amounts with RON equivalents in RO/EN/FR/DE. Checkout charges RON, with the exact amount confirmed before redirect. A changed quote requires another confirmation; browser amounts are never trusted.
 
-## Configure through /admin
+## Configuration
 
-Run php bin/console.php install, then sign into /admin with the administrator seeded from ADMIN_EMAIL and ADMIN_PASSWORD. Save Stripe secret/webhook credentials in its API settings section; this disables environment fallback for Stripe. Saving the selected TEST/LIVE API profile automatically creates/reuses all six Product/Price options; no manual IDs are required. The catalog also offers one full synchronization button. Creation uses one Product per plan and separate monthly/yearly Prices. Stable product IDs, lookup keys and idempotency keys allow retries to reuse created objects. See [API configuration](API-SETTINGS.md).
+Install/migrate and sign into /admin. Open **Configurare → Curs valutar BNR** (/admin?section=exchange) and refresh the rate, then synchronize the independent Stripe TEST/LIVE catalogs. API credentials and six monthly/yearly Price mappings remain database-managed. Stable Product IDs, lookup keys and idempotency keys support safe retries. Disabled options stay disabled.
 
-Validation requires the selected Stripe mode, active Price, exact EUR minor-unit amount and recurring interval/count. Checkout validates again before issuing a session. Replacing/disabling a mapping affects new purchases only; historical IDs remain recognizable. Catalog actions require admin authentication and CSRF and are audited. Keep billing_prices and stripe_catalog_products in database backups.
+The fixed official source is https://curs.bnr.ro/nbrfxrates10days.xml. The administration page shows publication date, retrieval time and source. The last published banking-day rate is used over weekends/holidays, with a maximum seven-day gap. Quotes require a successful recent fetch; failures block new payments rather than inventing a rate. Integer arithmetic rounds once to RON bani, with no FX markup. Public page views never call BNR or Stripe.
 
-TEST and LIVE use independent keys, catalogs and webhook verification. TEST is the initial active mode, with a localized sandbox notice in the site header. No real Stripe account or hosted payment was contacted during local automated validation; SDK fixtures validate requests and responses. Credentials and actual hosted Checkout totals require operator acceptance.
+The worker refreshes the source at most every 30 minutes and Checkout checks again. The admin refresh button also synchronizes both configured Stripe profiles. Each Price stores its EUR reference and conversion snapshot; historical IDs remain recognizable. Keep the full SQLite database in backups.
 
-## Existing subscriptions
+## Renewals and upgrades
 
-Migration imports previous STRIPE_PRICE_* / STRIPE_LEGACY_PRICE_* environment values once as legacy monthly RON mappings, plus known local subscription/change IDs. Future configuration is through /admin; add any additional historical IDs through its history form. Do not delete legacy mappings while old events/invoices can arrive. Environment IDs are no longer runtime configuration.
+Run php bin/console.php operations:work every minute (the provided Compose worker does this automatically). On Synology's existing web-only installation, the scheduled command must execute it inside zion_storage_web as www-data. Monitor /admin?section=exchange and the API journal.
 
-Existing subscriptions, paid amounts, currencies and fiscal records are preserved. No automatic RON-to-EUR conversion or repricing occurs. Legacy prices cannot use ordinary customer upgrades against the new EUR catalog. Already-open initial Checkout quotes retain their original terms and block a new conflicting quote until resolved or expired.
+New BNR-managed subscriptions use Stripe pause_collection.behavior=keep_as_draft. This keeps the subscription active while preventing unattended collection at an old conversion rate. Each renewal freezes the published BNR rate available for its service-period start. The worker validates the original recurring line, adds a positive or negative FX adjustment when necessary, verifies taxes/totals, finalizes and collects. Retry uses the same frozen quote and idempotency keys. An outage leaves an invoice awaiting retry; payment success and entitlement still require the authoritative invoice.paid reconciliation.
 
-Customer upgrades remain limited to the original five-day window, a larger plan and the same currency/interval. Personal to Plus costs 3.20 EUR for monthly billing or 35.20 EUR for yearly billing, once. Future renewals use the larger plan at the original renewal date. Admin paid plan changes also preserve the interval and anchor.
+Subscribe the Stripe webhook destination to invoice.created and invoice.payment_action_required in addition to the existing checkout/subscription/invoice events. Worker discovery also finds draft renewals if invoice.created is missed. Customer action required by the bank is reported by email.
 
-Oblio receives actual EUR payments and full Stripe invoice periods; annual service names identify annual billing. Historical RON documents remain RON. Oblio currency support includes EUR/RON; issuer/exchange-rate settings and real provider acceptance must be verified before issuance. The application does not invent an exchange rate.
+Customer upgrades remain limited to five days from initial purchase, a larger plan and the same interval. The EUR difference is converted and frozen for the one-time RON charge. Future renewals use the larger EUR reference at each cycle's BNR rate, preserving the original anniversary.
 
-## Validation
+## Existing subscriptions and fiscal records
 
-Run composer test, composer lint, python3 tests/http_flow.py, python3 tests/admin_http.py and the pricing/carousel browser scripts with Playwright and Chrome. Coverage includes catalog validation/history, retry-safe Product/Price creation, annual webhook/fiscal capture and same-anniversary paid upgrades. Browser coverage includes four locales, responsive sizes, switcher/registration interval propagation, no-JavaScript fallback and reduced motion.
+Existing EUR subscriptions cannot be changed directly to RON. Their paid amounts, currency and fiscal records remain unchanged; enrolling in a new RON subscription is required. The application does not cancel or re-enroll existing customers automatically. Historical environment mappings are imported once; do not delete mappings while old events can arrive.
+
+Oblio receives actual collected amounts in RON. Its visible mentions include the EUR reference, BNR rate/date and RON equivalent. Romanian city/county fields are normalized; known rejected requests can be rebuilt from a corrected customer profile, while uncertain provider outcomes retain their original snapshot. Issued documents are never silently rewritten.
+
+## Validation and recovery
+
+Run composer lint, composer test, python3 tests/http_flow.py, python3 tests/admin_http.py and tests/bnr-ron-browser.cjs with Playwright. Coverage includes frozen quotes, retry after lost responses, upward/downward FX adjustments, tax rounding, foreign invoice rejection, address normalization, localization and stale-quote confirmation. Isolated Stripe TEST API acceptance checks validated held drafts and both signs of adjustment without attempting a payment; actual bank authentication and the full live payment flow require a real customer transaction.
+
+Before release, take a consistent SQLite backup using VACUUM INTO and verify PRAGMA quick_check; record the old Git commit and Docker image. Schema additions are backward compatible. Rollback application/image first without restoring a database containing newer payments. If RON subscriptions have been enrolled, keep their draft holds in place and restore the RON worker promptly; older code cannot collect those renewals correctly. Restore a database backup only as a separately reviewed recovery action, after accounting for intervening provider transactions.

@@ -1,8 +1,9 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/src/bootstrap.php';
+require_once __DIR__.'/fixture-fx.php';
 if (env('APP_ENV')!=='test' || env('OBLIO_ENABLED','false')!=='false') throw new RuntimeException('Fixture setup requires an isolated test environment');
-$db=new Zion\Database();$db->migrate();
+$db=new Zion\Database();$db->migrate();testFx($db);
 $db->run("INSERT OR IGNORE INTO billing_prices(price_id,plan,interval,currency,amount,status,created_at,updated_at) VALUES('price_browser_eur','120gb','month','eur',399,'active',1,1)");
 $mail=new Zion\MailerService($db);$plans=new Zion\Plans($db);
 $account=new Zion\AccountService($db,$plans,$mail,new Zion\StorageProvisioningService());

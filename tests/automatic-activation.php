@@ -1,6 +1,6 @@
 <?php
 // Independent fixtures: no storage/payment network requests.
-$autoDb=new Zion\Database(':memory:');$autoDb->migrate();seedCatalog($autoDb);
+$autoDb=new Zion\Database(':memory:');$autoDb->migrate();testFx($autoDb);seedCatalog($autoDb);
 $autoPlans=new Zion\Plans($autoDb);$autoMail=new Zion\MailerService($autoDb);$autoStore=new TestStorage();
 $autoAccounts=new Zion\AccountService($autoDb,$autoPlans,$autoMail,$autoStore);
 $autoSignup=function(string $email,string $plan='free')use($autoAccounts){return $autoAccounts->register(['name'=>'Auto User','email'=>$email,'password'=>'automatic-password-fixture','locale'=>'en','plan'=>$plan]);};
@@ -21,7 +21,7 @@ $autoAccounts->retryAutomatic();check($autoStore->created===1,'automatic retries
 $id=$autoSignup('paid-auto@example.com','120gb');$autoVerify($id);
 check(!$autoAccounts->automatic($id) && $autoStore->created===1,'automatic paid activation refuses checkout return without confirmed payment');
 $autoBilling=new TestStripe($autoDb,$autoPlans,$autoMail,$autoStore);
-$autoBilling->snapshot=['id'=>'sub_auto','customer'=>'cus_auto','status'=>'active','metadata'=>['user_id'=>$id,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120'],'current_period_end'=>time()+86400]]],'latest_invoice'=>['id'=>'in_auto','status'=>'paid','amount_paid'=>199,'currency'=>'eur','created'=>time()]];
+$autoBilling->snapshot=['id'=>'sub_auto','customer'=>'cus_auto','status'=>'active','metadata'=>['user_id'=>$id,'plan'=>'120gb'],'items'=>['data'=>[['price'=>['id'=>'price_120'],'current_period_end'=>time()+86400]]],'latest_invoice'=>['id'=>'in_auto','status'=>'paid','amount_paid'=>199,'currency'=>'ron','created'=>time()]];
 $autoBilling->process(['id'=>'evt_auto','livemode'=>false,'type'=>'customer.subscription.created','data'=>['object'=>['id'=>'sub_auto']]]);
 check($autoStore->created===1,'webhook persists payment without slow activation API calls');
 check($autoAccounts->automatic($id) && $autoStore->created===2,'authoritative paid subscription automatically permits activation');

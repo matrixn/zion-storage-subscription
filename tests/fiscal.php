@@ -52,7 +52,7 @@ function fiscalInvoiceFixture(string $id, int $start, int $end, int $amount=799)
     ];
 }
 
-$db = new Zion\Database(':memory:'); $db->migrate(); $db->migrate(); seedCatalog($db);
+$db = new Zion\Database(':memory:'); $db->migrate();testFx($db); $db->migrate();testFx($db); seedCatalog($db);
 $db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,status,created_at,updated_at) VALUES('price_120_ron','120gb','month','ron',799,'legacy',1,1)");
 $plans = new Zion\Plans($db); $mail = new Zion\MailerService($db); $store = new TestStorage();
 $accounts = new Zion\AccountService($db,$plans,$mail,$store);
@@ -88,7 +88,7 @@ check($payload1['products'][0]['name']==='Abonament Zion Storage Personal 120 GB
 check($payload1['products'][0]['price']===6.97 && $payload1['collect']['value']===6.97 && $row1['amount']===697,'fiscal gross equals actual discounted Stripe amount, not catalog price');
 check($payload1['products'][0]['vatIncluded']===1 && $payload1['products'][0]['vatPercentage']===21.0,'VAT is isolated/configured and included in collected gross');
 check($payload1['language']==='RO' && $payload1['sendEmail']===0,'Romanian fiscal content and locally localized customer email');
-check($payload1['clientLocation']['postalCode']==='010101' && $payload1['client']['autocomplete']===0,'complete local billing address passed without remote autocomplete');
+check($payload1['client']['postalCode']==='010101' && $payload1['client']['country']==='Romania' && !isset($payload1['clientLocation']) && $payload1['client']['autocomplete']===0,'complete local billing address passed without remote autocomplete');
 check($payload1['collectDate']==='2026-10-16','fiscal collection date uses Romanian issuer timezone across UTC midnight');
 check($row1['billing_period_start']===$oct && $row1['billing_period_end']===$nov,'exact Stripe period timestamps persisted');
 check($row1['completed_at']===null && $row1['notification_queued_at']!==null,'fiscal completion waits for email delivery');

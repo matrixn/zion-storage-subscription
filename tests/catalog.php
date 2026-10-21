@@ -29,7 +29,7 @@ final class CatalogHttp implements Stripe\HttpClient\ClientInterface {
   return [json_encode($r),200,[]];
  }
 }
-$db=new Zion\Database(':memory:');$db->migrate();seedCatalog($db);$plans=new Zion\Plans($db);
+$db=new Zion\Database(':memory:');$db->migrate();testFx($db);seedCatalog($db);$plans=new Zion\Plans($db);
 $mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
 $_ENV['ADMIN_EMAIL']='catalog-fixture@example.com';$_ENV['ADMIN_PASSWORD']='catalog-fixture-password';
 Zion\AccountControl::seedAdmin($db);$admin=$db->one('SELECT id FROM administrators')['id'];$_ENV['ADMIN_EMAIL']='';$_ENV['ADMIN_PASSWORD']='';
@@ -40,7 +40,7 @@ check(array_column($plans->all('year'),'price_amount')===[0,4389,7909,13189],'an
 check($plans->get('500gb')['name']==='Titan','Titan replaces Family without changing plan slug');
 foreach(['120gb'=>'price_120','250gb'=>'price_250','500gb'=>'price_500'] as $slug=>$id)foreach(['month'=>'','year'=>'_year'] as $interval=>$suffix)$catalog->save($slug,$interval,$id.$suffix,$admin);
 check(count($catalog->rows())===6,'six validated prices managed in database');
-foreach(['currency'=>'ron','unit_amount'=>999,'livemode'=>true,'recurring'=>['interval'=>'year','interval_count'=>1]] as $field=>$value){
+foreach(['currency'=>'usd','unit_amount'=>999,'livemode'=>true,'recurring'=>['interval'=>'year','interval_count'=>1]] as $field=>$value){
  $http->prices['price_invalid']=array_replace($fixture->price('price_120'),['id'=>'price_invalid',$field=>$value]);
  try{$catalog->save('120gb','month','price_invalid',$admin);check(false,'invalid price accepted');}catch(DomainException $e){check($plans->get('120gb')['stripe_price_id']==='price_120','invalid price cannot replace catalog mapping');}
 }
@@ -56,14 +56,14 @@ check($http->created===2 && $http->productCreates===1,'annual and monthly Prices
 Stripe\ApiRequestor::setHttpClient($fixture);$billing=new Zion\StripeService($db,$plans,$mail,$store);
 [$id,$token]=signup('annual@example.com','120gb','de','year');$accounts->verify($token);
 $start=time()-60;$end=strtotime('+1 year',$start);
-$invoice=['id'=>'in_annual','object'=>'invoice','livemode'=>false,'customer'=>'cus_annual','subscription'=>'sub_annual','status'=>'paid','amount_paid'=>4389,'currency'=>'eur','billing_reason'=>'subscription_create','status_transitions'=>['paid_at'=>$start],'created'=>$start,'lines'=>['data'=>[['price'=>['id'=>'price_120_year'],'quantity'=>1,'period'=>['start'=>$start,'end'=>$end]]],'has_more'=>false]];
+$invoice=['id'=>'in_annual','object'=>'invoice','livemode'=>false,'customer'=>'cus_annual','subscription'=>'sub_annual','status'=>'paid','amount_paid'=>4389,'currency'=>'ron','billing_reason'=>'subscription_create','status_transitions'=>['paid_at'=>$start],'created'=>$start,'lines'=>['data'=>[['price'=>['id'=>'price_120_year'],'quantity'=>1,'period'=>['start'=>$start,'end'=>$end]]],'has_more'=>false]];
 $fixture->invoices[$invoice['id']]=$invoice;
 $fixture->subscription=['id'=>'sub_annual','object'=>'subscription','customer'=>'cus_annual','status'=>'active','metadata'=>['user_id'=>$id,'plan'=>'120gb','billing_interval'=>'year'],'items'=>['data'=>[['id'=>'si_annual','quantity'=>1,'price'=>$fixture->price('price_120_year'),'current_period_end'=>$end]]],'latest_invoice'=>$invoice];
 $billing->process(['id'=>'evt_annual','type'=>'invoice.paid','data'=>['object'=>$invoice]]);
 $sub=$db->one('SELECT * FROM subscriptions WHERE user_id=?',[$id]);
-check($sub['billing_interval']==='year' && $sub['currency']==='eur' && $sub['renewal_at']===$end,'annual webhook stores actual currency and full renewal period');
+check($sub['billing_interval']==='year' && $sub['currency']==='ron' && $sub['renewal_at']===$end,'annual webhook stores actual currency and full renewal period');
 $fiscal=$db->one('SELECT * FROM fiscal_invoices WHERE stripe_invoice_id=?',['in_annual']);
-check($fiscal['amount']===4389 && $fiscal['currency']==='EUR','annual fiscal amount is actual EUR payment');
+check($fiscal['amount']===4389 && $fiscal['currency']==='RON','annual fiscal amount is actual EUR payment');
 $source=Zion\EncryptedPayload::decode($fiscal['source_snapshot']);
 check(str_contains($source['plan']['invoice_name_ro'],'anual') && $fiscal['billing_period_start']===$start && $fiscal['billing_period_end']===$end,'annual fiscal snapshot names full annual service period');
 $user=$db->one('SELECT * FROM users WHERE id=?',[$id]);$changes=$billing->changes();
@@ -73,6 +73,6 @@ $billing->process(['id'=>'evt_annual_upgrade','type'=>'checkout.session.complete
 check($fixture->subscription['items']['data'][0]['price']['unit_amount']===7909 && $fixture->subscription['items']['data'][0]['price']['recurring']['interval']==='year','annual upgrade changes future renewal to new annual Price');
 $upgradeFiscal=$db->one('SELECT source_snapshot FROM fiscal_invoices WHERE stripe_invoice_id=?',[$session['invoice']['id']]);
 check(str_contains(Zion\EncryptedPayload::decode($upgradeFiscal['source_snapshot'])['plan']['invoice_name_ro'],'anual'),'annual upgrade fiscal snapshot retains annual service label');
-check($db->one('SELECT renewal_at FROM subscriptions WHERE user_id=?',[$id])['renewal_at']===$end && $change['currency']==='eur' && $change['billing_interval']==='year','annual upgrade preserves anniversary and payment currency');
+check($db->one('SELECT renewal_at FROM subscriptions WHERE user_id=?',[$id])['renewal_at']===$end && $change['currency']==='ron' && $change['billing_interval']==='year','annual upgrade preserves anniversary and payment currency');
 Stripe\ApiRequestor::setHttpClient(new NoNetworkStripe());
 echo "\n$count total assertions passed, including EUR annual catalog and upgrade.\n";
