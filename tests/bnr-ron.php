@@ -47,7 +47,7 @@ final class RonHttpFixture implements Stripe\HttpClient\ClientInterface {
  }
 }
 function ronFixture(int $rate=53285,int $oldRate=50125,int $tax=0):array {
- $db=new Zion\Database(':memory:');$db->migrate();testFx($db);seedCatalog($db);
+ $db=new Zion\Database(':memory:');$db->migrate();testFx($db);seedCatalog($db);$db->run("UPDATE billing_prices SET price_policy='bnr_v1'");
  $db->run('UPDATE exchange_rates SET eur_ron=?',[$rate]);
  $old=['rate_date'=>Zion\BnrRates::date(),'eur_ron'=>$oldRate,'source_url'=>Zion\BnrRates::SOURCE,'fetched_at'=>time()];
  $base=Zion\BnrRates::convert(399,$oldRate);$db->run("UPDATE billing_prices SET amount=?,eur_amount=399,fx_snapshot=? WHERE price_id='price_120'",[$base,json_encode($old)]);

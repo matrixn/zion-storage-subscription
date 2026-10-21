@@ -11,12 +11,13 @@ final class Database {
   $this->pdo->exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=15000; PRAGMA journal_mode=WAL;');
  }
  public function migrate(): void {
+  $wasInitialized=$this->one("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")!==null;
   $this->pdo->exec(file_get_contents(dirname(__DIR__).'/database/schema.sql'));
   foreach(glob(dirname(__DIR__).'/database/migrations/*.sql') as $file) $this->pdo->exec(file_get_contents($file));
   // Preserve installations made before quota synchronization was introduced.
   if(!in_array('user_id',array_column($this->run('PRAGMA table_info(billing_events)')->fetchAll(),'name'),true))$this->pdo->exec('ALTER TABLE billing_events ADD COLUMN user_id TEXT');
   if(!in_array('quota_sync',array_column($this->run('PRAGMA table_info(account_controls)')->fetchAll(),'name'),true))$this->pdo->exec("ALTER TABLE account_controls ADD COLUMN quota_sync TEXT NOT NULL DEFAULT 'ready'");
-  foreach(['users'=>['session_version'=>'INTEGER NOT NULL DEFAULT 0','is_deleted'=>'INTEGER NOT NULL DEFAULT 0','archived_at'=>'INTEGER','terms_version'=>"TEXT NOT NULL DEFAULT ''",'privacy_version'=>"TEXT NOT NULL DEFAULT ''",'billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'subscriptions'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'",'currency'=>"TEXT NOT NULL DEFAULT 'ron'"], 'managed_ron_subscriptions'=>['checked_at'=>'INTEGER NOT NULL DEFAULT 0'], 'plan_settings'=>['storage_bytes'=>'INTEGER'], 'billing_prices'=>['storage_bytes'=>'INTEGER','eur_amount'=>'INTEGER','fx_snapshot'=>'TEXT'], 'checkout_sessions'=>['fx_snapshot'=>'TEXT','tax_bps'=>'INTEGER NOT NULL DEFAULT 0','price_id'=>'TEXT','billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'plan_changes'=>['fx_snapshot'=>'TEXT','tax_bps'=>'INTEGER NOT NULL DEFAULT 0','tax_rate_id'=>"TEXT NOT NULL DEFAULT ''",'base_amount'=>'INTEGER','billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"]] as $table=>$columns){
+  foreach(['users'=>['session_version'=>'INTEGER NOT NULL DEFAULT 0','is_deleted'=>'INTEGER NOT NULL DEFAULT 0','archived_at'=>'INTEGER','terms_version'=>"TEXT NOT NULL DEFAULT ''",'privacy_version'=>"TEXT NOT NULL DEFAULT ''",'billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'subscriptions'=>['billing_interval'=>"TEXT NOT NULL DEFAULT 'month'",'currency'=>"TEXT NOT NULL DEFAULT 'ron'"], 'managed_ron_subscriptions'=>['checked_at'=>'INTEGER NOT NULL DEFAULT 0'], 'plan_settings'=>['storage_bytes'=>'INTEGER','price_currency'=>"TEXT NOT NULL DEFAULT 'eur'"], 'billing_prices'=>['price_policy'=>"TEXT NOT NULL DEFAULT 'bnr_v1'",'storage_bytes'=>'INTEGER','eur_amount'=>'INTEGER','fx_snapshot'=>'TEXT'], 'checkout_sessions'=>['fx_snapshot'=>'TEXT','tax_bps'=>'INTEGER NOT NULL DEFAULT 0','price_id'=>'TEXT','billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"], 'plan_changes'=>['fx_snapshot'=>'TEXT','tax_bps'=>'INTEGER NOT NULL DEFAULT 0','tax_rate_id'=>"TEXT NOT NULL DEFAULT ''",'base_amount'=>'INTEGER','billing_interval'=>"TEXT NOT NULL DEFAULT 'month'"]] as $table=>$columns){
    $existing=array_column($this->run('PRAGMA table_info('.$table.')')->fetchAll(),'name');
    foreach($columns as $name=>$type)if(!in_array($name,$existing,true))$this->pdo->exec('ALTER TABLE '.$table.' ADD COLUMN '.$name.' '.$type);
   }
@@ -41,6 +42,7 @@ final class Database {
    foreach($this->run('SELECT from_plan,to_plan,from_price,to_price,currency FROM plan_changes')->fetchAll() as $r)foreach(['from','to'] as $side)if($r[$side.'_price'])$this->run("INSERT OR IGNORE INTO billing_prices(price_id,plan,interval,currency,status,created_at,updated_at) VALUES(?,?,'month',?,'legacy',?,?)",[$r[$side.'_price'],$r[$side.'_plan'],$r['currency'],time(),time()]);
    $this->run("INSERT INTO integration_settings(key,value) VALUES('catalog_env_import_v1','done')");
   });
+  CatalogCurrencyMigration::run($this,$wasInitialized);
  }
  public function run(string $sql,array $p=[]): \PDOStatement { $s=$this->pdo->prepare($sql); $s->execute($p); return $s; }
  public function one(string $sql,array $p=[]): ?array { return $this->run($sql,$p)->fetch() ?: null; }

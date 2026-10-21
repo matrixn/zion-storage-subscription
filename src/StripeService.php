@@ -21,9 +21,9 @@ class StripeService implements BillingService {
   $profile=(new BillingProfileService($this->db))->get($u['id']);
   if(!$profile) throw new \InvalidArgumentException('billing.required');
   BillingProfileService::validate($profile,$u);
-  (new BnrRates($this->db))->refresh();
+  try{(new BnrRates($this->db))->refresh();}catch(\Throwable $e){/* RON contracts do not depend on display FX availability. */}
   $interval=$u['billing_interval']??'month';$p=$this->plans->get($u['selected_plan_id'],$interval,$this->settings['mode']);
-  if(!$p || !$p['fx'] || !$this->settings['secret_key']) throw new \RuntimeException('billing_unconfigured');
+  if(!$p || !$this->settings['secret_key']) throw new \RuntimeException('billing_unconfigured');
   if($quote!==null && !hash_equals(BnrRates::signature($p,$u['id']),$quote))throw new \DomainException('checkout.quote_changed');
   // Serialize session creation so two tabs cannot create separate subscriptions.
   $lock=fopen(dirname(__DIR__).'/storage/checkout-'.$u['id'].'.lock','c'); flock($lock,LOCK_EX);
@@ -31,10 +31,10 @@ class StripeService implements BillingService {
    $s=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$u['id']]);
    if($s && $s['stripe_subscription_id'] && !in_array($s['status'],['canceled','incomplete_expired'],true)) throw new \RuntimeException('subscription_exists');
    $old=$this->db->one('SELECT * FROM checkout_sessions WHERE user_id=? AND expires_at>?',[$u['id'],time()+60]);
-   if($old && ($old['fx_snapshot']?json_decode($old['fx_snapshot'],true)['eur_ron']??null:null)===$p['fx']['eur_ron'] && ($old['fx_snapshot']?json_decode($old['fx_snapshot'],true)['rate_date']??null:null)===$p['fx']['rate_date'] && $old['price_id']===$p['stripe_price_id'] && $old['billing_interval']===$interval && $old['stripe_mode']===$this->settings['mode'] && $old['tax_bps']===$p['tax_bps'])return $old['url'];
+   if($old && $old['price_id']===$p['stripe_price_id'] && $old['billing_interval']===$interval && $old['stripe_mode']===$this->settings['mode'] && $old['tax_bps']===$p['tax_bps'])return $old['url'];
    if($old)throw new \DomainException('checkout.pending_quote');
-   $mapping=$this->db->one('SELECT currency,amount,storage_bytes FROM billing_prices WHERE price_id=?',[$p['stripe_price_id']]);
-   if(!$mapping || $mapping['currency']!=='ron' || $mapping['amount']!==$p['price_amount'] || ($mapping['storage_bytes']!==null && $mapping['storage_bytes']!==$p['storage_bytes'])){
+   $mapping=$this->db->one('SELECT currency,amount,storage_bytes,price_policy FROM billing_prices WHERE price_id=?',[$p['stripe_price_id']]);
+   if(!$mapping || $mapping['price_policy']!==$p['price_policy'] || $mapping['currency']!=='ron' || $mapping['amount']!==$p['price_amount'] || ($mapping['storage_bytes']!==null && $mapping['storage_bytes']!==$p['storage_bytes'])){
     $admin=$this->db->one('SELECT id FROM administrators ORDER BY created_at LIMIT 1')['id']??null;
     if(!$admin)throw new \DomainException('upgrade.unconfigured');
     $this->catalog()->synchronize($p['slug'],$interval,$admin);
@@ -45,7 +45,7 @@ class StripeService implements BillingService {
    $rates=(new BillingTax($this->db))->rates($this->client,$this->settings['mode'],$p['tax_bps']);
    $l=$u['locale']; $epoch=intdiv(time(),1800);
    $session=$this->client->checkout->sessions->create([
-    'expires_at'=>time()+1860,'mode'=>'subscription','customer_email'=>$u['email'],'client_reference_id'=>$u['id'],'locale'=>$l==='ro'?'ro':$l,
+    'expires_at'=>time()+1860,'mode'=>'subscription','adaptive_pricing'=>['enabled'=>false],'customer_email'=>$u['email'],'client_reference_id'=>$u['id'],'locale'=>$l==='ro'?'ro':$l,
     'line_items'=>[['price'=>$p['stripe_price_id'],'quantity'=>1,'tax_rates'=>$rates]],
     'metadata'=>['user_id'=>$u['id'],'plan'=>$p['slug'],'billing_interval'=>$interval,'stripe_mode'=>$this->settings['mode']],
     'custom_text'=>['submit'=>['message'=>(new TranslationService($l))->get('fx.policy')]],
@@ -54,7 +54,7 @@ class StripeService implements BillingService {
    ],['idempotency_key'=>'checkout-'.$u['id'].'-'.$p['stripe_price_id'].'-vat'.$p['tax_bps'].'-'.$epoch]);
    $this->db->run('INSERT INTO checkout_sessions(user_id,session_id,url,expires_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET session_id=excluded.session_id,url=excluded.url,expires_at=excluded.expires_at',[$u['id'],$session->id,$session->url,$session->expires_at]);
    $this->db->run('UPDATE checkout_sessions SET price_id=?,billing_interval=?,stripe_mode=?,tax_bps=? WHERE user_id=?',[$p['stripe_price_id'],$interval,$this->settings['mode'],$p['tax_bps'],$u['id']]);
-   $this->db->run('UPDATE checkout_sessions SET fx_snapshot=? WHERE user_id=?',[json_encode($p['fx']+['eur_amount'=>$p['eur_amount'],'ron_amount'=>$p['price_amount']],JSON_THROW_ON_ERROR),$u['id']]);
+   $this->db->run('UPDATE checkout_sessions SET fx_snapshot=? WHERE user_id=?',[json_encode(($p['fx']??[])+['eur_amount'=>$p['eur_amount'],'ron_amount'=>$p['price_amount']],JSON_THROW_ON_ERROR),$u['id']]);
    return $session->url;
   } finally { flock($lock,LOCK_UN); fclose($lock); }
  }
@@ -183,7 +183,7 @@ class StripeService implements BillingService {
   $rates=$lines[0]['tax_rates']??[];
   if(count($rates)===1 && isset($rates[0]['percentage']))$snapshot=(int)round($rates[0]['percentage']*100);
   if($snapshot!==null){$fallback['invoice_vat_rate']=BillingTax::percentage((int)$snapshot);$fallback['invoice_vat_name']='TVA';}
-  if(($invoice['currency']??'')==='ron'){
+  if(($invoice['currency']??'')==='ron' && ($fallback['price_policy']??'bnr_v1')!=='ron_fixed_v1'){
    $quote=$this->db->one('SELECT snapshot FROM invoice_fx_quotes WHERE invoice_id=? AND stripe_mode=?',[$invoice['id'],$this->settings['mode']]);
    $fx=$quote?json_decode($quote['snapshot'],true):null;
    $meta=$invoice['metadata']??[];

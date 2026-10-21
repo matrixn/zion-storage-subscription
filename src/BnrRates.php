@@ -11,6 +11,10 @@ class BnrRates {
   if($eurMinor<0 || $eurMinor>100000000 || $scaled<1 || $scaled>1000000)throw new \DomainException('Conversie valutară invalidă.');
   return intdiv($eurMinor*$scaled+5000,10000);
  }
+ public static function inverse(int $ronMinor,int $scaled): int {
+  if($ronMinor<0 || $ronMinor>100000000 || $scaled<1 || $scaled>1000000)throw new \DomainException('Conversie valutară invalidă.');
+  return intdiv($ronMinor*10000+intdiv($scaled,2),$scaled);
+ }
  public static function formatted(array $rate): string {return number_format($rate['eur_ron']/10000,4,'.','');}
  public function current(?string $date=null): ?array {
   $date??=self::date();
@@ -20,9 +24,12 @@ class BnrRates {
   return $row;
  }
  public static function signature(array $plan,string $uid): string {
+  if(($plan['price_policy']??'')==='ron_fixed_v1')return hash_hmac('sha256',json_encode([$uid,$plan['slug'],$plan['billing_interval'],$plan['stripe_mode'],'ron_fixed_v1',$plan['storage_bytes'],$plan['price_amount'],$plan['tax_bps']],JSON_THROW_ON_ERROR),env('APP_KEY'));
   return hash_hmac('sha256',json_encode([$uid,$plan['slug'],$plan['billing_interval'],$plan['stripe_mode'],$plan['eur_amount'],$plan['storage_bytes'],$plan['price_amount'],$plan['tax_bps'],$plan['fx']['rate_date']??null,$plan['fx']['eur_ron']??null],JSON_THROW_ON_ERROR),env('APP_KEY'));
  }
- public static function metadata(array $plan): array {return ['zion_fx_policy'=>'bnr_v1','zion_eur_amount'=>(string)$plan['eur_amount'],'zion_fx_rate'=>(string)$plan['fx']['eur_ron'],'zion_fx_date'=>$plan['fx']['rate_date']];}
+ public static function metadata(array $plan): array {
+  if(($plan['price_policy']??'')==='ron_fixed_v1')return ['zion_fx_policy'=>'ron_fixed_v1','zion_ron_amount'=>(string)$plan['price_amount']];
+  return ['zion_fx_policy'=>'bnr_v1','zion_eur_amount'=>(string)$plan['eur_amount'],'zion_fx_rate'=>(string)$plan['fx']['eur_ron'],'zion_fx_date'=>$plan['fx']['rate_date']];}
  public function quote(int $eurMinor,?string $date=null): array {
   $rate=$this->current($date);
   $error=$this->db->one("SELECT value FROM integration_settings WHERE key='bnr:last_error'");

@@ -10,8 +10,8 @@ final class ModeStripeHttp implements Stripe\HttpClient\ClientInterface {
   if(preg_match('~/subscriptions/([^/]+)$~',$path,$m)){
    if(!isset($this->subscriptions[$mode][$m[1]]))throw new RuntimeException('Fixture mode mismatch');
    $s=&$this->subscriptions[$mode][$m[1]];
-   if($post && isset($params['pause_collection'])){$s['pause_collection']=$params['pause_collection'];return [json_encode($s),200,[]];}
-   if($post){if(array_key_exists('tax_rates',$params['items'][0]))$s['items']['data'][0]['tax_rates']=$params['items'][0]['tax_rates'];if(array_key_exists('default_tax_rates',$params))$s['default_tax_rates']=$params['default_tax_rates'];$s['items']['data'][0]['price']=$this->catalogs[$mode]->prices[$params['items'][0]['price']];$s['metadata']=array_replace($s['metadata'],$params['metadata']);check($params['proration_behavior']==='none'&&$params['billing_cycle_anchor']==='unchanged','mode-aware subscription update preserves renewal');if($this->loseUpdate){$this->loseUpdate=false;throw new RuntimeException('fixture-response-lost');}}
+   if($post && isset($params['pause_collection']) && !isset($params['items'])){$s['pause_collection']=$params['pause_collection'];return [json_encode($s),200,[]];}
+   if($post){if(array_key_exists('pause_collection',$params))$s['pause_collection']=$params['pause_collection']?:null;if(array_key_exists('tax_rates',$params['items'][0]))$s['items']['data'][0]['tax_rates']=$params['items'][0]['tax_rates'];if(array_key_exists('default_tax_rates',$params))$s['default_tax_rates']=$params['default_tax_rates'];$s['items']['data'][0]['price']=$this->catalogs[$mode]->prices[$params['items'][0]['price']];$s['metadata']=array_replace($s['metadata'],$params['metadata']);check($params['proration_behavior']==='none'&&$params['billing_cycle_anchor']==='unchanged','mode-aware subscription update preserves renewal');if($this->loseUpdate){$this->loseUpdate=false;throw new RuntimeException('fixture-response-lost');}}
    $r=$s;
   }elseif(str_ends_with($path,'/checkout/sessions')&&$post){
    $id='cs_'.$mode.'_'.(count($this->sessions[$mode])+1);

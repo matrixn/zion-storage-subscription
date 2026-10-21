@@ -13,10 +13,13 @@ final class Plans {
    $p['stripe_mode']=$mode;
    $p['invoice_vat_rate']=$vat;
    $p['tax_bps']=$taxBps;
-   $p['billing_interval']=$interval;$p['eur_amount']=$interval==='year'?$p['yearly_price']:$p['monthly_price'];
-   $p['fx']=$fx;$p['ron_monthly']=$fx?BnrRates::convert($p['monthly_price'],$fx['eur_ron']):null;$p['ron_yearly']=$fx?BnrRates::convert($p['yearly_price'],$fx['eur_ron']):null;
-   $p['price_amount']=$fx?BnrRates::convert($p['eur_amount'],$fx['eur_ron']):0;
-   $p['fx_managed']=$p['slug']!=='free' && $fx!==null;
+   $p['billing_interval']=$interval;$p['price_policy']='ron_fixed_v1';
+   $p['fx']=$fx;$p['ron_monthly']=$p['monthly_price'];$p['ron_yearly']=$p['yearly_price'];
+   $p['price_amount']=$interval==='year'?$p['yearly_price']:$p['monthly_price'];
+   $p['eur_monthly']=$fx?BnrRates::inverse($p['monthly_price'],$fx['eur_ron']):($p['monthly_price']===0?0:null);
+   $p['eur_yearly']=$fx?BnrRates::inverse($p['yearly_price'],$fx['eur_ron']):($p['yearly_price']===0?0:null);
+   $p['eur_amount']=$interval==='year'?$p['eur_yearly']:$p['eur_monthly'];
+   $p['fx_managed']=false;
    $p['gross_amount']=BillingTax::total($p['price_amount'],$taxBps);
    if($interval==='year'){$p['invoice_name_ro']='Abonament anual Zion Storage '.$p['name'].' '.$p['capacity'];$p['invoice_product_code'].='_YEAR';}
    $row=$this->db->one("SELECT * FROM billing_prices WHERE plan=? AND interval=? AND stripe_mode=? AND status='active'",[$p['slug'],$interval,$mode]);
@@ -30,7 +33,7 @@ final class Plans {
   $p=$this->get($r['plan'],$r['interval'],$r['stripe_mode']);if(!$p)return null;
   $fx=$r['fx_snapshot']?json_decode($r['fx_snapshot'],true):null;
   $p=self::withCapacity($p,$r['storage_bytes']??$p['storage_bytes']);
-  return array_replace($p,['fx'=>$fx,'eur_amount'=>$r['eur_amount']??($r['currency']==='eur'?$r['amount']:$p['eur_amount']),'fx_managed'=>$r['currency']==='ron' && $fx!==null,'stripe_price_id'=>$id,'gross_amount'=>BillingTax::total($r['amount']??$p['price_amount'],$p['tax_bps']),'price_amount'=>$r['amount']??$p['price_amount'],'currency'=>$r['currency'],'billing_interval'=>$r['interval'],'legacy'=>$r['status']==='legacy']);
+  return array_replace($p,['price_policy'=>$r['price_policy'],'fx'=>$fx,'eur_amount'=>$r['eur_amount']??($r['currency']==='eur'?$r['amount']:$p['eur_amount']),'fx_managed'=>$r['price_policy']==='bnr_v1' && $r['currency']==='ron' && $fx!==null,'stripe_price_id'=>$id,'gross_amount'=>BillingTax::total($r['amount']??$p['price_amount'],$p['tax_bps']),'price_amount'=>$r['amount']??$p['price_amount'],'currency'=>$r['currency'],'billing_interval'=>$r['interval'],'legacy'=>$r['status']==='legacy']);
  }
  public static function withCapacity(array $p,int $bytes): array {
   $p['storage_bytes']=$bytes;$p['capacity']=PlanSettings::capacity($bytes);

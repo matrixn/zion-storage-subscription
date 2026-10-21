@@ -136,7 +136,7 @@ final class OblioInvoiceService
                 'vatIncluded'=>1, 'productType'=>'Serviciu', 'save'=>0,
             ]],
         ];
-        if($row['currency']==='RON' && !empty($source['plan']['fx']['rate_date']))$payload['mentions']=RonRenewals::note($source['plan']['fx']+['eur_amount'=>$source['plan']['eur_amount'],'ron_amount'=>$source['plan']['price_amount']]);
+        if($row['currency']==='RON' && ($source['plan']['price_policy']??'bnr_v1')!=='ron_fixed_v1' && !empty($source['plan']['fx']['rate_date']))$payload['mentions']=RonRenewals::note($source['plan']['fx']+['eur_amount'=>$source['plan']['eur_amount'],'ron_amount'=>$source['plan']['price_amount']]);
         if ($this->config['workstation'] !== '') $payload['workStation'] = $this->config['workstation'];
         return $payload;
     }

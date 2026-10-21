@@ -81,10 +81,11 @@ final class AdminApplication {
     if($action==='plan_save'){
      $this->section='plans';
      if(!Security::limit($this->db,'plan-save:'.$admin['id'],12,900))throw new \DomainException('Prea multe salvări. Reîncearcă mai târziu.');
+     if(($_POST['price_currency']??'')!=='ron'){unset($_POST['monthly_price']);throw new \DomainException('Moneda formularului s-a schimbat în RON. Prețurile curente au fost reîncărcate; verifică și salvează din nou.');}
      (new PlanSettings($this->db))->save((string)($_POST['plan']??''),$_POST,$admin['id']);
      $results=[];$settings=new IntegrationSettings($this->db);
      try{
-      (new BnrRates($this->db))->refresh();
+      try{(new BnrRates($this->db))->refresh();}catch(\Throwable $e){$results[]='Echivalentul EUR așteaptă actualizarea cursului BNR; prețul RON rămâne disponibil.';}
       foreach(['test','live'] as $mode)if($settings->stripe($mode)['secret_key']){
        $result=(new StripeIntegration($this->db,$this->plans,null,$mode))->synchronize($admin['id']);
        $results[]=strtoupper($mode).': '.$result['message'];

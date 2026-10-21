@@ -1,7 +1,7 @@
 <?php
 namespace Zion;
 final class LegalDocuments {
- public const VERSION='2026-10-21';
+ public const VERSION='2026-10-21-ron';
  public static function operator(): array {return require dirname(__DIR__).'/config/operator.php';}
  public static function read(string $locale,string $document): ?string {
   if(!in_array($locale,TranslationService::LOCALES,true) || !in_array($document,['privacy','terms','cookies'],true))return null;

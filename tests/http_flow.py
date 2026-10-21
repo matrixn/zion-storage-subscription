@@ -175,7 +175,7 @@ with tempfile.TemporaryDirectory(prefix="zion-http-") as temp:
         verification=re.search(r'name="token" value="([^"]+)"',html).group(1)
         status,html=request("/fr/verification-email",dict(_csrf=csrf(html),token=verification))
         check(status==200 and "Votre compte est confirmé" in html and "Continuer avec le paiement de 3,99 RON" in html and "votre espace sera activé après confirmation du paiement" in html,"HTTP paid verification shows confirmed account and exact payment total")
-        check('TVA non collectée' not in html and 'BNR' in html and 'paiements sont effectués en RON' in html,'Checkout shows BNR policy in RON without zero-tax text')
+        check('TVA non collectée' not in html and 'BNR' in html and 'paiements et renouvellements sont facturés en RON' in html,'Checkout shows BNR policy in RON without zero-tax text')
         _,html=request("/fr/coordonnees-facturation")
         check("paid-billing@example.com" in html and 'name="robots" content="noindex,nofollow"' in html,"HTTP private billing page renders local profile and noindex")
         company=billing.copy()

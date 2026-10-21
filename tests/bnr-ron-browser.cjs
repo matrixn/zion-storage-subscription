@@ -16,14 +16,17 @@ function check(ok,label){if(!ok)throw Error(label);checks++;console.log('PASS '+
  const rejected=await ctx.request.post(origin+'/admin?section=exchange',{form:{action:'bnr_update'}});check(rejected.status()===419,'BNR update requires administrator CSRF');
  await page.goto(origin+'/ro/plata');const before=await page.locator('input[name=price_quote]').inputValue();check((await page.locator('[data-confirmed-payment]').innerText()).includes('3,99 RON'),'initial payment displays RON total');
  execFileSync('php',['-r',String.raw`require 'src/bootstrap.php';(new Zion\Database())->run('UPDATE exchange_rates SET eur_ron=53285');`],{cwd:root,env});
+ await page.reload();check(await page.locator('input[name=price_quote]').inputValue()===before && (await page.locator('[data-confirmed-payment]').innerText()).includes('3,99 RON'),'FX update does not change the fixed RON charge or quote');
+ execFileSync('php',['-r',String.raw`require 'src/bootstrap.php';(new Zion\Database())->run("UPDATE plan_settings SET monthly_price=499 WHERE slug='120gb'");`],{cwd:root,env});
  await page.locator('[data-confirmed-payment]').click();await page.waitForLoadState('networkidle');
- check((await page.locator('[data-confirmed-payment]').innerText()).includes('21,26 RON') && await page.locator('input[name=price_quote]').inputValue()!==before,'changed rate requires a new confirmation before Stripe receives a payment request');
+ check((await page.locator('[data-confirmed-payment]').innerText()).includes('4,99 RON') && await page.locator('input[name=price_quote]').inputValue()!==before,'changed RON amount requires confirmation before any Stripe request');
+ execFileSync('php',['-r',String.raw`require 'src/bootstrap.php';(new Zion\Database())->run("UPDATE plan_settings SET monthly_price=399 WHERE slug='120gb'");`],{cwd:root,env});
  for(const locale of ['ro','en','fr','de']){
   await page.goto(origin+'/'+locale+'/#pricing');check(await page.locator('.plan-ron').count()===4,'RON equivalent for every plan '+locale);
   check(await page.locator('.price-net-label,.plan-tax').count()===0,'old tax text removed beneath prices '+locale);
-  check((await page.locator('.plan-ron').nth(1).innerText()).includes(locale==='en'?'21.26':'21,26'),'monthly RON equivalent uses saved BNR rate '+locale);
+  check((await page.locator('.plan-ron').nth(1).innerText()).includes(locale==='ro'?'0,75':(locale==='en'?'3.99':'3,99')),'monthly RON equivalent uses saved BNR rate '+locale);
   await page.locator('[data-billing-switch] button[value=year]').click();
-  check((await page.locator('.plan-ron').nth(1).innerText()).includes(locale==='en'?'233.87':'233,87'),'annual RON equivalent updates with switcher '+locale);
+  check((await page.locator('.plan-ron').nth(1).innerText()).includes(locale==='ro'?'8,24':(locale==='en'?'43.89':'43,89')),'annual RON equivalent updates with switcher '+locale);
  }
  const artifacts=path.join(root,'tests/artifacts/bnr-ron');fs.mkdirSync(artifacts,{recursive:true});
  await page.goto(origin+'/admin?section=exchange');await page.screenshot({path:path.join(artifacts,'admin-desktop.png'),fullPage:true});

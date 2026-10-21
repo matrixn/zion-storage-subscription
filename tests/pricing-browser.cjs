@@ -4,7 +4,7 @@ const origin=process.env.TEST_URL||'http://localhost:8088';const dir=path.join(_
 let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
 const slugs=['free','120gb','250gb','500gb'];
 const registration={ro:'inregistrare',en:'register',fr:'inscription',de:'registrieren'};
-const expected={ro:['0,00 EUR','3,99 EUR','7,19 EUR','11,99 EUR'],en:['EUR 0.00','EUR 3.99','EUR 7.19','EUR 11.99'],fr:['0,00 EUR','3,99 EUR','7,19 EUR','11,99 EUR'],de:['0,00 EUR','3,99 EUR','7,19 EUR','11,99 EUR']};
+const expected={ro:['0,00 RON','3,99 RON','7,19 RON','11,99 RON'],en:['EUR 0.00','EUR 3.99','EUR 7.19','EUR 11.99'],fr:['0,00 EUR','3,99 EUR','7,19 EUR','11,99 EUR'],de:['0,00 EUR','3,99 EUR','7,19 EUR','11,99 EUR']};
 (async()=>{
  const browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||undefined,headless:true});const context=await browser.newContext();const page=await context.newPage();const errors=[];
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});

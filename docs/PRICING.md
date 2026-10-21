@@ -1,49 +1,37 @@
-# EUR reference prices and RON billing
+# Native RON pricing and billing
 
-The central catalog in config/plans.php defines Free 5 GB, Personal 120 GB, Plus 250 GB and Titan 500 GB. Titan retains the 500gb identifier and provides one account.
+Configure existing packages at **Configurare → Pachete și prețuri** (/admin?section=plans). Names and integer GB capacities remain editable. Enter monthly prices in RON with a comma or point and up to two decimals. Paid packages accept 2.00–9999.99 RON; Free stays zero. Annual RON prices are monthly × 11: twelve months for eleven monthly payments.
 
-| Plan | Monthly EUR | Annual EUR |
-| --- | ---: | ---: |
-| Personal | 3.99 | 43.89 |
-| Plus | 7.19 | 79.09 |
-| Titan | 11.99 | 131.89 |
+The shipped RON defaults are 21.26 / 38.31 / 63.89 monthly. Existing installations migrate their actual saved EUR references using the latest saved BNR rate, so their resulting RON amounts may differ from fresh-install defaults. Migration preserves package names and GB overrides.
 
-Annual billing charges once for twelve months at eleven monthly prices. The public switcher displays EUR reference amounts with RON equivalents in RO/EN/FR/DE. Checkout charges RON, with the exact amount confirmed before redirect. A changed quote requires another confirmation; browser amounts are never trusted.
+## Public display and payment
 
-## Configuration
+RO shows the native RON price as the primary amount, with indicative EUR below. EN/FR/DE show EUR first, with the native RON below. Monthly/yearly switching and registration labels use the same display helper, including without JavaScript.
 
-Install/migrate and sign into /admin. Open **Configurare → Curs valutar BNR** (/admin?section=exchange) and refresh the rate, then synchronize the independent Stripe TEST/LIVE catalogs. API credentials and six monthly/yearly Price mappings remain database-managed. Stable Product IDs, lookup keys and idempotency keys support safe retries. Disabled options stay disabled.
+BNR source: https://curs.bnr.ro/nbrfxrates10days.xml. The administration exchange page shows rate, publication date and refresh control. EUR is calculated by dividing integer RON bani by the scaled RON-per-EUR rate and rounding to EUR cents. No markup is added. Updating BNR changes display equivalents only: it does not change RON charges, invalidate a confirmed RON quote or create replacement Stripe Prices.
 
-The fixed official source is https://curs.bnr.ro/nbrfxrates10days.xml. The administration page shows publication date, retrieval time and source. The last published banking-day rate is used over weekends/holidays, with a maximum seven-day gap. Quotes require a successful recent fetch; failures block new payments rather than inventing a rate. Integer arithmetic rounds once to RON bani, with no FX markup. Public page views never call BNR or Stripe.
+If BNR is unavailable, the native RON amount and Checkout remain available. EUR is marked unavailable once no usable recent rate exists. A changed package amount/capacity requires a fresh Checkout confirmation.
 
-The worker refreshes the source at most every 30 minutes and Checkout checks again. The admin refresh button also synchronizes both configured Stripe profiles. Each Price stores its EUR reference and conversion snapshot; historical IDs remain recognizable. Keep the full SQLite database in backups.
+All new Stripe Prices, payments, upgrades and Oblio products/invoices are in RON. Checkout explicitly disables Adaptive Pricing so Stripe does not switch the charge currency for foreign visitors. Any configured VAT is added separately at Checkout. EUR display values are not invoice currency or a contractual exchange-rate adjustment.
 
-## Edit package names and EUR prices
+## Stripe and existing customers
 
-Open **Configurare → Pachete și prețuri** (/admin?section=plans). Every existing package can be renamed and assigned an integer capacity from 1 to 1,000,000 GB (decimal GB = 1,000,000,000 bytes). Paid monthly EUR references accept a comma or point and up to two decimal places, from 1.00 to 9999.99 EUR. Free remains zero. Annual references are always monthly × 11; there is no independent annual-price override. Slug and recommendation remain unchanged.
+Saving a package synchronizes both configured TEST/LIVE catalogs without switching the active environment. Stable lookup keys include RON amount, billing policy and capacity, not the current FX display rate. Capacity-only changes create separate Product/Price versions. Disabled options stay disabled and replaced Price IDs remain recognizable.
 
-Edits are stored in plan_settings and audited with before/after values. Saving updates public pages immediately and synchronizes both configured Stripe profiles without changing the active mode. Name changes update existing Stripe Products even when their Prices already match; amount changes create/reuse immutable Prices and retain historical mappings. Disabled options remain disabled. If BNR/Stripe is unavailable, the edit remains saved and the notice explains the pending sync; use Catalog Stripe / Curs BNR to retry.
+New subscriptions use ordinary Stripe recurring collection at the purchased fixed RON price. There is no pause_collection or draft FX adjustment for these contracts. Existing subscriptions retain purchased capacity and their original billing policy. Historical bnr_v1 contracts continue their agreed EUR-to-RON renewal worker; historical EUR subscriptions are not silently converted. Explicit upgrades into the new catalog use the full RON price difference within the original five-day window, preserve the anniversary and switch future renewals to the new fixed RON Price.
 
-Existing subscriptions retain both their EUR amount and purchased GB capacity, including all renewals. A new capacity applies only to new subscriptions or an explicitly purchased change to a different plan. Changing the catalog does not resize active accounts. Price mappings freeze storage_bytes; a capacity-only edit creates new monthly/yearly Prices and a separate Stripe Product for that capacity, preserving old invoice descriptions. Free and manually granted accounts retain their stored quota. Activation, quota retries, unban, statistics and paid webhooks use the historical entitlement. Renewal FX conversions use that amount, not the edited public reference. Issued invoices retain their snapshots. Previously displayed checkout quotes must be reconfirmed when the amount changes.
+Capacity snapshots continue to protect activation, webhook retries, admin quota sync, unban and usage statistics. Free/manual grants preserve their assigned capacity. Issued invoices are never rewritten.
 
-## Renewals and upgrades
+## One-time migration
 
-Run php bin/console.php operations:work every minute (the provided Compose worker does this automatically). On Synology's existing web-only installation, the scheduled command must execute it inside zion_storage_web as www-data. Monitor /admin?section=exchange and the API journal.
+Take and verify a consistent SQLite backup and prebuild the new image before deployment. Refresh BNR in the currently installed application. Stop the web/worker processes before running the monetary migration, then start only the RON-aware release: old EUR catalog code must never serve the converted database. This short maintenance window prevents either code version from interpreting the other version’s units. CatalogCurrencyMigration atomically converts old editable EUR rows to RON, fills missing package overrides from the prior defaults and records original settings plus conversion date/rate under catalog:ron-primary-v1. Re-running migrate does not convert again.
 
-New BNR-managed subscriptions use Stripe pause_collection.behavior=keep_as_draft. This keeps the subscription active while preventing unattended collection at an old conversion rate. Each renewal freezes the published BNR rate available for its service-period start. The worker validates the original recurring line, adds a positive or negative FX adjustment when necessary, verifies taxes/totals, finalizes and collects. Retry uses the same frozen quote and idempotency keys. An outage leaves an invoice awaiting retry; payment success and entitlement still require the authoritative invoice.paid reconciliation.
+The migration does not purge users, invoices, provider records or historical Price mappings. Existing rows retain their bnr_v1 policy; newly synchronized Prices use ron_fixed_v1. A stale EUR admin form is rejected so it cannot save an EUR number as RON after deployment. If an old installation has no valid stored rate, fx:update followed by migrate resumes the conversion; no monetary fallback is invented.
 
-Subscribe the Stripe webhook destination to invoice.created and invoice.payment_action_required in addition to the existing checkout/subscription/invoice events. Worker discovery also finds draft renewals if invoice.created is missed. Customer action required by the bank is reported by email.
-
-Customer upgrades remain limited to five days from initial purchase, a larger plan and the same interval. The EUR difference is converted and frozen for the one-time RON charge. Future renewals use the larger EUR reference at each cycle's BNR rate, preserving the original anniversary.
-
-## Existing subscriptions and fiscal records
-
-Existing EUR subscriptions cannot be changed directly to RON. Their paid amounts, currency and fiscal records remain unchanged; enrolling in a new RON subscription is required. The application does not cancel or re-enroll existing customers automatically. Historical environment mappings are imported once; do not delete mappings while old events can arrive.
-
-Oblio receives actual collected amounts in RON. Its visible mentions include the EUR reference, BNR rate/date and RON equivalent. Romanian city/county fields are normalized; known rejected requests can be rebuilt from a corrected customer profile, while uncertain provider outcomes retain their original snapshot. Issued documents are never silently rewritten.
+Synchronize both configured Stripe catalogs after migration. The existing operations/mail worker remains required for fiscal/email queues and historical FX contracts; fresh RON subscriptions are renewed by Stripe.
 
 ## Validation and recovery
 
-Run composer lint, composer test, python3 tests/http_flow.py, python3 tests/admin_http.py and tests/bnr-ron-browser.cjs with Playwright. Coverage includes frozen quotes, retry after lost responses, upward/downward FX adjustments, tax rounding, foreign invoice rejection, address normalization, localization and stale-quote confirmation. Isolated Stripe TEST API acceptance checks validated held drafts and both signs of adjustment without attempting a payment; actual bank authentication and the full live payment flow require a real customer transaction.
+Run composer lint, composer test, python3 tests/http_flow.py, python3 tests/admin_http.py, tests/plan-editor-browser.cjs and tests/bnr-ron-browser.cjs. Coverage includes inverse conversion, locale ordering, fixed RON Checkout during FX outage, quote stability under rate changes, migration idempotency, immutable billing history, native Stripe Price reuse and purchased capacity preservation.
 
-Before release, take a consistent SQLite backup using VACUUM INTO and verify PRAGMA quick_check; record the old Git commit and Docker image. Schema additions are backward compatible. Rollback application/image first without restoring a database containing newer payments. After any capacity edits, do not roll back to code that lacks capacity versioning: it cannot honor historical quotas. Use a capacity-aware release or keep billing/provisioning paused during a separately reviewed recovery. If RON subscriptions have been enrolled, keep their draft holds in place and restore the RON worker promptly; older code cannot collect those renewals correctly. Restore a database backup only as a separately reviewed recovery action, after accounting for intervening provider transactions.
+Record the previous Git commit/image and use VACUUM INTO with PRAGMA quick_check for a consistent database backup. Do not deploy EUR-only catalog code over migrated RON rows: it would reinterpret amounts. Likewise do not deploy pre-capacity-versioning code after GB edits. Use a compatible release or a separately reviewed recovery that accounts for payments/settings changed since backup; do not restore a stale database over newer provider transactions.

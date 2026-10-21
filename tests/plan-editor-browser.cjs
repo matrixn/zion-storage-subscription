@@ -15,11 +15,15 @@ function check(ok,label){if(!ok)throw Error(label);checks++;console.log('PASS '+
  check(await page.locator('[data-plan-editor]').first().locator('[name=monthly_price]').getAttribute('readonly')!==null,'free package price remains read-only');
  const personal=page.locator('[data-plan-editor]').nth(1);
  await personal.locator('[name=name]').fill('Essential Prime');await personal.locator('[name=storage_gb]').fill('150');await personal.locator('[name=monthly_price]').fill('4,59');
+ check((await personal.locator('[data-plan-eur-month]').innerText()).includes('4,59'),'admin converts edited RON input to EUR immediately');
  check((await personal.locator('[data-plan-annual]').innerText()).includes('50,49'),'annual preview updates immediately at eleven monthly prices');
  await personal.getByRole('button').click();await page.waitForLoadState('networkidle');
  check((await page.locator('[role=status]').innerText()).includes('Pachet salvat.'),'save confirms persistence independently from unavailable test Stripe transport');
  await page.reload();check(await page.locator('[data-plan-editor]').nth(1).locator('[name=name]').inputValue()==='Essential Prime','saved name survives reload');
  check(await page.locator('[data-plan-editor]').nth(1).locator('[name=storage_gb]').inputValue()==='150','saved GB capacity survives reload');
+ const csrf=await page.locator('input[name=_csrf]').first().inputValue();
+ const stale=await ctx.request.post(origin+'/admin?section=plans',{form:{_csrf:csrf,action:'plan_save',plan:'120gb',name:'Stale EUR form',monthly_price:'4.59'}});
+ check(stale.status()===422 && (await stale.text()).includes('Moneda formularului'),'stale EUR forms cannot save EUR numbers as RON');
  const denied=await ctx.request.post(origin+'/admin?section=plans',{form:{action:'plan_save',plan:'120gb',name:'Forged',monthly_price:'1.00'}});
  check(denied.status()===419,'edit action protected by administrator CSRF');
  for(const locale of ['ro','en','fr','de']){

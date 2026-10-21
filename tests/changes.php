@@ -7,10 +7,10 @@ class ChangesHttp implements Stripe\HttpClient\ClientInterface {
   $path=parse_url($url,PHP_URL_PATH);$this->calls[]=[$method,$path,$params];$r=null;
   if(preg_match('~/prices/(price_\d+(?:_year)?)$~',$path,$m))$r=$this->price($m[1]);
   elseif(preg_match('~/subscriptions/[^/]+$~',$path)){
-   if(strtolower($method)==='post' && isset($params['pause_collection'])){$this->subscription['pause_collection']=$params['pause_collection'];return [json_encode($this->subscription),200,[]];}
+   if(strtolower($method)==='post' && isset($params['pause_collection']) && !isset($params['items'])){$this->subscription['pause_collection']=$params['pause_collection'];return [json_encode($this->subscription),200,[]];}
    if(strtolower($method)==='post'){
     check($params['proration_behavior']==='none' && $params['billing_cycle_anchor']==='unchanged','upgrade never prorates or resets renewal');
-    $this->updates++;if(array_key_exists('tax_rates',$params['items'][0]))$this->subscription['items']['data'][0]['tax_rates']=$params['items'][0]['tax_rates'];if(array_key_exists('default_tax_rates',$params))$this->subscription['default_tax_rates']=$params['default_tax_rates'];$this->subscription['items']['data'][0]['price']=$this->price($params['items'][0]['price']);
+    $this->updates++;if(array_key_exists('pause_collection',$params))$this->subscription['pause_collection']=$params['pause_collection']?:null;if(array_key_exists('tax_rates',$params['items'][0]))$this->subscription['items']['data'][0]['tax_rates']=$params['items'][0]['tax_rates'];if(array_key_exists('default_tax_rates',$params))$this->subscription['default_tax_rates']=$params['default_tax_rates'];$this->subscription['items']['data'][0]['price']=$this->price($params['items'][0]['price']);
     $this->subscription['metadata']=array_replace($this->subscription['metadata'],$params['metadata']);
     if($this->loseUpdate){$this->loseUpdate=false;throw new RuntimeException('fixture response lost');}
    }

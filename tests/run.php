@@ -35,7 +35,7 @@ function seedCatalog(Zion\Database $db):void {
  $db->run('DELETE FROM billing_prices');
  foreach(['120gb'=>['price_120',399],'250gb'=>['price_250',719],'500gb'=>['price_500',1199]] as $slug=>[$id,$amount])foreach(['month'=>1,'year'=>11] as $interval=>$multiple)$db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,product_id,status,created_at,updated_at) VALUES(?,?,?,'ron',?,'prod_fixture','active',?,?)",[$id.($interval==='year'?'_year':''),$slug,$interval,$amount*$multiple,time(),time()]);
  $rate=$db->one('SELECT * FROM exchange_rates ORDER BY rate_date DESC LIMIT 1');
- $db->run('UPDATE billing_prices SET eur_amount=amount,fx_snapshot=?',[json_encode($rate,JSON_THROW_ON_ERROR)]);
+ $db->run("UPDATE billing_prices SET price_policy='ron_fixed_v1',eur_amount=amount,fx_snapshot=?",[json_encode($rate,JSON_THROW_ON_ERROR)]);
 }
 $db=new Zion\Database(':memory:');$db->migrate();testFx($db);seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
 function signup(string $email,string $plan='free',string $locale='en',string $interval='month'):array{
@@ -136,3 +136,5 @@ require __DIR__.'/bnr-ron.php';
 require __DIR__.'/plan-settings.php';
 
 require __DIR__.'/plan-capacity.php';
+
+require __DIR__.'/ron-primary.php';
