@@ -127,6 +127,7 @@ final class TestAccountReset {
      foreach(['email_verifications','billing_profiles','subscriptions','invoices','fiscal_invoices','account_controls','subscription_origins','plan_changes','provisioning_events','checkout_sessions','notices','billing_events','admin_audit'] as $table)$this->db->run('DELETE FROM '.$table.' WHERE user_id=?',[$uid]);
      $this->db->run("DELETE FROM outbox WHERE kind='admin_signup' AND dedupe_key LIKE ?",['admin-signup:'.$uid.':%']);
      $this->db->run('DELETE FROM outbox WHERE recipient=?',[$u['email']]);
+     $this->db->run("DELETE FROM outbox WHERE kind='invoice_copy' AND dedupe_key LIKE ?",['invoice-copy:'.$uid.':%']);
      $this->db->run('DELETE FROM users WHERE id=?',[$uid]);
      $this->db->run("UPDATE test_account_resets SET status='complete',step='complete',snapshot='{}',error_code=NULL,updated_at=? WHERE user_id=?",[time(),$uid]);
      $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin,'test_account_reset','Cont TEST '.$uid.' și evidențe locale șterse; resursele externe de test au fost închise.',time()]);

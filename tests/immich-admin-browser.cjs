@@ -19,7 +19,7 @@ function check(ok,label){if(!ok)throw Error(label);checks++;}
   await ctx.addCookies([{name:'zion_admin_session',value:sessions.admin,url:origin+'/admin'}]);
   const response=await page.goto(origin+'/admin?section=immich-general');
   check(response.status()===200,'dedicated admin route');
-  check(response.headers()['content-security-policy'].includes("script-src 'none'"),'admin remains functional without scripts');
+  check(response.headers()['content-security-policy'].includes("script-src 'self'"),'admin permits only local scripts');
   check(await page.locator('input[type=checkbox][name="features[facial_recognition]"]').isChecked()===false,'actual global state loaded');
   check(await page.locator('input[type=checkbox][name="defaults[memories]"]').isChecked()===true,'default profile loaded');
   check(!(await page.content()).includes('never-render-fixture-secret'),'no full server configuration in HTML');

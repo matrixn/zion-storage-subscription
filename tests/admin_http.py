@@ -11,6 +11,9 @@ def check(value,label):
 class Backend(http.server.BaseHTTPRequestHandler):
     records=[]
     last_api_key=None
+    session_token='fixture-admin-http-session-not-real'
+    onboarded=False
+    preferences={}
     listmonk_messages=[]
     def log_message(self,*args): pass
     def respond(self,obj,code=200):
@@ -19,6 +22,9 @@ class Backend(http.server.BaseHTTPRequestHandler):
         if self.path.startswith('/api/templates/'):
             if self.headers.get('Authorization')!='Basic '+base64.b64encode(b'fixture-api-user:fixture-listmonk-api-token-123456').decode():return self.respond({'message':'Unauthorized'},401)
             return self.respond({'data':{'id':7,'type':'tx'}})
+        if self.path=='/api/users/me/onboarding':
+            assert self.headers.get('Authorization')=='Bearer '+self.session_token and not self.headers.get('x-api-key')
+            return self.respond({'isOnboarded':Backend.onboarded})
         Backend.last_api_key=self.headers.get('x-api-key')
         if self.path=='/api/users/me':
             return self.respond({'id':'immich-admin-test'} if self.headers.get('Authorization')=='Bearer fixture-user' else {},200 if self.headers.get('Authorization')=='Bearer fixture-user' else 401)
@@ -27,7 +33,13 @@ class Backend(http.server.BaseHTTPRequestHandler):
             return self.respond(dict(usage=3_000_000_000,photos=120,videos=7,usageByUser=[dict(userId=u['id'],usage=3_000_000_000,photos=120,videos=7,quotaSizeInBytes=u.get('quotaSizeInBytes')) for u in self.records]))
         return self.respond(self.records if '?' in self.path else self.records[0])
     def do_POST(self):
-        body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        body=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))) or b'{}')
+        if self.path=='/api/auth/login':
+            assert not self.headers.get('x-api-key') and body['email']==self.records[0]['email']
+            return self.respond({'accessToken':self.session_token,'userId':self.records[0]['id'],'userEmail':body['email'],'isAdmin':False})
+        if self.path=='/api/auth/logout':
+            assert self.headers.get('Authorization')=='Bearer '+self.session_token
+            return self.respond({'successful':True})
         if self.path=='/api/tx':
             if self.headers.get('Authorization')!='Basic '+base64.b64encode(b'fixture-api-user:fixture-listmonk-api-token-123456').decode():return self.respond({'message':'Unauthorized'},401)
             if body.get('subscriber_mode')!='external' or body.get('template_id')!=7:return self.respond({'message':'Invalid transactional payload'},400)
@@ -35,7 +47,13 @@ class Backend(http.server.BaseHTTPRequestHandler):
         if self.headers.get('x-api-key') not in ['fixture-key','fixture-immich-api-key-123456']:return self.respond({},403)
         body.pop('password');body.update(id='immich-admin-test',quotaUsageInBytes=0);self.records.append(body);self.respond(body)
     def do_PUT(self):
-        body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        body=json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))) or b'{}')
+        if self.path.startswith('/api/users/me/'):
+            assert self.headers.get('Authorization')=='Bearer '+self.session_token and not self.headers.get('x-api-key')
+            if self.path.endswith('/preferences'):
+                Backend.preferences.update(body);return self.respond(Backend.preferences)
+            if self.path.endswith('/onboarding'):
+                Backend.onboarded=body['isOnboarded'];return self.respond({'isOnboarded':Backend.onboarded})
         if self.headers.get('x-api-key') not in ['fixture-key','fixture-immich-api-key-123456']:return self.respond({},403)
         self.records[0].update(body);self.respond(self.records[0])
 def client():return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
@@ -112,16 +130,16 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             operations_result=subprocess.run(['php','bin/console.php','operations:work'],cwd=ROOT,env=env,check=True,capture_output=True,text=True)
             check('fiscal' in json.loads(operations_result.stdout) and 'mail_accepted' in json.loads(operations_result.stdout),'single CLI command processes fiscal queue and email queue')
             tax_body=request(admin,'/admin?section=tax')[1]
-            check('name="vat_rate"' in tax_body and 'value="21"' in tax_body and '2,41 EUR' in tax_body,'admin tax settings default to 21 percent and preview gross total')
+            check('name="vat_rate"' in tax_body and 'value="21"' in tax_body and '4,83 EUR' in tax_body,'admin tax settings default to 21 percent and preview gross total')
             check(request(admin,'/admin',{'action':'tax_save','vat_rate':'19'})[0]==419,'VAT updates require admin CSRF')
             status,tax_body,_=request(admin,'/admin',{'_csrf':csrf(tax_body),'action':'tax_save','vat_rate':'19'})
-            check(status==200 and 'value="19"' in tax_body and '2,37 EUR' in tax_body,'admin can change global exclusive VAT')
+            check(status==200 and 'value="19"' in tax_body and '4,75 EUR' in tax_body,'admin can change global exclusive VAT')
             status,tax_body,_=request(admin,'/admin',{'_csrf':csrf(tax_body),'action':'tax_save','vat_rate':'101'})
             check(status==422 and 'value="19"' in tax_body,'invalid VAT does not replace saved rate')
             request(admin,'/admin',{'_csrf':csrf(tax_body),'action':'tax_save','vat_rate':'21'})
             for loc in ['ro','en','fr','de']:
                 html=request(customer,'/'+loc+'/')[1]
-                check('2,41' in html or '2.41' in html,'localized public pricing discloses VAT and gross total '+loc)
+                check('4,83' in html or '4.83' in html,'localized public pricing discloses VAT and gross total '+loc)
             immich_body=request(admin,'/admin?section=immich')[1]
             check('Testează conexiunea Immich' in immich_body and 'Sincronizează acum statisticile' in immich_body,'Immich has dedicated configuration and diagnostic page')
             check(request(admin,'/admin',{'action':'immich_save','url':'https://invalid.example/api','api_key':'invalid'})[0]==419,'Immich settings require administrative CSRF')
@@ -130,7 +148,7 @@ with tempfile.TemporaryDirectory(prefix='zion-admin-') as temp:
             status,immich_body,_=request(admin,'/admin',{'_csrf':csrf(immich_body),'action':'immich_check'})
             check(status==200 and 'Conexiunea Immich funcționează' in immich_body and Backend.last_api_key=='fixture-immich-api-key-123456','Immich connection test reads authenticated statistics using stored settings')
             body=request(admin,'/admin?section=catalog')[1]
-            check('Catalog Stripe' in body and '21,89' in body and 'Titan' in body,'admin exposes six-option EUR catalog')
+            check('Catalog Stripe' in body and '43,89' in body and 'Titan' in body,'admin exposes six-option EUR catalog')
             check(request(admin,'/admin',{'action':'catalog_disable','plan':'120gb','billing_interval':'year'})[0]==419,'catalog writes require admin CSRF')
             status,body,_=request(admin,'/admin',{'_csrf':csrf(body),'action':'catalog_save','plan':'120gb','billing_interval':'year','price_id':'invalid'})
             check(status==422,'catalog rejects invalid Price ID before network request')

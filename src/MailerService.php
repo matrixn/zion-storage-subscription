@@ -4,7 +4,7 @@ use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Mime\Email;
 final class MailerService {
- public function __construct(private Database $db,private ?ListmonkClient $listmonkClient=null) {}
+ public function __construct(private Database $db,private ?ListmonkClient $listmonkClient=null,private ?FiscalDocuments $documents=null) {}
  public static function encode(array $data): string {
   return EncryptedPayload::encode($data);
  }
@@ -29,6 +29,17 @@ final class MailerService {
    if(!(new IntegrationSettings($this->db))->listmonk()['enabled'])return;
    foreach($this->db->run("SELECT id FROM outbox WHERE sent_at IS NULL AND kind='admin_signup' AND dedupe_key LIKE ? LIMIT 10",['admin-signup:'.$userId.':%'])->fetchAll() as $row)$this->deliver(1,(int)$row['id'],true);
   }catch(\Throwable $e){error_log('Administrator signup notification pending');}
+ }
+ public function dispatch(string $key): string {
+  $row=$this->db->one('SELECT id,sent_at FROM outbox WHERE dedupe_key=?',[$key]);
+  if(!$row)return 'pending';
+  if(!$row['sent_at'])try{$this->deliver(1,(int)$row['id'],true);}catch(\Throwable $e){error_log('Targeted mail dispatch pending; outbox_id='.$row['id']);return 'pending';}
+  $sent=$this->db->one('SELECT sent_at FROM outbox WHERE id=?',[$row['id']]);
+  if(empty($sent['sent_at']))return 'pending';
+  return !(new IntegrationSettings($this->db))->listmonk()['enabled'] && env('MAIL_TRANSPORT','log')==='log' && !production()?'simulated':'accepted';
+ }
+ public static function dispatchNotice(string $state): string {
+  return match($state){'accepted'=>'Emailul către client a fost trimis cu succes (acceptat de serviciul email).','simulated'=>'Emailul a fost simulat local; nu a fost trimis clientului.',default=>'Emailul nu a fost trimis încă; a rămas în coadă. Verifică jurnalul API și configurația email.'};
  }
  public function diagnostics(): array {
   $pending=$this->db->one('SELECT COUNT(*) total,COALESCE(SUM(attempts=0),0) unattempted,COALESCE(SUM(attempts>0),0) failed,MIN(created_at) oldest FROM outbox WHERE sent_at IS NULL');
@@ -62,9 +73,14 @@ final class MailerService {
      // Expired/replaced/consumed links cannot activate an account. Remove their encrypted payloads.
      $this->db->run('DELETE FROM outbox WHERE id=? AND sent_at IS NULL',[$row['id']]);continue;
     }
+    if($row['kind']==='onboarding_access' && !(new OnboardingLinks($this->db,$this))->resolveHash(substr($row['dedupe_key'],11))){
+     $this->db->run('DELETE FROM outbox WHERE id=? AND sent_at IS NULL',[$row['id']]);continue;
+    }
     $this->db->run('UPDATE outbox SET attempts=attempts+1 WHERE id=?',[$row['id']]);
     $tr=new TranslationService($row['locale']); $data=self::decode($row['payload']);
-    $subject=$tr->get('email.'.$row['kind'].'.subject');
+    $pdf=null;
+    if($row['kind']==='invoice_copy')$pdf=($this->documents??new FiscalDocuments($this->db))->pdf($data['attachment_invoice_id'],$data['user_id']);
+    $subject=$tr->get('email.'.$row['kind'].'.subject',$data);
     $body=$tr->get('email.'.$row['kind'].'.body',$data);
     if(isset($data['legal_receipt']))$body.="\n\n".$data['legal_receipt'];
     $html='<!doctype html><html lang="'.e($row['locale']).'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.e($subject).'</title></head><body style="margin:0;padding:0;background-color:#0b1115;color:#edf2e9;font-family:Arial,Helvetica,sans-serif"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#0b1115"><tr><td align="center" style="padding:28px 16px"><table role="presentation" width="560" cellpadding="0" cellspacing="0" bgcolor="#111b20" style="width:100%;max-width:560px;border:1px solid #27342f;border-radius:16px"><tr><td style="padding:30px 24px"><p style="margin:0 0 30px;color:#edf2e9;font-size:23px;letter-spacing:-1px;font-weight:bold">zion <span style="font-weight:normal">storage</span><span style="color:#c4f582">.</span></p><h1 style="margin:0 0 20px;font-size:28px;line-height:1.3;font-weight:600;letter-spacing:-0.6px;color:#edf2e9">'.e($subject).'</h1><p style="margin:0 0 24px;font-size:15px;line-height:1.8;color:#b9c6be">'.nl2br(e($body)).'</p>';
@@ -75,7 +91,9 @@ final class MailerService {
     $html.='<p style="border-top:1px solid #27342f;padding-top:22px;margin:0;color:#9ba8a1;font-size:12px;line-height:1.7">'.e($tr->get('email.footer')).'</p></td></tr></table></td></tr></table></body></html>';
     $listmonk=(new IntegrationSettings($this->db))->listmonk();
     if($listmonk['enabled']) {
-     ($this->listmonkClient??new ListmonkClient($listmonk))->send($row['recipient'],$subject,$html,$body.(!empty($data['url'])?"\n".$data['url']:''),$row['locale'],$row['kind']);
+     $client=$this->listmonkClient??new ListmonkClient($listmonk);
+     $args=[$row['recipient'],$subject,$html,$body.(!empty($data['url'])?"\n".$data['url']:''),$row['locale'],$row['kind']];
+     if($pdf)$client->sendWithAttachment(...[...$args,$pdf]);else $client->send(...$args);
     } elseif(env('MAIL_TRANSPORT')==='listmonk') {
      throw new \RuntimeException('listmonk_disabled');
     } elseif(env('MAIL_TRANSPORT','log')==='log' && !production()) {
@@ -86,7 +104,9 @@ final class MailerService {
      $dsn=$scheme.'://'.rawurlencode(env('MAIL_USERNAME')).':'.rawurlencode(env('MAIL_PASSWORD')).'@'.env('MAIL_HOST').':'.env('MAIL_PORT','587');
      if($scheme==='smtp') $dsn.='?require_tls=true';
      $mailer=new Mailer(Transport::fromDsn($dsn));
-     $mailer->send((new Email())->from(new \Symfony\Component\Mime\Address(LegalDocuments::operator()['email'], 'Zion Storage'))->to($row['recipient'])->subject($subject)->text($body.(!empty($data['url'])?"\n".$data['url']:''))->html($html));
+     $message=(new Email())->from(new \Symfony\Component\Mime\Address(LegalDocuments::operator()['email'], 'Zion Storage'))->to($row['recipient'])->subject($subject)->text($body.(!empty($data['url'])?"\n".$data['url']:''))->html($html);
+     if($pdf)$message->attach($pdf['bytes'],$pdf['filename'],'application/pdf');
+     $mailer->send($message);
     }
     $this->db->transaction(function() use($row,$data) {
      $this->db->run('UPDATE outbox SET sent_at=?,payload=? WHERE id=?',[time(),'{}',$row['id']]);

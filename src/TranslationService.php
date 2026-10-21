@@ -5,12 +5,13 @@ final class TranslationService {
  public array $messages;
  public function __construct(public string $locale) {
   if (!in_array($locale,self::LOCALES,true)) throw new \InvalidArgumentException('locale');
+  $extra=(require dirname(__DIR__).'/translations/customer_documents.php')[$locale];
   $this->messages=require dirname(__DIR__).'/translations/'.$locale.'.php';
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/account_changes.php')[$locale]);
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/pricing.php')[$locale]);
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/carousel.php')[$locale]);
   $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/billing.php')[$locale]);
-  $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/onboarding.php')[$locale]);
+  $this->messages=array_replace($this->messages,(require dirname(__DIR__).'/translations/onboarding.php')[$locale],$extra);
  }
  public function get(string $key,array $vars=[]): string {
   $s=$this->messages[$key]??throw new \RuntimeException('Missing translation: '.$key);

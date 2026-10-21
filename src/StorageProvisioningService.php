@@ -66,6 +66,12 @@ class StorageProvisioningService {
    try{if(($this->userRequest('POST','/auth/logout',null,$token)['successful']??null)!==true)throw new \RuntimeException('storage_logout_not_confirmed');}catch(\Throwable $e){if($complete)throw $e;}
   }
  }
+ public function updateContact(array $user,array $data): void {
+  $id=$user['storage_user_id'];$remote=$this->request('GET','/admin/users/'.rawurlencode($id));
+  if(($remote['storageLabel']??'')!=='zs-'.$user['id'] || ($remote['isAdmin']??null)!==false || !in_array(strtolower($remote['email']??''),[strtolower($user['email']),$data['email']],true))throw new \DomainException('Identitatea contului Immich nu corespunde clientului.');
+  $result=$this->request('PUT','/admin/users/'.rawurlencode($id),['email'=>$data['email'],'name'=>$data['name']]);
+  if(strtolower($result['email']??'')!==$data['email'] || ($result['name']??'')!==$data['name'])throw new \DomainException('Actualizarea datelor Immich nu a fost confirmată. Reîncearcă sincronizarea.');
+ }
  public function updateQuota(string $id,int $quota): void { $this->request('PUT','/admin/users/'.rawurlencode($id),['quotaSizeInBytes'=>max(1,$quota)]); }
  public function getUsage(string $id): array { $u=$this->request('GET','/admin/users/'.rawurlencode($id)); return ['used'=>(int)($u['quotaUsageInBytes']??0),'quota'=>(int)($u['quotaSizeInBytes']??0)]; }
  public function getIdentity(string $id): array { $u=$this->request('GET','/admin/users/'.rawurlencode($id));return ['label'=>$u['storageLabel']??'','email'=>$u['email']??'']; }

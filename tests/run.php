@@ -32,7 +32,7 @@ function seedCatalog(Zion\Database $db):void {
  if(env('APP_ENV')!=='test' || $db->one('SELECT id FROM users LIMIT 1'))throw new RuntimeException('Fixture requires empty test database');
  $db->run("INSERT INTO integration_settings(key,value) VALUES('billing:vat_bps','0') ON CONFLICT(key) DO UPDATE SET value='0'"); // Historical tax-free fixtures; dedicated VAT tests exercise the default and nonzero rates.
  $db->run('DELETE FROM billing_prices');
- foreach(['120gb'=>['price_120',199],'250gb'=>['price_250',359],'500gb'=>['price_500',599]] as $slug=>[$id,$amount])foreach(['month'=>1,'year'=>11] as $interval=>$multiple)$db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,product_id,status,created_at,updated_at) VALUES(?,?,?,'eur',?,'prod_fixture','active',?,?)",[$id.($interval==='year'?'_year':''),$slug,$interval,$amount*$multiple,time(),time()]);
+ foreach(['120gb'=>['price_120',399],'250gb'=>['price_250',719],'500gb'=>['price_500',1199]] as $slug=>[$id,$amount])foreach(['month'=>1,'year'=>11] as $interval=>$multiple)$db->run("INSERT INTO billing_prices(price_id,plan,interval,currency,amount,product_id,status,created_at,updated_at) VALUES(?,?,?,'eur',?,'prod_fixture','active',?,?)",[$id.($interval==='year'?'_year':''),$slug,$interval,$amount*$multiple,time(),time()]);
 }
 $db=new Zion\Database(':memory:');$db->migrate();seedCatalog($db);$plans=new Zion\Plans($db);$mail=new Zion\MailerService($db);$store=new TestStorage();$accounts=new Zion\AccountService($db,$plans,$mail,$store);
 function signup(string $email,string $plan='free',string $locale='en',string $interval='month'):array{
@@ -51,7 +51,7 @@ foreach(Zion\TranslationService::LOCALES as $l){
 check(Zion\TranslationService::preferred('de','ro')==='de','cookie preference');
 check(Zion\TranslationService::preferred('','fr;q=0.3,ro-RO;q=0.9,en;q=0.5')==='ro','Accept-Language priorities');
 check(Zion\TranslationService::preferred('','es')==='en','English fallback');
-check(count($plans->all())===4 && $plans->get('free')['storage_bytes']===10_000_000_000 && $plans->get('1tb')===null && array_column($plans->all(),'monthly_price')===[0,199,359,599],'configured plans and quotas');
+check(count($plans->all())===4 && $plans->get('free')['storage_bytes']===5_000_000_000 && $plans->get('1tb')===null && array_column($plans->all(),'monthly_price')===[0,399,719,1199],'configured plans and quotas');
 check(!$plans->get('tampered'),'reject unknown plan');
 check(!Zion\AccountService::passwordValid('short'),'password length');
 [$free,$token,$link]=signup('free@example.com','free','ro');
@@ -123,3 +123,7 @@ require __DIR__.'/manual-billing-archive.php';
 require __DIR__.'/mobile-onboarding.php';
 require __DIR__.'/immich-account-defaults.php';
 require __DIR__.'/immich-configuration.php';
+
+require __DIR__.'/customer-documents.php';
+
+require __DIR__.'/pricing-revision.php';

@@ -4,9 +4,9 @@ const origin=process.env.TEST_URL||'http://localhost:8088';const dir=path.join(_
 let checks=0;function check(ok,label){if(!ok)throw Error(label);checks++;}
 const slugs=['free','120gb','250gb','500gb'];
 const registration={ro:'inregistrare',en:'register',fr:'inscription',de:'registrieren'};
-const expected={ro:['0,00 EUR','1,99 EUR','3,59 EUR','5,99 EUR'],en:['EUR 0.00','EUR 1.99','EUR 3.59','EUR 5.99'],fr:['0,00 EUR','1,99 EUR','3,59 EUR','5,99 EUR'],de:['0,00 EUR','1,99 EUR','3,59 EUR','5,99 EUR']};
+const expected={ro:['0,00 EUR','3,99 EUR','7,19 EUR','11,99 EUR'],en:['EUR 0.00','EUR 3.99','EUR 7.19','EUR 11.99'],fr:['0,00 EUR','3,99 EUR','7,19 EUR','11,99 EUR'],de:['0,00 EUR','3,99 EUR','7,19 EUR','11,99 EUR']};
 (async()=>{
- const browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'chrome',headless:true});const context=await browser.newContext();const page=await context.newPage();const errors=[];
+ const browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||undefined,headless:true});const context=await browser.newContext();const page=await context.newPage();const errors=[];
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  for(const width of [320,360,390,430,768,1024,1440,1920]){
   await page.setViewportSize({width,height:1000});
@@ -14,7 +14,7 @@ const expected={ro:['0,00 EUR','1,99 EUR','3,59 EUR','5,99 EUR'],en:['EUR 0.00',
    const response=await page.goto(origin+'/'+locale+'/#pricing');check(response.status()===200,'home response '+width+locale);
    await page.locator('#pricing').scrollIntoViewIfNeeded();await page.waitForTimeout(750);
    check(await page.locator('#pricing .plan').count()===4,'four plans');
-   check(JSON.stringify(await page.locator('.plan h3').allTextContents())===JSON.stringify(['10 GB','120 GB','250 GB','500 GB']),'catalog capacities');
+   check(JSON.stringify(await page.locator('.plan h3').allTextContents())===JSON.stringify(['5 GB','120 GB','250 GB','500 GB']),'catalog capacities');
    check(JSON.stringify(await page.locator('.price-amount').allTextContents())===JSON.stringify(expected[locale]),'localized catalog prices '+locale);
    check((await page.locator('.plan.recommended .plan-name').textContent())==='Personal','Personal remains recommended');
    check(await page.locator('.recommendation').isVisible(),'ribbon visible');
@@ -43,17 +43,17 @@ const expected={ro:['0,00 EUR','1,99 EUR','3,59 EUR','5,99 EUR'],en:['EUR 0.00',
  for(const locale of ['ro','en','fr','de'])for(const [i,slug] of slugs.entries()){
   await page.goto(origin+'/'+locale+'/'+registration[locale]+'?plan='+slug);
   check(await page.locator('#plan').inputValue()===slug,'CTA preselects '+locale+slug);
-  check((await page.locator('#plan option[value="250gb"]').textContent()).replace(',','.').includes('3.59'),'registration matches new Plus price');
+  check((await page.locator('#plan option[value="250gb"]').textContent()).replace(',','.').includes('7.19'),'registration matches new Plus price');
  }
  for(const locale of ['ro','en','fr','de']){
   await page.goto(origin+'/'+locale+'/#pricing');
   await page.locator('[data-billing-switch] button[value=year]').click();
-  check((await page.locator('.price-amount').allTextContents()).map(t=>t.replace(',','.')).join(' ').includes('21.89'),'annual total localized '+locale);
+  check((await page.locator('.price-amount').allTextContents()).map(t=>t.replace(',','.')).join(' ').includes('43.89'),'annual total localized '+locale);
   check(await page.locator('.plan-name').last().textContent()==='Titan','Titan plan name');
   check((await page.locator('.plan .button').nth(1).getAttribute('href')).includes('billing_interval=year'),'annual CTA preserves interval');
   await page.locator('.plan .button').nth(1).click();
   check(await page.locator('#billing_interval').inputValue()==='year','annual registration preselected');
-  check((await page.locator('#plan option[value="120gb"]').textContent()).replace(',','.').includes('21.89'),'annual registration total');
+  check((await page.locator('#plan option[value="120gb"]').textContent()).replace(',','.').includes('43.89'),'annual registration total');
  }
  const nojs=await browser.newContext({javaScriptEnabled:false,viewport:{width:320,height:900}});const fallback=await nojs.newPage();
  for(const locale of ['ro','en','fr','de']){

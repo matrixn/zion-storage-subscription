@@ -271,6 +271,7 @@ class StripeService implements BillingService {
     else $this->storage->disableUser($u['storage_user_id']);
     $this->db->run('UPDATE users SET status=?,updated_at=? WHERE id=?',[$paid?'active':'restricted',time(),$uid]);
    }
+   if($paid && !$oldSubscription && ($paidInvoice || $invoice))(new OnboardingLinks($this->db,$this->mail))->firstPayment($uid,($paidInvoice??$invoice)['id']);
    $this->trace('notifications');
    $this->db->transaction(function() use($u,$paidInvoice,$paid,$s,$event,$oldSubscription) {
     if($paidInvoice) $this->mail->queue($u['email'],$u['locale'],'payment',[],'paid:'.$paidInvoice['id']);

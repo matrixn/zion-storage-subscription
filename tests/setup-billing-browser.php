@@ -3,7 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/src/bootstrap.php';
 if (env('APP_ENV')!=='test' || env('OBLIO_ENABLED','false')!=='false') throw new RuntimeException('Fixture setup requires an isolated test environment');
 $db=new Zion\Database();$db->migrate();
-$db->run("INSERT OR IGNORE INTO billing_prices(price_id,plan,interval,currency,amount,status,created_at,updated_at) VALUES('price_browser_eur','120gb','month','eur',199,'active',1,1)");
+$db->run("INSERT OR IGNORE INTO billing_prices(price_id,plan,interval,currency,amount,status,created_at,updated_at) VALUES('price_browser_eur','120gb','month','eur',399,'active',1,1)");
 $mail=new Zion\MailerService($db);$plans=new Zion\Plans($db);
 $account=new Zion\AccountService($db,$plans,$mail,new Zion\StorageProvisioningService());
 $id=$account->register(['name'=>'Browser Billing','email'=>'billing-'.bin2hex(random_bytes(6)).'@example.com','password'=>'billing-browser-password','locale'=>'en','plan'=>'120gb','billing'=>[

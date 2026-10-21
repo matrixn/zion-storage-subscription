@@ -4,6 +4,7 @@ final class AdminApplication {
  private Database $db;private Plans $plans;private SubscriptionChanges $changes;private AdminService $service;private BillingCatalog $catalog;
  private string $section='dashboard';
  private string $stripeMode='test';
+ private string $customerId='';
  public function __construct(){
   $this->db=new Database();$this->plans=new Plans($this->db);
  }
@@ -12,19 +13,20 @@ final class AdminApplication {
   $billing=new StripeService($this->db,$this->plans,$mail,$storage);$this->changes=$billing->changes();$this->catalog=$billing->catalog();
   $this->service=new AdminService($this->db,$this->plans,$mail,$storage,$this->changes);
  }
- private function redirect(): never {header('Location: /admin?section='.$this->section.(in_array($this->section,['integrations','catalog'],true)?'&stripe_mode='.$this->stripeMode:''),true,303);exit;}
+ private function redirect(): never {header('Location: /admin?section='.$this->section.($this->section==='client'?'&user_id='.rawurlencode($this->customerId):'').(in_array($this->section,['integrations','catalog'],true)?'&stripe_mode='.$this->stripeMode:''),true,303);exit;}
  public function handle(): void {
   header('Cache-Control: private, no-store');header('X-Robots-Tag: noindex, nofollow');header('X-Content-Type-Options: nosniff');header('Referrer-Policy: no-referrer');
-  header("Content-Security-Policy: default-src 'self'; style-src 'self'; script-src 'none'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  header("Content-Security-Policy: default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   if(production())header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
   $path=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);
   if(!in_array($path,['/admin','/admin/'],true)){http_response_code(404);return;}
-  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','immich-general'=>'Immich · Configurare generală','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
+  $sections=['dashboard'=>'Dashboard','clients'=>'Clienți','client'=>'Detalii client','new-client'=>'Client nou','subscriptions'=>'Abonamente','changes'=>'Upgrade-uri','invoices'=>'Facturi fiscale','operations'=>'Operațiuni','integrations'=>'API-uri Stripe și Oblio','catalog'=>'Catalog Stripe','tax'=>'TVA produse','immich'=>'API Immich','immich-general'=>'Immich · Configurare generală','listmonk'=>'Email / Listmonk','legal-requests'=>'Retrageri consumatori','audit'=>'Acțiuni administrare','api-log'=>'Comunicare API'];
   $action=(string)($_POST['action']??'');
   $default=match(true){$action==='withdrawal_resolve'=>'legal-requests',in_array($action,['fiscal_retry','fiscal_generate'],true)=>'invoices',$action==='mail_retry'=>'listmonk',str_starts_with($action,'listmonk_')=>'listmonk',str_starts_with($action,'immich_general_')=>'immich-general',$action==='immich_save'||str_starts_with($action,'immich_')=>'immich',$action==='tax_save'=>'tax',$action==='stripe_event_replay'=>'api-log',$action==='settings_save'||str_starts_with($action,'stripe_')=>'integrations',str_starts_with($action,'catalog_')=>'catalog',$action==='create'=>'new-client',in_array($action,['plan','ban','unban','sync','test_account_reset','archive','restore'],true)=>'clients',in_array($action,['retry','cancel'],true)=>'changes',default=>'dashboard'};
   $this->section=(string)($_GET['section']??$_POST['section']??$default);
   if(!isset($sections[$this->section])){http_response_code(404);return;}
   $section=$this->section;
+  $this->customerId=(string)($_POST['user_id']??$_GET['user_id']??'');
   $attentionOnly=($_GET['attention']??'')==='1';$archivedOnly=($_GET['archived']??'')==='1';
   $stripeActiveMode=(new IntegrationSettings($this->db))->stripe()['mode'];
   $this->stripeMode=(string)($_POST['credential_mode']??$_GET['stripe_mode']??$stripeActiveMode);
@@ -35,6 +37,15 @@ final class AdminApplication {
   if(($_SESSION['admin_until']??0)>time() && isset($_SESSION['admin_id']))$admin=$this->db->one('SELECT id,email FROM administrators WHERE id=?',[$_SESSION['admin_id']]);
   $method=$_SERVER['REQUEST_METHOD'];
   if(!in_array($method,['GET','HEAD','POST'],true)){http_response_code(405);return;}
+  if($admin && in_array($method,['GET','HEAD'],true) && isset($_GET['download_invoice'])){
+   try{
+    $docs=new FiscalDocuments($this->db);$id=(string)$_GET['download_invoice'];
+    if($id==='latest')$id=($docs->latest($this->customerId)??[])['id']??'';
+    $pdf=$docs->pdf($id,$this->customerId);
+    header('Content-Type: application/pdf');header('Content-Disposition: attachment; filename="'.$pdf['filename'].'"');header('Content-Length: '.strlen($pdf['bytes']));
+    if($method==='GET')echo $pdf['bytes'];return;
+   }catch(\Throwable $e){http_response_code(502);$error='Factura nu poate fi descărcată. Verifică jurnalul API Oblio și reîncearcă.';}
+  }
   if($method==='POST'){
    if(!Security::checkCsrf()){http_response_code(419);$error='Sesiunea formularului a expirat. Reîncarcă pagina.';}
    elseif(!Security::limit($this->db,'admin-post:'.Security::clientIp(),60,900)){http_response_code(429);$error='Prea multe cereri. Încearcă mai târziu.';}
@@ -49,6 +60,23 @@ final class AdminApplication {
      $valid=password_verify((string)($_POST['password']??''),$hash);
      if($action!=='login' || !$allowed || !$row || !$valid)throw new \DomainException('Autentificare nereușită. Verifică datele sau încearcă mai târziu.');
      session_regenerate_id(true);$_SESSION=['admin_id'=>$row['id'],'admin_until'=>time()+3600,'csrf'=>bin2hex(random_bytes(32))];$this->redirect();
+    }
+    if(in_array($action,['customer_contact','customer_contact_retry','customer_billing','customer_guide','customer_invoice_email'],true)){
+     $uid=$this->customerId;$mail=new MailerService($this->db);$manager=new AdminCustomer($this->db,$mail);$manager->customer($uid);
+     $this->section='client';
+     if(!Security::limit($this->db,'customer-action:'.$uid.':'.$action,6,900))throw new \DomainException('Prea multe cereri pentru acest client. Reîncearcă mai târziu.');
+     if($action==='customer_contact' || $action==='customer_contact_retry'){
+      $manager->saveContact($uid,$_POST,$admin['id'],$action==='customer_contact_retry');
+      $message='Datele de contact au fost actualizate și sincronizate. Schimbarea emailului invalidează sesiunile și linkurile anterioare; generează un link nou dacă este necesar.';
+     }elseif($action==='customer_billing'){
+      $manager->saveBilling($uid,is_array($_POST['billing']??null)?$_POST['billing']:[],$admin['id']);$message='Datele de facturare au fost actualizate. Facturile deja emise sunt păstrate.';
+     }elseif($action==='customer_invoice_email'){
+      $message=MailerService::dispatchNotice($manager->invoiceEmail($uid,(string)($_POST['invoice_id']??''),$admin['id']));
+     }else{
+      $link=(new OnboardingLinks($this->db,$mail))->issue($uid,true);$manager->audit($uid,$admin['id'],'onboarding_link_regenerated');
+      $message='Am regenerat linkul, valabil încă 3 zile. '.MailerService::dispatchNotice($mail->dispatch('onboarding:'.$link['token_hash']));
+     }
+     $_SESSION['admin_notice']=$message;$this->redirect();
     }
     if($action==='logout'){$_SESSION=[];session_regenerate_id(true);$this->section='dashboard';$this->redirect();}
     if($action==='withdrawal_resolve'){
@@ -219,6 +247,18 @@ final class AdminApplication {
    $stripeSaved=$integrations->saved('stripe')!==null;$oblioSaved=$integrations->saved('oblio')!==null;
    $stripeState=(new StripeIntegration($this->db,$this->plans,null,$stripeMode))->state();
   }
+  if($admin && $section==='client'){
+   try{
+    $customer=(new AdminCustomer($this->db,new MailerService($this->db)))->customer($this->customerId);
+    $customerBilling=(new BillingProfileService($this->db))->get($customer['id']);
+    $customerSubscription=$this->db->one('SELECT * FROM subscriptions WHERE user_id=?',[$customer['id']]);
+    $customerControl=(new AccountControl($this->db))->get($customer['id']);
+    $customerStats=$this->db->one('SELECT * FROM immich_statistics WHERE user_id=? AND storage_user_id=?',[$customer['id'],$customer['storage_user_id']]);
+    $customerInvoices=$this->db->run('SELECT id,oblio_series,oblio_number,status,amount,currency,stripe_mode,created_at,stripe_invoice_id FROM fiscal_invoices WHERE user_id=? ORDER BY created_at DESC,id DESC',[$customer['id']])->fetchAll();
+    $customerLink=(new OnboardingLinks($this->db,new MailerService($this->db)))->current($customer['id']);
+    $contactPending=$this->db->one('SELECT created_at FROM customer_contact_changes WHERE user_id=?',[$customer['id']]);
+   }catch(\DomainException $e){http_response_code(404);$error=$e->getMessage();$customer=null;}
+  }
   if($admin && $section==='clients'){
    $clients=$this->db->run("SELECT u.*,c.banned_at,c.reason,c.manual_plan,c.access_sync,c.quota_sync,s.status AS subscription_status,s.renewal_at,ist.used_bytes AS immich_used_bytes,ist.photos AS immich_photos,ist.videos AS immich_videos,ist.synced_at AS immich_synced_at,ist.available AS immich_available,r.status AS reset_status,r.step AS reset_step FROM users u LEFT JOIN account_controls c ON c.user_id=u.id LEFT JOIN subscriptions s ON s.user_id=u.id LEFT JOIN test_account_resets r ON r.user_id=u.id LEFT JOIN immich_statistics ist ON ist.user_id=u.id AND ist.storage_user_id=u.storage_user_id AND ist.config_hash=? WHERE u.is_deleted=CAST(? AS INTEGER) AND (?='' OR instr(lower(u.email),lower(?))>0 OR instr(lower(u.name),lower(?))>0) AND (CAST(? AS INTEGER)=0 OR c.quota_sync<>'ready' OR c.access_sync<>'ready') ORDER BY u.created_at DESC LIMIT 100",[(new ImmichStatistics($this->db))->fingerprint(),(int)$archivedOnly,$search,$search,$search,(int)$attentionOnly])->fetchAll();
   }
@@ -232,7 +272,7 @@ final class AdminApplication {
   if($admin){
    $dashboard=in_array($section,['dashboard','operations'],true)?(new AdminDashboard($this->db))->snapshot():[];
    $subscriptionRows=$section==='subscriptions'?$this->db->run("SELECT s.*,u.email FROM subscriptions s JOIN users u ON u.id=s.user_id WHERE (CAST(? AS INTEGER)=0 OR s.status IN ('past_due','unpaid','incomplete')) ORDER BY s.renewal_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll():[];
-   $fiscalRows=$section==='invoices'?$this->db->run("SELECT f.id,f.stripe_invoice_id,f.amount,f.currency,f.stripe_mode,f.status,f.error_message,f.oblio_series,f.oblio_number,f.created_at,u.email FROM fiscal_invoices f JOIN users u ON u.id=f.user_id WHERE (CAST(? AS INTEGER)=0 OR f.status IN ('pending','processing','failed')) ORDER BY f.created_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll():[];
+   $fiscalRows=$section==='invoices'?$this->db->run("SELECT f.id,f.user_id,f.stripe_invoice_id,f.amount,f.currency,f.stripe_mode,f.status,f.error_message,f.oblio_series,f.oblio_number,f.created_at,u.email FROM fiscal_invoices f JOIN users u ON u.id=f.user_id WHERE (CAST(? AS INTEGER)=0 OR f.status IN ('pending','processing','failed')) ORDER BY f.created_at DESC LIMIT 100",[(int)$attentionOnly])->fetchAll():[];
    $unbilledPayments=$section==='invoices'?$this->db->run("SELECT p.*,u.email FROM (SELECT id,user_id,amount,currency,stripe_mode,created_at FROM invoices UNION ALL SELECT invoice_id,user_id,amount,currency,stripe_mode,paid_at FROM plan_changes c WHERE invoice_id IS NOT NULL AND paid_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM invoices i WHERE i.id=c.invoice_id)) p JOIN users u ON u.id=p.user_id LEFT JOIN fiscal_invoices f ON f.stripe_invoice_id=p.id WHERE p.amount>0 AND f.id IS NULL ORDER BY p.created_at DESC LIMIT 100")->fetchAll():[];
    $fiscalDiagnostics=$section==='invoices'?(new OblioInvoiceService($this->db,new MailerService($this->db)))->diagnostics():[];
    $mailRows=$section==='operations'?$this->db->run('SELECT recipient,kind,attempts,created_at FROM outbox WHERE sent_at IS NULL ORDER BY created_at LIMIT 30')->fetchAll():[];

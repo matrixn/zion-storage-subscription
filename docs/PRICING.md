@@ -1,12 +1,12 @@
 # EUR pricing and billing catalog
 
-The central catalog in config/plans.php defines Free 10 GB, Personal 120 GB, Plus 250 GB and Titan 500 GB. Titan retains the 500gb identifier and provides one account.
+The central catalog in config/plans.php defines Free 5 GB, Personal 120 GB, Plus 250 GB and Titan 500 GB. Titan retains the 500gb identifier and provides one account.
 
 | Plan | Monthly EUR | Annual EUR |
 | --- | ---: | ---: |
-| Personal | 1.99 | 21.89 |
-| Plus | 3.59 | 39.49 |
-| Titan | 5.99 | 65.89 |
+| Personal | 3.99 | 43.89 |
+| Plus | 7.19 | 79.09 |
+| Titan | 11.99 | 131.89 |
 
 Annual billing charges the displayed total once per year: twelve months of storage for eleven monthly payments. The home switcher and registration interval selector work with server rendering and JavaScript. Every registration persists its chosen interval; Checkout uses the corresponding server-side Price, never a browser-provided amount. RO/EN/FR/DE are supported.
 
@@ -24,7 +24,7 @@ Migration imports previous STRIPE_PRICE_* / STRIPE_LEGACY_PRICE_* environment va
 
 Existing subscriptions, paid amounts, currencies and fiscal records are preserved. No automatic RON-to-EUR conversion or repricing occurs. Legacy prices cannot use ordinary customer upgrades against the new EUR catalog. Already-open initial Checkout quotes retain their original terms and block a new conflicting quote until resolved or expired.
 
-Customer upgrades remain limited to the original five-day window, a larger plan and the same currency/interval. Personal to Plus costs 1.60 EUR for monthly billing or 17.60 EUR for yearly billing, once. Future renewals use the larger plan at the original renewal date. Admin paid plan changes also preserve the interval and anchor.
+Customer upgrades remain limited to the original five-day window, a larger plan and the same currency/interval. Personal to Plus costs 3.20 EUR for monthly billing or 35.20 EUR for yearly billing, once. Future renewals use the larger plan at the original renewal date. Admin paid plan changes also preserve the interval and anchor.
 
 Oblio receives actual EUR payments and full Stripe invoice periods; annual service names identify annual billing. Historical RON documents remain RON. Oblio currency support includes EUR/RON; issuer/exchange-rate settings and real provider acceptance must be verified before issuance. The application does not invent an exchange rate.
 

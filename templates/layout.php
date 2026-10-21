@@ -14,7 +14,7 @@
 <?php foreach(Zion\TranslationService::LOCALES as $l): ?><link rel="alternate" hreflang="<?= $l ?>" href="<?= e(base_url().$url($canonicalPage,$l).$legalQuery) ?>"><?php endforeach ?>
 <link rel="alternate" hreflang="x-default" href="<?= e(base_url().$url($canonicalPage,'en').$legalQuery) ?>">
 <?php if(!in_array($page,['home','how','register','contact'])): ?><meta name="robots" content="noindex,nofollow"><?php endif ?>
-<link rel="stylesheet" href="/assets/site.css?v=confirmation-2"><script src="/assets/site.js?v=onboarding-1" defer></script>
+<link rel="stylesheet" href="/assets/site.css?v=confirmation-2"><script src="/assets/site.js?v=customer-guide-1" defer></script>
 <?php if(in_array($page,['status','activate'],true)): ?><link rel="stylesheet" href="/assets/onboarding.css?v=1"><script src="/assets/device-detection.js?v=1" defer></script><script src="/assets/onboarding.js?v=1" defer></script><?php endif ?>
 <?php if($page==='legal'): ?><link rel="stylesheet" href="/assets/legal.css?v=headings-2"><?php endif ?>
 <?php if($page==='home'): ?><link rel="stylesheet" href="/assets/pricing.css"><link rel="stylesheet" href="/assets/hero-carousel.css"><script src="/assets/hero-carousel.js" defer></script><?php endif ?>

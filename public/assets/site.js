@@ -73,3 +73,18 @@ document.querySelector('[data-receipt-download]')?.addEventListener('click',()=>
 // GET only displays the verification page; confirmation remains a CSRF-protected POST.
 const verification=document.querySelector('[data-auto-verification]');
 if(verification)verification.requestSubmit();
+
+// Keep bearer links out of HTTP request URLs and server access logs.
+const guideEntry = document.querySelector('[data-guide-entry]');
+if (guideEntry) {
+ const openGuide = () => {
+  const token = new URLSearchParams(location.hash.slice(1)).get('token');
+  history.replaceState(null, '', location.pathname);
+  if (token && /^[a-f0-9]{64}$/.test(token)) {
+   guideEntry.querySelector('[data-guide-token]').value = token;
+   guideEntry.requestSubmit();
+  }
+ };
+ window.addEventListener('hashchange', openGuide);
+ openGuide();
+}

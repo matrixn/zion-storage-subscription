@@ -9,6 +9,11 @@ if($cmd==='immich:sync'){
 if($cmd==='key'){echo bin2hex(random_bytes(32)).PHP_EOL;exit;}
 if(in_array($cmd,['migrate','install'],true)){$db->migrate();$seeded=Zion\AccountControl::seedAdmin($db);echo "Database ready\n".($seeded?"Admin configured (existing passwords preserved)\n":"Set ADMIN_EMAIL and ADMIN_PASSWORD, then run install to create the administrator\n");exit;}
 $mail=new Zion\MailerService($db);
+if($cmd==='free-quota:sync'){
+ $plans=new Zion\Plans($db);$storage=new Zion\StorageProvisioningService();$changes=(new Zion\StripeService($db,$plans,$mail,$storage))->changes();$admin=new Zion\AdminService($db,$plans,$mail,$storage,$changes);$processed=0;$failed=0;
+ foreach($db->run("SELECT c.user_id FROM account_controls c JOIN users u ON u.id=c.user_id WHERE u.selected_plan_id='free' AND c.quota_sync='pending' LIMIT 100")->fetchAll() as $r){try{$admin->syncQuota($r['user_id']);$processed++;}catch(Throwable $e){$failed++;}}
+ echo json_encode(['processed'=>$processed,'failed'=>$failed],JSON_THROW_ON_ERROR).PHP_EOL;exit($failed?1:0);
+}
 if($cmd==='changes:retry'){
  $plans=new Zion\Plans($db);$storage=new Zion\StorageProvisioningService();$changes=(new Zion\StripeService($db,$plans,$mail,$storage))->changes();
  $activation=(new Zion\AccountService($db,$plans,$mail,$storage))->retryAutomatic();
@@ -70,4 +75,4 @@ $queries=[
  ,'fiscal-invoices'=>'SELECT id,user_id,stripe_invoice_id,stripe_subscription_id,oblio_invoice_id,oblio_series,oblio_number,amount,currency,status,error_message,attempts,issued_at,notification_sent_at,completed_at FROM fiscal_invoices ORDER BY created_at DESC LIMIT 100'
 ];
 if(isset($queries[$cmd])){echo json_encode($db->run($queries[$cmd])->fetchAll(),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE).PHP_EOL;exit;}
-echo "Commands: operations:work, immich:sync [--due], key, install, migrate, activation:retry, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";
+echo "Commands: free-quota:sync, operations:work, immich:sync [--due], key, install, migrate, activation:retry, changes:retry, mail:work, maintenance, quota:check, users, subscriptions, provisioning, events, deliveries, fiscal-invoices, oblio:retry [--due]\n";

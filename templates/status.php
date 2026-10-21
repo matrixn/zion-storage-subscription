@@ -15,5 +15,5 @@
  <p><a class="text-link" href="<?= $url('contact') ?>"><?= e($t('on.support')) ?> ↗</a></p>
 </section>
 <?php endif ?>
-<?php if($user && $user['selected_plan_id']!=='free'): ?><div class="wrap billing-shortcut"><form method="post" action="<?= $url('portal') ?>"><input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><button class="text-link"><?= e($t('status.billing')) ?> ↗</button></form><a class="text-link" href="<?= $url('billing-profile') ?>"><?= e($t('billing.title')) ?> · <?= e($t('billing.history')) ?> ↗</a></div><?php endif ?>
-<?php if($user && ($upgradeOffers || $latestChange)): ?><div class="wrap billing-shortcut"><a class="button outline" href="<?= $url('upgrade') ?>"><?= e($t('upgrade.title')) ?> ↗</a></div><?php endif ?>
+<?php if(!$guideOnly && $user && $user['selected_plan_id']!=='free'): ?><div class="wrap billing-shortcut"><form method="post" action="<?= $url('portal') ?>"><input type="hidden" name="_csrf" value="<?= e(Zion\Security::csrf()) ?>"><button class="text-link"><?= e($t('status.billing')) ?> ↗</button></form><a class="text-link" href="<?= $url('billing-profile') ?>"><?= e($t('billing.title')) ?> · <?= e($t('billing.history')) ?> ↗</a></div><?php endif ?>
+<?php if(!$guideOnly && $user && ($upgradeOffers || $latestChange)): ?><div class="wrap billing-shortcut"><a class="button outline" href="<?= $url('upgrade') ?>"><?= e($t('upgrade.title')) ?> ↗</a></div><?php endif ?>

@@ -11,9 +11,12 @@ final class Application {
  private function redirect(string $path): never { header('Location: '.$path,true,303); exit; }
  private function user(): ?array {
   if(empty($_SESSION['uid']) || ($_SESSION['auth_until']??0)<time()) return null;
-  return $this->db->one('SELECT * FROM users WHERE id=?',[$_SESSION['uid']]);
+  $u=$this->db->one('SELECT * FROM users WHERE id=?',[$_SESSION['uid']]);
+  if(!$u || (int)($_SESSION['session_version']??0)!==(int)$u['session_version'])return null;
+  if(!empty($_SESSION['onboarding_only']) && !(new OnboardingLinks($this->db,$this->mail))->resolveHash($_SESSION['onboarding_hash']??''))return null;
+  return $u;
  }
- private function authenticate(string $uid): void { session_regenerate_id(true); $_SESSION['uid']=$uid; $_SESSION['auth_until']=time()+3600*4; }
+ private function authenticate(string $uid): void { session_regenerate_id(true); $_SESSION['uid']=$uid; $_SESSION['auth_until']=time()+3600*4; $_SESSION['session_version']=(int)($this->db->one('SELECT session_version FROM users WHERE id=?',[$uid])['session_version']??0); unset($_SESSION['onboarding_only'],$_SESSION['onboarding_hash']); }
  private function fail(string $key,int $status=422): void { http_response_code($status); $this->render($status===404?'error':$this->page,['error'=>$key]); }
  public function handle(): void {
   header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: no-referrer');
@@ -41,6 +44,7 @@ final class Application {
   [$this->locale,$this->page]=$route; $this->tr=new TranslationService($this->locale);
   setcookie('locale',$this->locale,['expires'=>time()+31536000,'path'=>'/','secure'=>str_starts_with(base_url(),'https://'),'httponly'=>true,'samesite'=>'Lax']);
   header('Cache-Control: private, no-store');
+  if(!empty($_SESSION['onboarding_only']) && !in_array($this->page,['onboarding','status','activate','resend','verify','home','how','contact','legal'],true)){http_response_code(403);$this->render('onboarding',['error'=>'guide.invalid']);return;}
   if($method==='POST') {
    if(!Security::checkCsrf()){$this->fail('error.csrf',419);return;}
    if(!Security::limit($this->db,'post:'.$this->page.':'.Security::clientIp(),$this->page==='contact'?5:((($_POST['automatic']??'')==='1' && $this->page==='activate')?20:15),900)){$this->fail('error.rate',429);return;}
@@ -60,6 +64,14 @@ final class Application {
   $this->render($this->page);
  }
  private function post(): void {
+  if($this->page==='onboarding'){
+   $token=trim((string)($_POST['token']??''));
+   if(str_contains($token,'#token='))$token=explode('#token=',$token,2)[1];
+   $u=(new OnboardingLinks($this->db,$this->mail))->resolve($token);
+   if(!$u){$this->fail('guide.invalid',410);return;}
+   $this->authenticate($u['id']);$_SESSION['onboarding_only']=true;$_SESSION['onboarding_hash']=hash('sha256',$token);$_SESSION['auth_until']=$u['link_expires_at'];
+   $this->redirect(Router::path($u['locale'],'status'));
+  }
   if($this->page==='register') {
    $d=[]; foreach(['name','email','password','confirm','locale','plan'] as $k) $d[$k]=is_string($_POST[$k]??null)?(in_array($k,['password','confirm'],true)?$_POST[$k]:trim($_POST[$k])):'';
    if(!empty($_POST['company'])) {$this->render('message',['message'=>'register.sent']);return;}
@@ -168,11 +180,12 @@ final class Application {
   $stripeMode=(new IntegrationSettings($this->db))->stripe()['mode'];
   $banned=$user?(new AccountControl($this->db))->banned($user['id']):false;
   $onboarding=in_array($view,['status','activate'],true)?(new MobileOnboarding($this->db))->view($user,$eligible,$banned,(bool)$automaticActivation):null;
-  $upgradeOffers=$user && $this->billing instanceof StripeService?$this->billing->changes()->offers($user):[];
+  $guideOnly=!empty($_SESSION['onboarding_only']);
+  $upgradeOffers=!$guideOnly && $user && $this->billing instanceof StripeService?$this->billing->changes()->offers($user):[];
   $latestChange=$user?$this->db->one('SELECT * FROM plan_changes WHERE user_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',[$user['id']]):null;
   $profile=$user?(new BillingProfileService($this->db))->get($user['id']):null;
   $billing=is_array($_POST['billing']??null)?$_POST['billing']:($profile??[]);
-  $fiscalInvoices=$user?$this->db->run('SELECT oblio_series,oblio_number,invoice_url,amount,currency,status,billing_period_start,billing_period_end FROM fiscal_invoices WHERE user_id=? ORDER BY created_at DESC LIMIT 50',[$user['id']])->fetchAll():[];
+  $fiscalInvoices=$user && !$guideOnly?$this->db->run('SELECT oblio_series,oblio_number,invoice_url,amount,currency,status,billing_period_start,billing_period_end FROM fiscal_invoices WHERE user_id=? ORDER BY created_at DESC LIMIT 50',[$user['id']])->fetchAll():[];
   $receipt=$data['receipt']??null;
   $error=$data['error']??null;$message=$data['message']??null;
   $selected=(string)($_GET['plan']??$_POST['plan']??'free'); if(!$this->plans->get($selected))$selected='free';

@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS onboarding_links (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ token_hash TEXT NOT NULL UNIQUE, token TEXT NOT NULL,
+ email TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS customer_contact_changes (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ payload TEXT NOT NULL, admin_id TEXT NOT NULL, created_at INTEGER NOT NULL
+);

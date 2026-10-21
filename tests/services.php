@@ -4,7 +4,7 @@ final class FixtureHttp implements Stripe\HttpClient\ClientInterface {
  public array $calls=[];
  public function request($method,$url,$headers,$params,$hasFile,$apiMode='v1',$maxNetworkRetries=null) {
   $this->calls[]=[$method,$url,$params,$headers];
-  if(str_contains($url,'/prices/')){$year=str_ends_with($url,'_year');$r=['id'=>$year?'price_120_year':'price_120','object'=>'price','active'=>true,'livemode'=>false,'currency'=>'eur','unit_amount'=>$year?2189:199,'recurring'=>['interval'=>$year?'year':'month','interval_count'=>1],'product'=>'prod_fixture'];}
+  if(str_contains($url,'/prices/')){$year=str_ends_with($url,'_year');$r=['id'=>$year?'price_120_year':'price_120','object'=>'price','active'=>true,'livemode'=>false,'currency'=>'eur','unit_amount'=>$year?4389:399,'recurring'=>['interval'=>$year?'year':'month','interval_count'=>1],'product'=>'prod_fixture'];}
   elseif(str_contains($url,'checkout/sessions'))$r=['id'=>'cs_fixture','object'=>'checkout.session','url'=>'https://checkout.stripe.com/c/pay/cs_fixture','expires_at'=>time()+3600];
   elseif(str_contains($url,'billing_portal/configurations'))$r=['id'=>'bpc_fixture','object'=>'billing_portal.configuration','active'=>true,'features'=>['subscription_update'=>['enabled'=>false]]];
   else $r=['id'=>'bps_fixture','object'=>'billing_portal.session','url'=>'https://billing.stripe.com/p/session/test'];
