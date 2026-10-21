@@ -189,8 +189,8 @@ final class AdminApplication {
     if(in_array($action,['plan','unban','sync'],true) && $this->db->one('SELECT id FROM users WHERE id=? AND is_deleted=1',[(string)($_POST['user_id']??'')]))throw new \DomainException('Restaurează clientul arhivat înainte de modificarea accesului sau planului.');
     $this->initializeBilling();
     if($action==='test_account_reset'){
-     (new TestAccountReset($this->db,$this->changes,new StorageProvisioningService()))->reset((string)($_POST['user_id']??''),(string)($_POST['confirm_email']??''),($_POST['confirm_reset']??'')==='1',($_POST['delete_storage']??'')==='1',$admin['id']);
-     unset($_SESSION['admin_activation_link']);$_SESSION['admin_notice']='Contul TEST și tranzacțiile locale au fost șterse. Te poți înregistra din nou cu același email. Facturile TEST asociate au fost eliminate din Oblio când au existat. Istoricul plăților de test rămâne în Stripe.';$this->section='clients';$this->redirect();
+     $reset=new TestAccountReset($this->db,$this->changes,new StorageProvisioningService());$reset->reset((string)($_POST['user_id']??''),(string)($_POST['confirm_email']??''),($_POST['confirm_reset']??'')==='1',($_POST['delete_storage']??'')==='1',$admin['id']);
+     unset($_SESSION['admin_activation_link']);$_SESSION['admin_notice']='Contul TEST și tranzacțiile locale au fost șterse. Te poți înregistra din nou cu același email. Facturile TEST asociate au fost eliminate din Oblio când au existat. Istoricul plăților de test rămâne în Stripe.'.($reset->missingInvoiceCount()?' Notificare: '.$reset->missingInvoiceCount().' factură/facturi nu mai existau în Oblio. Absența a fost confirmată, iar ștergerea clientului a continuat.':'');$this->section='clients';$this->redirect();
     }
     if($action==='activation_link'){
      $link=$this->service->activationLink((string)($_POST['user_id']??''),$admin['id']);

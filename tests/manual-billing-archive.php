@@ -42,12 +42,15 @@ $manualService->archive($manualUid,false,'Restore fixture',$manualAdmin);
 check($manualDb->one('SELECT is_deleted FROM users WHERE id=?',[$manualUid])['is_deleted']===0 && (new Zion\AccountControl($manualDb))->banned($manualUid),'restore returns LIVE customer to list without silently granting access');
 
 final class ResetOblioFixture extends Zion\OblioClient {
- public bool $fail=true;public int $deletes=0;public array $calls=[];
+ public bool $fail=true,$missing=false,$missingAfterDelete=false,$lookupFail=false;public int $deletes=0;public array $calls=[];
  protected function transport(string $method,string $path,array $data,?string $token,bool $json=true):array {
   $this->calls[]=[$method,$path,$data];
   if($path==='/authorize/token')return ['access_token'=>'fixture','expires_in'=>3600];
+  if($method==='GET' && $this->lookupFail)throw new Zion\OblioException('provider_transport_failed');
+  if($method==='GET' && $this->missing)throw new Zion\OblioException('provider_document_missing');
   if($method==='DELETE'){
    check(!$json && $data['deleteCollect']===1 && str_starts_with($data['idempotencyKey'],'zion-test-reset:'),'TEST Oblio deletion removes collection and uses stable idempotency key');
+   if($this->missingAfterDelete){$this->missing=true;throw new Zion\OblioException('provider_transport_failed');}
    if($this->fail)throw new Zion\OblioException('not_last_document');$this->deletes++;
   }
   return ['status'=>200,'data'=>['id'=>'oblio-reset-doc','seriesName'=>'ZS','number'=>'0001']];
@@ -65,3 +68,22 @@ try{
  check(!$resetDb->one('SELECT id FROM users WHERE id=?',[$resetUid]) && $resetProvider->deletes===1,'TEST reset resumes and deletes associated Oblio invoice before local cleanup');
 }finally{Stripe\ApiRequestor::setHttpClient($oldStripe);}
 echo "\n$count total assertions passed including manual billing, LIVE archive and TEST Oblio deletion.\n";
+
+foreach(['missing_before','missing_after_timeout','lookup_outage'] as $missingCase){
+ $savedStripe=Stripe\ApiRequestor::httpClient();
+ try{
+  [$resetDb,$resetUid,$other,$resetHttp,$resetStorage,$unusedReset,$resetAdmin,$resetAccounts,$resetPlans,$resetMail]=resetFixture();
+  $resetDb->run("INSERT INTO fiscal_invoices(id,user_id,stripe_invoice_id,stripe_subscription_id,stripe_customer_id,amount,currency,plan,status,idempotency_key,source_snapshot,request_snapshot,oblio_invoice_id,oblio_series,oblio_number,issued_at,created_at,updated_at) VALUES(?,?,'in_reset_oblio','sub_reset','cus_reset',199,'eur','120gb','issued','reset-oblio-key',?,?,'oblio-reset-doc','ZS','0001',?,?,?)",[str_repeat('f',32),$resetUid,Zion\EncryptedPayload::encode(['simulated'=>false,'invoice'=>['id'=>'in_reset_oblio','livemode'=>false]]),Zion\EncryptedPayload::encode(['cif'=>'RO-FIXTURE']),time(),time(),time()]);
+  $provider=new ResetOblioFixture($manualConfig);$provider->fail=false;
+  $provider->missing=$missingCase==='missing_before';$provider->missingAfterDelete=$missingCase==='missing_after_timeout';$provider->lookupFail=$missingCase==='lookup_outage';
+  $client=new Stripe\StripeClient('sk_test_resetFixture');$changes=new Zion\SubscriptionChanges($resetDb,$resetPlans,$resetMail,$resetStorage,$client,new Zion\OblioInvoiceService($resetDb,$resetMail));
+  $reset=new Zion\TestAccountReset($resetDb,$changes,$resetStorage,$client,$provider);
+  try{$reset->reset($resetUid,'reset-fixture@example.com',true,false,$resetAdmin);check($missingCase!=='lookup_outage','lookup outage cannot permit account deletion');}
+  catch(DomainException $e){check($missingCase==='lookup_outage' && $resetDb->one('SELECT id FROM users WHERE id=?',[$resetUid]),'unconfirmed Oblio lookup failure preserves customer');continue;}
+  check(!$resetDb->one('SELECT id FROM users WHERE id=?',[$resetUid]) && $reset->missingInvoiceCount()===1,'confirmed missing invoice permits TEST cleanup and reports warning: '.$missingCase);
+  check(str_contains($resetDb->one("SELECT detail FROM admin_audit WHERE action='test_account_reset'")['detail'],'Oblio: 1'),'missing document warning is retained in reset audit');
+ }finally{Stripe\ApiRequestor::setHttpClient($savedStripe);}
+}
+$missingBody=json_encode(['status'=>400,'statusMessage'=>'Nu exista document cu seria ZS si numarul 0001']);
+check(Zion\OblioClient::missingDocumentResponse('GET','/docs/invoice',400,$missingBody),'exact Oblio missing-document HTTP 400 classified distinctly');
+foreach([['GET','/docs/invoice',401,$missingBody],['DELETE','/docs/invoice',400,$missingBody],['GET','/authorize/token',400,$missingBody],['GET','/docs/invoice',400,'<html>Nu exista document cu seria ZS si numarul 1</html>'],['GET','/docs/invoice',400,json_encode(['message'=>'Invalid company or permissions'])]] as $bad)check(!Zion\OblioClient::missingDocumentResponse(...$bad),'unrelated provider failure never classified as missing invoice');

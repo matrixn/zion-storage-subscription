@@ -4,6 +4,8 @@ namespace Zion;
 
 /** Destructive TEST-only reset. Remote work is resumable; local cleanup is atomic. */
 final class TestAccountReset {
+ private int $missingInvoices=0;
+ public function missingInvoiceCount(): int {return $this->missingInvoices;}
  private \Stripe\StripeClient $stripe;private bool $networkAllowed;private OblioClient $oblio;
  public function __construct(private Database $db,private SubscriptionChanges $changes,private StorageProvisioningService $storage,?\Stripe\StripeClient $stripe=null,?OblioClient $oblio=null){
   $this->oblio=$oblio??new OblioClient((new IntegrationSettings($db))->oblio());
@@ -94,19 +96,30 @@ final class TestAccountReset {
       $this->db->run("UPDATE users SET status='banned',updated_at=? WHERE id=?",[time(),$uid]);
      });
     }
+    $this->missingInvoices=count($plan['missing_documents']??[]);
     $documents=$this->db->run("SELECT * FROM fiscal_invoices WHERE user_id=? AND oblio_series IS NOT NULL AND oblio_number IS NOT NULL ORDER BY issued_at DESC,CAST(oblio_number AS INTEGER) DESC",[$uid])->fetchAll();
     foreach($documents as $document){
      $key='oblio:'.$document['id'];if(in_array($key,$plan['done'],true))continue;
      $payload=EncryptedPayload::decode($document['request_snapshot']??'{}');$cif=(string)($payload['cif']??'');
      if($cif==='' || $cif==='SIMULATION')throw new \DomainException('Lipsește firma emitentă din evidența facturii TEST.');
+     try{
      if(!in_array($key.':validated',$plan['done'],true)){
       $remote=$this->oblio->getInvoice($cif,$document['oblio_series'],$document['oblio_number']);
       if(($remote['series']??'')!==$document['oblio_series'] || ltrim((string)($remote['number']??''),'0')!==ltrim($document['oblio_number'],'0') || ($document['oblio_invoice_id'] && (string)($remote['id']??'')!==(string)$document['oblio_invoice_id']))throw new \DomainException('Identitatea facturii Oblio nu corespunde evidenței locale.');
       $plan['done'][]=$key.':validated';$this->save($uid,$plan,'oblio_validated');
      }
      try{$this->oblio->deleteInvoice($cif,$document['oblio_series'],$document['oblio_number'],'zion-test-reset:'.$document['id']);}
-     catch(\Throwable $e){throw new \DomainException('Oblio nu a confirmat ștergerea facturii '.$document['oblio_series'].' '.$document['oblio_number'].'. Oblio permite ștergerea doar a ultimului document din serie. Datele sunt păstrate; verifică jurnalul API și reîncearcă.');}
-     $plan['done'][]=$key;$this->save($uid,$plan,'oblio_deleted');
+     catch(\Throwable $e){
+      // A prior delete may have succeeded before its response was lost. Confirm absence by GET.
+      try{$this->oblio->getInvoice($cif,$document['oblio_series'],$document['oblio_number']);}
+      catch(OblioException $lookup){if($lookup->getMessage()==='provider_document_missing')throw $lookup;}
+      throw new \DomainException('Oblio nu a confirmat ștergerea facturii '.$document['oblio_series'].' '.$document['oblio_number'].'. Oblio permite ștergerea doar a ultimului document din serie. Datele sunt păstrate; verifică jurnalul API și reîncearcă.');}
+     }catch(OblioException $e){
+      if($e->getMessage()!=='provider_document_missing')throw $e;
+      $plan['missing_documents'][]=$document['id'];$plan['missing_documents']=array_values(array_unique($plan['missing_documents']));
+      $this->missingInvoices=count($plan['missing_documents']);
+     }
+     $plan['done'][]=$key;$this->save($uid,$plan,$this->missingInvoices?'oblio_absence_confirmed':'oblio_deleted');
     }
     foreach($plan['sessions'] as $id=>$open)if($open && !in_array('session:'.$id,$plan['done'],true)){
      $this->network();$s=$this->stripe->checkout->sessions->retrieve($id)->toArray();
@@ -130,7 +143,7 @@ final class TestAccountReset {
      $this->db->run("DELETE FROM outbox WHERE kind='invoice_copy' AND dedupe_key LIKE ?",['invoice-copy:'.$uid.':%']);
      $this->db->run('DELETE FROM users WHERE id=?',[$uid]);
      $this->db->run("UPDATE test_account_resets SET status='complete',step='complete',snapshot='{}',error_code=NULL,updated_at=? WHERE user_id=?",[time(),$uid]);
-     $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin,'test_account_reset','Cont TEST '.$uid.' și evidențe locale șterse; resursele externe de test au fost închise.',time()]);
+     $this->db->run('INSERT INTO admin_audit(admin_id,action,detail,created_at) VALUES(?,?,?,?)',[$admin,'test_account_reset','Cont TEST '.$uid.' și evidențe locale șterse; resursele externe de test au fost închise. Facturi deja absente în Oblio: '.count($plan['missing_documents']??[]),time()]);
     });
    }catch(\Throwable $e){
     $this->db->run('UPDATE test_account_resets SET error_code=?,updated_at=? WHERE user_id=?',['reset_requires_retry',time(),$uid]);

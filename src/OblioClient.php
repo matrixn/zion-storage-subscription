@@ -29,12 +29,25 @@ class OblioClient
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         ApiLog::curlResult('oblio',$method,$url,$ch,$body,$started,[$data,$token??'',$this->config['secret']??'']);
         curl_close($ch);
+        if (self::missingDocumentResponse($method,$path,(int)$status,$body)) throw new OblioException('provider_document_missing');
         if ($body === false || $status < 200 || $status >= 300) throw new OblioException('provider_transport_failed');
         try { $result = json_decode($body, true, 512, JSON_THROW_ON_ERROR); }
         catch (\JsonException $e) { throw new OblioException('provider_invalid_response'); }
         if (!is_array($result)) throw new OblioException('provider_invalid_response');
         if (isset($result['status']) && (int)$result['status'] !== 200) throw new OblioException('provider_request_rejected');
         return $result;
+    }
+
+    /** Only the documented missing-document response; auth, validation and outages stay errors. */
+    public static function missingDocumentResponse(string $method,string $path,int $status,string|false $body): bool
+    {
+        if ($method !== 'GET' || $path !== '/docs/invoice' || !in_array($status,[200,400,404],true) || !is_string($body)) return false;
+        $json=json_decode($body,true);
+        if (!is_array($json)) return false;
+        $message=$json['statusMessage']??$json['message']??null;
+        if (!is_string($message)) return false;
+        $message=strtr(mb_strtolower(trim($message)),['ă'=>'a','â'=>'a','î'=>'i','ș'=>'s','ş'=>'s','ț'=>'t','ţ'=>'t']);
+        return (bool)preg_match('/^nu exista document cu seria\b.+\bsi numarul\b.+/u',$message);
     }
 
     public function authenticate(): string
